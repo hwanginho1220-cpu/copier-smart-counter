@@ -18,10 +18,10 @@ let usageChart = null;
 // --- Demo Data ---
 const demoData = {
     customers: [
-        { id: 'cust-1', name: '(주)미래기획', copierModel: 'Canon iR ADV DX C3826', serialNumber: 'CNB12345', contact: '010-1234-5678', location: '2층 관리부 사무실', createdAt: '2026-03-01' },
-        { id: 'cust-2', name: '현대법률사무소', copierModel: 'HP Color LaserJet E78330', serialNumber: 'HP987654', contact: '02-555-1234', location: '5층 회의실 앞', createdAt: '2026-03-05' },
-        { id: 'cust-3', name: '디자인연구소 숲', copierModel: 'Epson WorkForce C879R', serialNumber: 'EP881122', contact: '010-9876-5432', location: '3층 디자인실', createdAt: '2026-03-10' },
-        { id: 'cust-4', name: '아이비 학원', copierModel: 'Sindoh D420', serialNumber: 'SD009988', contact: '031-777-8888', location: '1층 안내데스크', createdAt: '2026-03-12' }
+        { id: 'cust-1', name: '(주)미래기획', copierModel: 'Canon iR ADV DX C3826', serialNumber: 'CNB12345', contact: '010-1234-5678', location: '2층 관리부 사무실', createdAt: '2026-03-01', contractBw: 2000, contractColor: 300 },
+        { id: 'cust-2', name: '현대법률사무소', copierModel: 'HP Color LaserJet E78330', serialNumber: 'HP987654', contact: '02-555-1234', location: '5층 회의실 앞', createdAt: '2026-03-05', contractBw: 5000, contractColor: 500 },
+        { id: 'cust-3', name: '디자인연구소 숲', copierModel: 'Epson WorkForce C879R', serialNumber: 'EP881122', contact: '010-9876-5432', location: '3층 디자인실', createdAt: '2026-03-10', contractBw: 1500, contractColor: 3000 },
+        { id: 'cust-4', name: '아이비 학원', copierModel: 'Sindoh D420', serialNumber: 'SD009988', contact: '031-777-8888', location: '1층 안내데스크', createdAt: '2026-03-12', contractBw: 3000, contractColor: 100 }
     ],
     inspections: [
         // March 2026
@@ -351,6 +351,28 @@ function renderRecentInspections() {
         const customer = state.customers.find(c => c.id === insp.customerId);
         const customerName = customer ? customer.name : '알 수 없는 고객';
         
+        let bwBadge = '';
+        if (insp.bwUsage > 0) {
+            bwBadge = `<span class="badge badge-success">+${insp.bwUsage.toLocaleString()}</span>`;
+            if (customer && customer.contractBw > 0 && insp.bwUsage > customer.contractBw) {
+                const over = insp.bwUsage - customer.contractBw;
+                bwBadge += `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
+            }
+        } else {
+            bwBadge = '<span class="badge badge-info">기준</span>';
+        }
+
+        let colorBadge = '';
+        if (insp.colorUsage > 0) {
+            colorBadge = `<span class="badge badge-success" style="background:rgba(217,70,239,0.15); color:#f472b6;">+${insp.colorUsage.toLocaleString()}</span>`;
+            if (customer && customer.contractColor > 0 && insp.colorUsage > customer.contractColor) {
+                const over = insp.colorUsage - customer.contractColor;
+                colorBadge += `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
+            }
+        } else {
+            colorBadge = '<span class="badge badge-info">기준</span>';
+        }
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td data-label="점검일" style="font-weight:600;">${insp.date}</td>
@@ -359,11 +381,11 @@ function renderRecentInspections() {
             <td data-label="컬러 카운터" style="color:#d8b4fe;">${insp.colorCounter.toLocaleString()}</td>
             <td data-label="흑백 사용량">
                 <span style="font-weight:600;">${insp.bwUsage.toLocaleString()}</span>
-                ${insp.bwUsage > 0 ? '<span class="badge badge-success" style="margin-left:0.25rem;">+'+insp.bwUsage.toLocaleString()+'</span>' : '<span class="badge badge-info" style="margin-left:0.25rem;">기준</span>'}
+                ${bwBadge}
             </td>
             <td data-label="컬러 사용량">
                 <span style="font-weight:600;">${insp.colorUsage.toLocaleString()}</span>
-                ${insp.colorUsage > 0 ? '<span class="badge badge-success" style="margin-left:0.25rem; background:rgba(217,70,239,0.15); color:#f472b6;">+'+insp.colorUsage.toLocaleString()+'</span>' : '<span class="badge badge-info" style="margin-left:0.25rem;">기준</span>'}
+                ${colorBadge}
             </td>
             <td data-label="특이사항"><span style="font-size:0.85rem; color:var(--text-secondary);">${insp.notes || '-'}</span></td>
         `;
@@ -587,7 +609,12 @@ function renderCustomersTable() {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td data-label="고객사명"><span style="font-weight: 600; font-size:1rem; cursor:pointer; color:var(--primary);" onclick="openDetailModal('${cust.id}')">${cust.name}</span></td>
-            <td data-label="복사기 모델"><span style="font-weight:500;">${cust.copierModel}</span></td>
+            <td data-label="복사기 모델">
+                <span style="font-weight:500;">${cust.copierModel}</span>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.15rem;">
+                    계약: 흑백 ${(cust.contractBw || 0).toLocaleString()} / 컬러 ${(cust.contractColor || 0).toLocaleString()}
+                </div>
+            </td>
             <td data-label="일련번호(S/N)"><code style="color:var(--text-secondary); font-family: monospace;">${cust.serialNumber || '-'}</code></td>
             <td data-label="연락처">${cust.contact || '-'}</td>
             <td data-label="최근 점검일">${lastInspectionDate}</td>
@@ -616,6 +643,8 @@ function handleCustomerFormSubmit(e) {
     const model = document.getElementById('copierModel').value.trim();
     const serial = document.getElementById('serialNumber').value.trim();
     const contact = document.getElementById('customerContact').value.trim();
+    const contractBw = parseInt(document.getElementById('contractBw').value, 10) || 0;
+    const contractColor = parseInt(document.getElementById('contractColor').value, 10) || 0;
     const location = document.getElementById('customerLocation').value.trim();
 
     if (!name || !model) return;
@@ -628,6 +657,8 @@ function handleCustomerFormSubmit(e) {
             customer.copierModel = model;
             customer.serialNumber = serial;
             customer.contact = contact;
+            customer.contractBw = contractBw;
+            customer.contractColor = contractColor;
             customer.location = location;
         }
     } else {
@@ -638,6 +669,8 @@ function handleCustomerFormSubmit(e) {
             copierModel: model,
             serialNumber: serial,
             contact: contact,
+            contractBw: contractBw,
+            contractColor: contractColor,
             location: location,
             createdAt: new Date().toISOString().split('T')[0]
         };
@@ -701,6 +734,32 @@ function renderInspectionsTable() {
         const customerName = customer ? customer.name : '알 수 없음';
         const model = customer ? customer.copierModel : '-';
 
+        let bwBadge = '';
+        if (insp.bwUsage > 0) {
+            bwBadge = `<span class="badge badge-success">+${insp.bwUsage.toLocaleString()}</span>`;
+            if (customer && customer.contractBw > 0 && insp.bwUsage > customer.contractBw) {
+                const over = insp.bwUsage - customer.contractBw;
+                bwBadge += `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
+            }
+        } else if (insp.bwUsage < 0) {
+            bwBadge = `<span class="badge badge-danger">${insp.bwUsage.toLocaleString()} (감소)</span>`;
+        } else {
+            bwBadge = '<span class="badge badge-info">기준</span>';
+        }
+
+        let colorBadge = '';
+        if (insp.colorUsage > 0) {
+            colorBadge = `<span class="badge badge-success" style="background:rgba(217,70,239,0.15); color:#f472b6;">+${insp.colorUsage.toLocaleString()}</span>`;
+            if (customer && customer.contractColor > 0 && insp.colorUsage > customer.contractColor) {
+                const over = insp.colorUsage - customer.contractColor;
+                colorBadge += `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
+            }
+        } else if (insp.colorUsage < 0) {
+            colorBadge = `<span class="badge badge-danger">${insp.colorUsage.toLocaleString()} (감소)</span>`;
+        } else {
+            colorBadge = '<span class="badge badge-info">기준</span>';
+        }
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td data-label="점검일" style="font-weight: 600;">${insp.date}</td>
@@ -708,21 +767,11 @@ function renderInspectionsTable() {
             <td data-label="복사기 모델">${model}</td>
             <td data-label="흑백 카운터">
                 <div>${insp.bwCounter.toLocaleString()}</div>
-                ${insp.bwUsage > 0 
-                    ? `<span class="badge badge-success">+${insp.bwUsage.toLocaleString()}</span>` 
-                    : insp.bwUsage < 0 
-                        ? `<span class="badge badge-danger">${insp.bwUsage.toLocaleString()} (감소)</span>`
-                        : `<span class="badge badge-info">기준</span>`
-                }
+                ${bwBadge}
             </td>
             <td data-label="컬러 카운터">
                 <div>${insp.colorCounter.toLocaleString()}</div>
-                ${insp.colorUsage > 0 
-                    ? `<span class="badge badge-success" style="background:rgba(217,70,239,0.15); color:#f472b6;">+${insp.colorUsage.toLocaleString()}</span>` 
-                    : insp.colorUsage < 0 
-                        ? `<span class="badge badge-danger">${insp.colorUsage.toLocaleString()} (감소)</span>`
-                        : `<span class="badge badge-info">기준</span>`
-                }
+                ${colorBadge}
             </td>
             <td data-label="특이사항 / 메모"><span style="font-size: 0.85rem; color: var(--text-secondary);">${insp.notes || '-'}</span></td>
             <td data-label="삭제">
@@ -811,11 +860,15 @@ function openCustomerModal(id = null) {
             document.getElementById('copierModel').value = customer.copierModel;
             document.getElementById('serialNumber').value = customer.serialNumber || '';
             document.getElementById('customerContact').value = customer.contact || '';
+            document.getElementById('contractBw').value = customer.contractBw || '';
+            document.getElementById('contractColor').value = customer.contractColor || '';
             document.getElementById('customerLocation').value = customer.location || '';
         }
     } else {
         title.textContent = '고객사 신규 등록';
         saveBtn.textContent = '등록';
+        document.getElementById('contractBw').value = '';
+        document.getElementById('contractColor').value = '';
     }
 
     modal.classList.add('active');
@@ -910,6 +963,11 @@ function openDetailModal(customerId) {
     document.getElementById('detailCopierModel').textContent = customer.copierModel;
     document.getElementById('detailSerial').textContent = customer.serialNumber || '-';
     document.getElementById('detailContact').textContent = customer.contact || '-';
+    
+    const bwContractText = customer.contractBw ? `${customer.contractBw.toLocaleString()}매` : '0매';
+    const colorContractText = customer.contractColor ? `${customer.contractColor.toLocaleString()}매` : '0매';
+    document.getElementById('detailContract').innerHTML = `흑백: <span style="font-weight:600; color:var(--text-primary);">${bwContractText}</span> / 컬러: <span style="font-weight:600; color:#c084fc;">${colorContractText}</span>`;
+    
     document.getElementById('detailLocation').textContent = customer.location || '-';
 
     // Get historical inspections

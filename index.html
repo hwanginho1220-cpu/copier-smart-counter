@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartCounter - 복사기 점검 & 카운터 관리</title>
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="style.css?v=1.0.2">
+    <link rel="stylesheet" href="style.css?v=1.0.3">
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Chart.js for visualization -->
@@ -252,6 +252,16 @@
                         <label for="customerContact">연락처</label>
                         <input type="text" id="customerContact" class="form-control" placeholder="예: 02-1234-5678 또는 010-1234-5678">
                     </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="contractBw">월 흑백 계약 매수 (매)</label>
+                            <input type="number" id="contractBw" class="form-control" min="0" placeholder="예: 2000">
+                        </div>
+                        <div class="form-group">
+                            <label for="contractColor">월 컬러 계약 매수 (매)</label>
+                            <input type="number" id="contractColor" class="form-control" min="0" placeholder="예: 200">
+                        </div>
+                    </div>
                     <div class="form-group">
                         <label for="customerLocation">설치 위치 / 메모</label>
                         <input type="text" id="customerLocation" class="form-control" placeholder="예: 3F 탕비실 옆">
@@ -337,6 +347,10 @@
                                 <span class="value" id="detailContact">-</span>
                             </li>
                             <li>
+                                <span class="label">기본 계약 매수</span>
+                                <span class="value" id="detailContract">-</span>
+                            </li>
+                            <li>
                                 <span class="label">설치 위치 및 메모</span>
                                 <span class="value" id="detailLocation">-</span>
                             </li>
@@ -361,6 +375,6 @@
     </div>
 
     <!-- Application Logic Script -->
-    <script src="app.js?v=1.0.2"></script>
+    <script src="app.js?v=1.0.3"></script>
 </body>
 </html>
