@@ -8,12 +8,19 @@ let state = {
 
 // Storage keys
 const STORAGE_KEY = 'smartcounter_data';
+const FIREBASE_CONFIG_KEY = 'smartcounter_firebase_config';
 
 // Navigation & Active View
 let currentView = 'dashboard';
 
 // Chart instance reference
 let usageChart = null;
+
+// Firebase State Variables
+let db = null;
+let isCloudMode = false;
+let customersUnsubscribe = null;
+let inspectionsUnsubscribe = null;
 
 // --- Demo Data ---
 const demoData = {
@@ -23,7 +30,7 @@ const demoData = {
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
-    loadData();
+    initFirebase();
     setupEventListeners();
     initDateInputs();
     switchView('dashboard');
@@ -98,18 +105,42 @@ function setupEventListeners() {
     document.getElementById('exportDataBtn').addEventListener('click', exportData);
     document.getElementById('importDataFile').addEventListener('change', importData);
     document.getElementById('clearAllDataBtn').addEventListener('click', () => {
-        if (confirm('저장된 모든 고객 정보와 점검 기록이 영구적으로 삭제됩니다. 계속하시겠습니까?')) {
-            state.customers = [];
-            state.inspections = [];
-            saveToStorage();
-            alert('모든 데이터가 초기화되었습니다.');
-            location.reload();
+        const msg = isCloudMode 
+            ? '클라우드와 로컬 저장소의 모든 고객 정보 및 점검 기록이 영구적으로 삭제됩니다. 계속하시겠습니까?'
+            : '저장된 모든 고객 정보와 점검 기록이 영구적으로 삭제됩니다. 계속하시겠습니까?';
+        if (confirm(msg)) {
+            if (isCloudMode && db) {
+                const batch = db.batch();
+                state.customers.forEach(c => batch.delete(db.collection('customers').doc(c.id)));
+                state.inspections.forEach(i => batch.delete(db.collection('inspections').doc(i.id)));
+                batch.commit().then(() => {
+                    state.customers = [];
+                    state.inspections = [];
+                    saveToStorage();
+                    alert('모든 클라우드 및 로컬 데이터가 초기화되었습니다.');
+                    location.reload();
+                }).catch(err => {
+                    console.error("클라우드 초기화 실패:", err);
+                    alert("클라우드 데이터 초기화 중 오류가 발생했습니다: " + err.message);
+                });
+            } else {
+                state.customers = [];
+                state.inspections = [];
+                saveToStorage();
+                alert('모든 데이터가 초기화되었습니다.');
+                location.reload();
+            }
         }
     });
 
     // Customer Add button inside customer view
     document.getElementById('addCustomerBtn').addEventListener('click', () => openCustomerModal());
     document.getElementById('addInspectionBtn').addEventListener('click', () => openInspectionModal());
+
+    // Firebase Settings Trigger
+    document.getElementById('openFirebaseModalBtn').addEventListener('click', openFirebaseModal);
+    document.getElementById('firebaseConfigForm').addEventListener('submit', handleFirebaseConfigSubmit);
+    document.getElementById('clearFirebaseConfigBtn').addEventListener('click', clearFirebaseConfig);
 }
 
 function initDateInputs() {
@@ -172,7 +203,7 @@ function switchView(viewName) {
  * Recalculate usage for a specific customer.
  * Sorts all inspections for that customer chronologically and calculates the usage difference.
  */
-function recalculateUsageForCustomer(customerId) {
+async function recalculateUsageForCustomer(customerId) {
     // Get all inspections for this customer
     const custInspections = state.inspections.filter(i => i.customerId === customerId);
     
@@ -182,15 +213,22 @@ function recalculateUsageForCustomer(customerId) {
         return dateDiff !== 0 ? dateDiff : a.id.localeCompare(b.id);
     });
 
+    const changedInspections = [];
+
     // Recalculate diffs
     custInspections.forEach((insp, index) => {
-        if (index === 0) {
-            insp.bwUsage = 0;
-            insp.colorUsage = 0;
-        } else {
+        let newBwUsage = 0;
+        let newColorUsage = 0;
+        if (index > 0) {
             const prev = custInspections[index - 1];
-            insp.bwUsage = insp.bwCounter - prev.bwCounter;
-            insp.colorUsage = insp.colorCounter - prev.colorCounter;
+            newBwUsage = insp.bwCounter - prev.bwCounter;
+            newColorUsage = insp.colorCounter - prev.colorCounter;
+        }
+
+        if (insp.bwUsage !== newBwUsage || insp.colorUsage !== newColorUsage) {
+            insp.bwUsage = newBwUsage;
+            insp.colorUsage = newColorUsage;
+            changedInspections.push(insp);
         }
     });
 
@@ -204,6 +242,23 @@ function recalculateUsageForCustomer(customerId) {
     });
 
     saveToStorage();
+
+    // If cloud mode is active and there are updates, batch update Firestore
+    if (isCloudMode && db && changedInspections.length > 0) {
+        try {
+            const batch = db.batch();
+            changedInspections.forEach(insp => {
+                const docRef = db.collection('inspections').doc(insp.id);
+                batch.update(docRef, {
+                    bwUsage: insp.bwUsage,
+                    colorUsage: insp.colorUsage
+                });
+            });
+            await batch.commit();
+        } catch (err) {
+            console.error("Firestore usage calculation sync failed:", err);
+        }
+    }
 }
 
 /**
@@ -624,7 +679,7 @@ function renderCustomersTable() {
     });
 }
 
-function handleCustomerFormSubmit(e) {
+async function handleCustomerFormSubmit(e) {
     e.preventDefault();
     
     const id = document.getElementById('customerId').value;
@@ -638,51 +693,79 @@ function handleCustomerFormSubmit(e) {
 
     if (!name || !model) return;
 
+    let targetId = id || 'cust-' + Date.now();
+    let createdAt = new Date().toISOString().split('T')[0];
+
+    const customerData = {
+        id: targetId,
+        name: name,
+        copierModel: model,
+        serialNumber: serial,
+        contact: contact,
+        contractBw: contractBw,
+        contractColor: contractColor,
+        location: location
+    };
+
     if (id) {
-        // Edit existing customer
-        const customer = state.customers.find(c => c.id === id);
-        if (customer) {
-            customer.name = name;
-            customer.copierModel = model;
-            customer.serialNumber = serial;
-            customer.contact = contact;
-            customer.contractBw = contractBw;
-            customer.contractColor = contractColor;
-            customer.location = location;
+        const existing = state.customers.find(c => c.id === id);
+        if (existing) {
+            customerData.createdAt = existing.createdAt || createdAt;
+        } else {
+            customerData.createdAt = createdAt;
         }
     } else {
-        // Add new customer
-        const newCust = {
-            id: 'cust-' + Date.now(),
-            name: name,
-            copierModel: model,
-            serialNumber: serial,
-            contact: contact,
-            contractBw: contractBw,
-            contractColor: contractColor,
-            location: location,
-            createdAt: new Date().toISOString().split('T')[0]
-        };
-        state.customers.push(newCust);
+        customerData.createdAt = createdAt;
     }
 
-    saveToStorage();
+    if (isCloudMode && db) {
+        try {
+            await db.collection('customers').doc(targetId).set(customerData);
+        } catch (err) {
+            console.error("고객사 저장 중 오류:", err);
+            alert("클라우드 저장에 실패했습니다: " + err.message);
+            return;
+        }
+    } else {
+        if (id) {
+            state.customers = state.customers.map(c => c.id === id ? customerData : c);
+        } else {
+            state.customers.push(customerData);
+        }
+        saveToStorage();
+        renderCustomersTable();
+    }
+
     closeCustomerModal();
-    renderCustomersTable();
 }
 
-function deleteCustomer(id) {
+async function deleteCustomer(id) {
     const customer = state.customers.find(c => c.id === id);
     if (!customer) return;
 
     if (confirm(`고객사 "${customer.name}"을(를) 삭제하시겠습니까?\n삭제 시 해당 고객의 모든 월간 점검 기록도 영구적으로 삭제됩니다.`)) {
-        // Remove customer
-        state.customers = state.customers.filter(c => c.id !== id);
-        // Remove their inspections
-        state.inspections = state.inspections.filter(i => i.customerId !== id);
+        if (isCloudMode && db) {
+            try {
+                const batch = db.batch();
+                batch.delete(db.collection('customers').doc(id));
+                
+                const customerInspections = state.inspections.filter(i => i.customerId === id);
+                customerInspections.forEach(insp => {
+                    batch.delete(db.collection('inspections').doc(insp.id));
+                });
+                
+                await batch.commit();
+            } catch (err) {
+                console.error("고객사 삭제 실패:", err);
+                alert("삭제 처리에 실패했습니다: " + err.message);
+            }
+        } else {
+            state.customers = state.customers.filter(c => c.id !== id);
+            state.inspections = state.inspections.filter(i => i.customerId !== id);
 
-        saveToStorage();
-        renderCustomersTable();
+            saveToStorage();
+            renderCustomersTable();
+        }
     }
 }
 
@@ -778,7 +861,7 @@ function renderInspectionsTable() {
     });
 }
 
-function handleInspectionFormSubmit(e) {
+async function handleInspectionFormSubmit(e) {
     e.preventDefault();
 
     const id = document.getElementById('inspectionId').value;
@@ -790,53 +873,86 @@ function handleInspectionFormSubmit(e) {
 
     if (!customerId || !date || isNaN(bwCounter) || isNaN(colorCounter)) return;
 
-    if (id) {
-        // Edit Mode
-        const insp = state.inspections.find(i => i.id === id);
-        if (insp) {
-            const oldCustomerId = insp.customerId;
-            insp.customerId = customerId;
-            insp.date = date;
-            insp.bwCounter = bwCounter;
-            insp.colorCounter = colorCounter;
-            insp.notes = notes;
-
-            saveToStorage();
-            
-            // Recalculate for both old and new customers in case the customer was changed
-            recalculateUsageForCustomer(oldCustomerId);
-            if (oldCustomerId !== customerId) {
-                recalculateUsageForCustomer(customerId);
-            }
-        }
-    } else {
-        // Add Mode
-        // Check for duplicate inspections for the same customer on the same date
+    if (!id) {
         const duplicate = state.inspections.find(i => i.customerId === customerId && i.date === date);
         if (duplicate) {
             if (!confirm('해당 날짜에 이미 등록된 점검 기록이 있습니다. 덮어쓰시겠습니까?')) {
                 return;
             }
-            // Delete the duplicate first
-            state.inspections = state.inspections.filter(i => i.id !== duplicate.id);
+            if (isCloudMode && db) {
+                try {
+                    await db.collection('inspections').doc(duplicate.id).delete();
+                } catch (err) {
+                    console.error("기존 중복 점검 기록 삭제 실패:", err);
+                }
+            } else {
+                state.inspections = state.inspections.filter(i => i.id !== duplicate.id);
+            }
         }
+    }
 
-        const newInspection = {
-            id: 'insp-' + Date.now(),
-            customerId: customerId,
-            date: date,
-            bwCounter: bwCounter,
-            colorCounter: colorCounter,
-            bwUsage: 0, // Will be calculated below
-            colorUsage: 0, // Will be calculated below
-            notes: notes
-        };
+    const targetId = id || 'insp-' + Date.now();
+    const inspectionData = {
+        id: targetId,
+        customerId: customerId,
+        date: date,
+        bwCounter: bwCounter,
+        colorCounter: colorCounter,
+        bwUsage: 0,
+        colorUsage: 0,
+        notes: notes
+    };
 
-        state.inspections.push(newInspection);
-        saveToStorage();
+    if (isCloudMode && db) {
+        try {
+            const oldCustomerId = id ? (state.inspections.find(i => i.id === id)?.customerId) : null;
+            
+            // Temporary local sync for recalculation
+            const exists = state.inspections.find(i => i.id === targetId);
+            if (exists) {
+                state.inspections = state.inspections.map(i => i.id === targetId ? inspectionData : i);
+            } else {
+                state.inspections.push(inspectionData);
+            }
 
-        // Recalculate usage for this customer (this handles chronological order automatically!)
-        recalculateUsageForCustomer(customerId);
+            // Recalculate
+            await recalculateUsageForCustomer(customerId);
+            if (oldCustomerId && oldCustomerId !== customerId) {
+                await recalculateUsageForCustomer(oldCustomerId);
+            }
+
+            // Sync the recalculated result back to Firestore
+            const calculatedInsp = state.inspections.find(i => i.id === targetId);
+            if (calculatedInsp) {
+                await db.collection('inspections').doc(targetId).set(calculatedInsp);
+            }
+        } catch (err) {
+            console.error("점검 기록 저장 중 오류:", err);
+            alert("클라우드 저장에 실패했습니다: " + err.message);
+            return;
+        }
+    } else {
+        if (id) {
+            const insp = state.inspections.find(i => i.id === id);
+            if (insp) {
+                const oldCustomerId = insp.customerId;
+                insp.customerId = customerId;
+                insp.date = date;
+                insp.bwCounter = bwCounter;
+                insp.colorCounter = colorCounter;
+                insp.notes = notes;
+
+                saveToStorage();
+                recalculateUsageForCustomer(oldCustomerId);
+                if (oldCustomerId !== customerId) {
+                    recalculateUsageForCustomer(customerId);
+                }
+            }
+        } else {
+            state.inspections.push(inspectionData);
+            saveToStorage();
+            recalculateUsageForCustomer(customerId);
+        }
     }
 
     closeInspectionModal();
@@ -853,15 +969,23 @@ function refreshAllViews() {
     }
 }
 
-function deleteInspection(id, customerId) {
+async function deleteInspection(id, customerId) {
     if (confirm('이 점검 기록을 삭제하시겠습니까? 삭제 후 점검 대장의 사용량(증감)이 재계산됩니다.')) {
-        state.inspections = state.inspections.filter(i => i.id !== id);
-        saveToStorage();
-        
-        // Recalculate usage for this customer because chronological order changed
-        recalculateUsageForCustomer(customerId);
-        
-        refreshAllViews();
+        if (isCloudMode && db) {
+            try {
+                await db.collection('inspections').doc(id).delete();
+                state.inspections = state.inspections.filter(i => i.id !== id);
+                await recalculateUsageForCustomer(customerId);
+            } catch (err) {
+                console.error("점검 기록 삭제 실패:", err);
+                alert("삭제에 실패했습니다: " + err.message);
+            }
+        } else {
+            state.inspections = state.inspections.filter(i => i.id !== id);
+            saveToStorage();
+            recalculateUsageForCustomer(customerId);
+            refreshAllViews();
+        }
     }
 }
 
@@ -870,14 +994,26 @@ function editInspectionFromDetail(id, customerId) {
     openInspectionModal(id);
 }
 
-function deleteInspectionFromDetail(id, customerId) {
+async function deleteInspectionFromDetail(id, customerId) {
     if (confirm('이 점검 기록을 삭제하시겠습니까? 삭제 후 사용량(증감)이 재계산됩니다.')) {
-        state.inspections = state.inspections.filter(i => i.id !== id);
-        saveToStorage();
-        
-        recalculateUsageForCustomer(customerId);
-        openDetailModal(customerId); // refresh detail popup
-        refreshAllViews();
+        if (isCloudMode && db) {
+            try {
+                await db.collection('inspections').doc(id).delete();
+                state.inspections = state.inspections.filter(i => i.id !== id);
+                await recalculateUsageForCustomer(customerId);
+                openDetailModal(customerId); // refresh detail popup
+                refreshAllViews();
+            } catch (err) {
+                console.error("점검 기록 삭제 실패:", err);
+                alert("삭제에 실패했습니다: " + err.message);
+            }
+        } else {
+            state.inspections = state.inspections.filter(i => i.id !== id);
+            saveToStorage();
+            recalculateUsageForCustomer(customerId);
+            openDetailModal(customerId); // refresh detail popup
+            refreshAllViews();
+        }
     }
 }
 
@@ -1140,4 +1276,241 @@ function importData(e) {
         }
     };
     reader.readAsText(file);
+}
+
+// --- Firebase sync and configuration management ---
+
+function initFirebase() {
+    const configStr = localStorage.getItem(FIREBASE_CONFIG_KEY);
+    if (!configStr) {
+        isCloudMode = false;
+        loadData();
+        updateSyncStatusUI();
+        return;
+    }
+
+    try {
+        const config = JSON.parse(configStr);
+        let app;
+        if (firebase.apps.length === 0) {
+            app = firebase.initializeApp(config);
+        } else {
+            app = firebase.app();
+        }
+        
+        db = app.firestore();
+        isCloudMode = true;
+        updateSyncStatusUI();
+        setupFirebaseListeners();
+    } catch (e) {
+        console.error('Firebase 초기화 실패, 로컬 모드로 전환합니다.', e);
+        isCloudMode = false;
+        loadData();
+        updateSyncStatusUI(e);
+    }
+}
+
+function setupFirebaseListeners() {
+    if (customersUnsubscribe) customersUnsubscribe();
+    if (inspectionsUnsubscribe) inspectionsUnsubscribe();
+
+    customersUnsubscribe = db.collection('customers').onSnapshot(snapshot => {
+        const customersList = [];
+        snapshot.forEach(doc => {
+            customersList.push(doc.data());
+        });
+        state.customers = customersList;
+        saveToStorage();
+        refreshAllViews();
+    }, error => {
+        console.error("고객사 동기화 실패:", error);
+        updateSyncStatusUI(error);
+    });
+
+    inspectionsUnsubscribe = db.collection('inspections').onSnapshot(snapshot => {
+        const inspectionsList = [];
+        snapshot.forEach(doc => {
+            inspectionsList.push(doc.data());
+        });
+        state.inspections = inspectionsList;
+        saveToStorage();
+        refreshAllViews();
+    }, error => {
+        console.error("점검기록 동기화 실패:", error);
+        updateSyncStatusUI(error);
+    });
+}
+
+function updateSyncStatusUI(error = null) {
+    const badge = document.getElementById('syncStatusBadge');
+    if (!badge) return;
+
+    badge.className = 'badge';
+    
+    if (error) {
+        badge.classList.add('badge-cloud-error');
+        badge.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> 연결 오류`;
+        badge.title = `동기화 오류: ${error.message || error}`;
+    } else if (isCloudMode) {
+        badge.classList.add('badge-cloud-active');
+        badge.innerHTML = `<i class="fa-solid fa-cloud"></i> 클라우드 동기화`;
+        badge.title = '실시간 클라우드 동기화 모드가 활성화되었습니다.';
+    } else {
+        badge.classList.add('badge-info');
+        badge.innerHTML = `<i class="fa-solid fa-circle-dot"></i> 로컬 모드`;
+        badge.title = '로컬 브라우저 저장소(localStorage)에만 데이터가 기록됩니다.';
+    }
+
+    const clearBtn = document.getElementById('clearFirebaseConfigBtn');
+    if (clearBtn) {
+        const hasConfig = localStorage.getItem(FIREBASE_CONFIG_KEY) !== null;
+        clearBtn.style.display = hasConfig ? 'block' : 'none';
+    }
+}
+
+function openFirebaseModal() {
+    const modal = document.getElementById('firebaseModalBackdrop');
+    const configInput = document.getElementById('fbConfigJson');
+    const testResult = document.getElementById('firebaseConnectionTestResult');
+    
+    testResult.style.display = 'none';
+    
+    const existingConfig = localStorage.getItem(FIREBASE_CONFIG_KEY);
+    if (existingConfig) {
+        try {
+            configInput.value = JSON.stringify(JSON.parse(existingConfig), null, 2);
+        } catch (e) {
+            configInput.value = existingConfig;
+        }
+    } else {
+        configInput.value = '';
+    }
+    
+    updateSyncStatusUI();
+    modal.classList.add('active');
+}
+
+function closeFirebaseModal() {
+    document.getElementById('firebaseModalBackdrop').classList.remove('active');
+}
+
+async function handleFirebaseConfigSubmit(e) {
+    e.preventDefault();
+    const configInput = document.getElementById('fbConfigJson').value.trim();
+    const testResult = document.getElementById('firebaseConnectionTestResult');
+    const saveBtn = document.getElementById('saveFirebaseConfigBtn');
+
+    testResult.className = '';
+    testResult.style.display = 'block';
+    testResult.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 연결 테스트 중...';
+    saveBtn.disabled = true;
+
+    let config;
+    try {
+        config = JSON.parse(configInput);
+    } catch (err) {
+        testResult.className = 'error';
+        testResult.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 올바른 JSON 형식이 아닙니다. 괄호와 쉼표를 확인해 주세요.';
+        saveBtn.disabled = false;
+        return;
+    }
+
+    try {
+        const testAppName = 'testApp-' + Date.now();
+        const testApp = firebase.initializeApp(config, testAppName);
+        const testDb = testApp.firestore();
+        
+        await testDb.collection('_connection_test_').limit(1).get();
+        await testApp.delete();
+
+        localStorage.setItem(FIREBASE_CONFIG_KEY, JSON.stringify(config));
+        
+        testResult.className = 'success';
+        testResult.innerHTML = '<i class="fa-solid fa-circle-check"></i> 연결 성공! 클라우드 동기화를 시작합니다.';
+        
+        const hasLocalData = state.customers.length > 0 || state.inspections.length > 0;
+        let migrationConfirmed = false;
+        if (hasLocalData) {
+            migrationConfirmed = confirm(
+                '연결에 성공했습니다!\n\n현재 브라우저에 저장되어 있는 데이터(고객사 및 점검기록)를 클라우드로 이전하시겠습니까?\n(클라우드에 기존 데이터가 있다면 중복될 수 있습니다.)'
+            );
+        }
+
+        initFirebase();
+
+        if (migrationConfirmed) {
+            testResult.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 데이터를 클라우드로 복사하는 중...';
+            await migrateLocalDataToCloud();
+            testResult.className = 'success';
+            testResult.innerHTML = '<i class="fa-solid fa-circle-check"></i> 데이터 마이그레이션 완료!';
+        }
+
+        setTimeout(() => {
+            closeFirebaseModal();
+            refreshAllViews();
+        }, 1500);
+
+    } catch (err) {
+        console.error("Firebase 연결 실패:", err);
+        testResult.className = 'error';
+        testResult.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> 연결 실패: ${err.message || err}`;
+    } finally {
+        saveBtn.disabled = false;
+    }
+}
+
+async function migrateLocalDataToCloud() {
+    if (!db) return;
+    const batchSize = 100;
+    
+    for (let i = 0; i < state.customers.length; i += batchSize) {
+        const batch = db.batch();
+        const chunk = state.customers.slice(i, i + batchSize);
+        chunk.forEach(cust => {
+            const docRef = db.collection('customers').doc(cust.id);
+            batch.set(docRef, cust);
+        });
+        await batch.commit();
+    }
+
+    for (let i = 0; i < state.inspections.length; i += batchSize) {
+        const batch = db.batch();
+        const chunk = state.inspections.slice(i, i + batchSize);
+        chunk.forEach(insp => {
+            const docRef = db.collection('inspections').doc(insp.id);
+            batch.set(docRef, insp);
+        });
+        await batch.commit();
+    }
+}
+
+function clearFirebaseConfig() {
+    if (!confirm('클라우드 동기화 설정을 해제하고 로컬 모드로 전환하시겠습니까?\n(클라우드 데이터는 보존되며, 로컬 저장소의 데이터를 이어서 사용합니다.)')) {
+        return;
+    }
+
+    if (customersUnsubscribe) {
+        customersUnsubscribe();
+        customersUnsubscribe = null;
+    }
+    if (inspectionsUnsubscribe) {
+        inspectionsUnsubscribe();
+        inspectionsUnsubscribe = null;
+    }
+
+    if (firebase.apps.length > 0) {
+        firebase.apps.forEach(app => {
+            app.delete().catch(err => console.error("Firebase 앱 삭제 실패:", err));
+        });
+    }
+
+    localStorage.removeItem(FIREBASE_CONFIG_KEY);
+    db = null;
+    isCloudMode = false;
+
+    loadData();
+    updateSyncStatusUI();
+    refreshAllViews();
+    closeFirebaseModal();
+    alert('클라우드 연동이 해제되었습니다. 로컬 모드로 전환합니다.');
 }

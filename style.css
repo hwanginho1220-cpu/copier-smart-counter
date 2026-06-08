@@ -795,3 +795,54 @@ tr:hover td {
         font-size: 0.85rem;
     }
 }
+
+/* Firebase Sync Status and UI Styles */
+#syncStatusBadge {
+    transition: var(--transition);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#syncStatusBadge:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.badge-cloud-active {
+    background: rgba(16, 185, 129, 0.12) !important;
+    color: #34d399 !important;
+    border: 1px solid rgba(16, 185, 129, 0.3) !important;
+}
+
+.badge-cloud-active i {
+    animation: syncPulse 2s infinite ease-in-out;
+}
+
+.badge-cloud-error {
+    background: rgba(239, 68, 68, 0.12) !important;
+    color: #fca5a5 !important;
+    border: 1px solid rgba(239, 68, 68, 0.3) !important;
+}
+
+@keyframes syncPulse {
+    0% { opacity: 0.3; transform: scale(0.9); }
+    50% { opacity: 1; transform: scale(1.15); }
+    100% { opacity: 0.3; transform: scale(0.9); }
+}
+
+#firebaseConnectionTestResult {
+    transition: var(--transition);
+    line-height: 1.5;
+}
+
+#firebaseConnectionTestResult.success {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+#firebaseConnectionTestResult.error {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}

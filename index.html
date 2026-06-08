@@ -5,11 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartCounter - 복사기 점검 & 카운터 관리</title>
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="style.css?v=1.0.7">
+    <link rel="stylesheet" href="style.css?v=1.0.8">
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Chart.js for visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Firebase SDK (compat mode) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -43,6 +46,9 @@
                 <button class="backup-btn" id="clearAllDataBtn" style="width: 100%; margin-top: 0.5rem; background: rgba(239, 68, 68, 0.08); color: #fca5a5; border: 1px dashed rgba(239, 68, 68, 0.3);">
                     <i class="fa-solid fa-trash-can"></i><span>전체 데이터 초기화</span>
                 </button>
+                <button class="backup-btn" id="openFirebaseModalBtn" style="width: 100%; margin-top: 0.5rem; border-color: var(--border-color-active); color: var(--primary);">
+                    <i class="fa-solid fa-cloud"></i><span>클라우드 동기화 설정</span>
+                </button>
             </div>
         </aside>
 
@@ -54,7 +60,10 @@
                     <h1 id="viewTitle">대시보드</h1>
                     <p style="color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.25rem;" id="viewSubtitle">복사기 사용량 및 월간 점검 현황 요약</p>
                 </div>
-                <div class="header-actions">
+                <div class="header-actions" style="display: flex; align-items: center; gap: 1rem;">
+                    <span class="badge badge-info" id="syncStatusBadge" style="cursor: pointer; padding: 0.5rem 0.75rem; font-size: 0.85rem;" onclick="openFirebaseModal()">
+                        <i class="fa-solid fa-circle-dot"></i> 로컬 모드
+                    </span>
                     <button class="btn btn-primary" id="headerActionBtn">
                         <i class="fa-solid fa-plus"></i><span>새 기록 등록</span>
                     </button>
@@ -380,7 +389,51 @@
         </div>
     </div>
 
+    <!-- MODAL 4: FIREBASE SETTINGS -->
+    <div class="modal-backdrop" id="firebaseModalBackdrop">
+        <div class="modal" style="width: 550px;">
+            <div class="modal-header">
+                <h2>클라우드 동기화 설정 (Firebase)</h2>
+                <button class="close-btn" onclick="closeFirebaseModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="firebaseConfigForm">
+                <div class="modal-body">
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.6;">
+                        구글 Firebase Firestore 연동을 설정하면 PC와 스마트폰 간에 실시간으로 데이터가 동기화됩니다.<br>
+                        설정이 완료되면 기존 로컬 데이터가 자동으로 클라우드에 복사되어 연동됩니다.
+                    </p>
+                    <div class="form-group">
+                        <label for="fbConfigJson">Firebase 웹 앱 설정 객체 (JSON) <span style="color:var(--danger)">*</span></label>
+                        <textarea id="fbConfigJson" class="form-control" rows="8" required placeholder='{
+  "apiKey": "AIzaSy...",
+  "authDomain": "...",
+  "projectId": "...",
+  "storageBucket": "...",
+  "messagingSenderId": "...",
+  "appId": "..."
+}'></textarea>
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top: 0.5rem; line-height: 1.5;">
+                            * Firebase 콘솔의 웹 앱 등록 화면에서 발급되는 <code>const firebaseConfig = { ... }</code> 코드 블록 내부의 JSON 데이터만 입력해 주세요.
+                        </div>
+                    </div>
+                    <div id="firebaseConnectionTestResult" style="display:none; font-size:0.85rem; padding:0.75rem; border-radius:var(--radius-sm); margin-top:1rem;">
+                        <!-- Connection test results -->
+                    </div>
+                </div>
+                <div class="modal-footer" style="justify-content: space-between; align-items: center;">
+                    <div>
+                        <button type="button" class="btn btn-danger" id="clearFirebaseConfigBtn" style="display:none; padding: 0.6rem 1rem; font-size: 0.9rem;">연동 해제</button>
+                    </div>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button type="button" class="btn btn-secondary" onclick="closeFirebaseModal()">취소</button>
+                        <button type="submit" class="btn btn-primary" id="saveFirebaseConfigBtn">연동 및 저장</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Application Logic Script -->
-    <script src="app.js?v=1.0.7"></script>
+    <script src="app.js?v=1.0.8"></script>
 </body>
 </html>
