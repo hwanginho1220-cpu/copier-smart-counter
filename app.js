@@ -1054,6 +1054,13 @@ function openDetailModal(customerId) {
     }
 
     modal.classList.add('active');
+
+    // Bind edit button in details popup
+    const editBtn = document.getElementById('editCustomerFromDetailBtn');
+    editBtn.onclick = () => {
+        closeDetailModal();
+        openCustomerModal(customerId);
+    };
 }
 
 function closeDetailModal() {
