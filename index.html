@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartCounter - 복사기 점검 & 카운터 관리</title>
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="style.css">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js for visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fa-solid fa-print"></i>
+                <span>SmartCounter</span>
+            </div>
+            <ul class="nav-links">
+                <li class="active" data-view="dashboard">
+                    <a href="#"><i class="fa-solid fa-chart-pie"></i><span>대시보드</span></a>
+                </li>
+                <li data-view="customers">
+                    <a href="#"><i class="fa-solid fa-users"></i><span>고객사 관리</span></a>
+                </li>
+                <li data-view="inspections">
+                    <a href="#"><i class="fa-solid fa-clipboard-check"></i><span>점검 대장</span></a>
+                </li>
+            </ul>
+            <div class="sidebar-footer">
+                <button class="backup-btn" id="exportDataBtn">
+                    <i class="fa-solid fa-download"></i><span>백업 파일 내보내기</span>
+                </button>
+                <div class="file-input-wrapper" style="width: 100%; margin-top: 0.5rem;">
+                    <button class="backup-btn" style="width: 100%;">
+                        <i class="fa-solid fa-upload"></i><span>백업 복구 (가져오기)</span>
+                    </button>
+                    <input type="file" id="importDataFile" accept=".json">
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Section -->
+        <main class="main-content">
+            <!-- HEADER -->
+            <header>
+                <div>
+                    <h1 id="viewTitle">대시보드</h1>
+                    <p style="color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.25rem;" id="viewSubtitle">복사기 사용량 및 월간 점검 현황 요약</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-primary" id="headerActionBtn">
+                        <i class="fa-solid fa-plus"></i><span>새 기록 등록</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- 1. DASHBOARD VIEW -->
+            <section id="dashboardView" class="view-section active">
+                <!-- Metrics Row -->
+                <div class="metrics-grid">
+                    <div class="card metric-card">
+                        <div class="metric-icon blue">
+                            <i class="fa-solid fa-users"></i>
+                        </div>
+                        <div class="metric-info">
+                            <h3>총 관리 고객사</h3>
+                            <div class="value" id="totalCustomersVal">0</div>
+                            <div class="diff" id="customersDiffVal"></div>
+                        </div>
+                    </div>
+                    <div class="card metric-card">
+                        <div class="metric-icon purple">
+                            <i class="fa-solid fa-file-invoice"></i>
+                        </div>
+                        <div class="metric-info">
+                            <h3>이번 달 흑백 사용량</h3>
+                            <div class="value" id="monthlyBwVal">0</div>
+                            <div class="diff" id="monthlyBwDiffVal"></div>
+                        </div>
+                    </div>
+                    <div class="card metric-card">
+                        <div class="metric-icon emerald">
+                            <i class="fa-solid fa-file-image"></i>
+                        </div>
+                        <div class="metric-info">
+                            <h3>이번 달 컬러 사용량</h3>
+                            <div class="value" id="monthlyColorVal">0</div>
+                            <div class="diff" id="monthlyColorDiffVal"></div>
+                        </div>
+                    </div>
+                    <div class="card metric-card">
+                        <div class="metric-icon orange">
+                            <i class="fa-solid fa-calendar-check"></i>
+                        </div>
+                        <div class="metric-info">
+                            <h3>이번 달 점검 진행률</h3>
+                            <div class="value" id="inspectionProgressVal">0%</div>
+                            <div class="diff" id="inspectionProgressDiffVal"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Graphs and Info lists -->
+                <div class="dashboard-grid">
+                    <div class="card chart-card">
+                        <h2 style="font-size: 1.1rem; font-weight:600; margin-bottom: 1.5rem; font-family: var(--font-heading);">
+                            <i class="fa-solid fa-chart-line" style="color: var(--primary); margin-right: 0.5rem;"></i>월별 복사기 사용량 추이
+                        </h2>
+                        <div class="chart-container">
+                            <canvas id="usageChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card" style="display: flex; flex-direction: column;">
+                        <h2 style="font-size: 1.1rem; font-weight:600; margin-bottom: 1.25rem; font-family: var(--font-heading);">
+                            <i class="fa-solid fa-fire" style="color: #fca5a5; margin-right: 0.5rem;"></i>사용량 많은 고객사 (이번 달)
+                        </h2>
+                        <div id="topUsageCustomers" style="flex: 1; display:flex; flex-direction:column; gap:0.75rem; justify-content:flex-start;">
+                            <!-- Dynamically filled -->
+                            <p style="color: var(--text-muted); text-align: center; margin-top: 3rem;">이번 달 사용 기록이 없습니다.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Inspections Card -->
+                <div class="card table-card">
+                    <h2 style="font-size: 1.1rem; font-weight:600; margin-bottom: 1.25rem; font-family: var(--font-heading);">
+                        <i class="fa-solid fa-clock-rotate-left" style="color: var(--primary); margin-right: 0.5rem;"></i>최근 복사기 점검 기록
+                    </h2>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>점검일</th>
+                                    <th>고객사명</th>
+                                    <th>흑백 카운터</th>
+                                    <th>컬러 카운터</th>
+                                    <th>흑백 사용량</th>
+                                    <th>컬러 사용량</th>
+                                    <th>상태 및 특이사항</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentInspectionsTbody">
+                                <tr>
+                                    <td colspan="7" style="text-align: center; color: var(--text-muted);">점검 기록이 없습니다.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. CUSTOMERS VIEW -->
+            <section id="customersView" class="view-section">
+                <div class="card table-card">
+                    <div class="table-header-row">
+                        <div class="search-input-wrapper">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="customerSearchInput" class="search-input" placeholder="고객사 이름 또는 모델 검색...">
+                        </div>
+                        <button class="btn btn-primary" id="addCustomerBtn">
+                            <i class="fa-solid fa-user-plus"></i>고객 등록
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>고객사명</th>
+                                    <th>복사기 모델</th>
+                                    <th>일련번호(S/N)</th>
+                                    <th>연락처</th>
+                                    <th>최근 점검일</th>
+                                    <th>이번 달 점검 여부</th>
+                                    <th>관리</th>
+                                </tr>
+                            </thead>
+                            <tbody id="customersTbody">
+                                <!-- Dynamically populated -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. INSPECTIONS VIEW -->
+            <section id="inspectionsView" class="view-section">
+                <div class="card table-card">
+                    <div class="table-header-row">
+                        <div class="search-input-wrapper" style="display: flex; gap: 0.5rem; width: auto;">
+                            <div style="position: relative; width: 200px;">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" id="inspectionSearchInput" class="search-input" placeholder="고객사명 검색...">
+                            </div>
+                            <input type="month" id="inspectionMonthFilter" class="form-control" style="width: 160px; height: 100%;">
+                        </div>
+                        <button class="btn btn-primary" id="addInspectionBtn">
+                            <i class="fa-solid fa-file-signature"></i>점검 기록 등록
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>점검일</th>
+                                    <th>고객사명</th>
+                                    <th>복사기 모델</th>
+                                    <th>흑백 카운터 (사용량)</th>
+                                    <th>컬러 카운터 (사용량)</th>
+                                    <th>특이사항 / 메모</th>
+                                    <th>삭제</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inspectionsTbody">
+                                <!-- Dynamically populated -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- MODAL 1: ADD/EDIT CUSTOMER -->
+    <div class="modal-backdrop" id="customerModalBackdrop">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="customerModalTitle">고객사 등록</h2>
+                <button class="close-btn" onclick="closeCustomerModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="customerForm">
+                <input type="hidden" id="customerId">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="customerName">고객사명 <span style="color:var(--danger)">*</span></label>
+                        <input type="text" id="customerName" class="form-control" required placeholder="예: (주)에이비씨">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="copierModel">복사기 모델 <span style="color:var(--danger)">*</span></label>
+                            <input type="text" id="copierModel" class="form-control" required placeholder="예: Canon C3525">
+                        </div>
+                        <div class="form-group">
+                            <label for="serialNumber">일련번호 (S/N)</label>
+                            <input type="text" id="serialNumber" class="form-control" placeholder="예: SN12345678">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="customerContact">연락처</label>
+                        <input type="text" id="customerContact" class="form-control" placeholder="예: 02-1234-5678 또는 010-1234-5678">
+                    </div>
+                    <div class="form-group">
+                        <label for="customerLocation">설치 위치 / 메모</label>
+                        <input type="text" id="customerLocation" class="form-control" placeholder="예: 3F 탕비실 옆">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeCustomerModal()">취소</button>
+                    <button type="submit" class="btn btn-primary" id="saveCustomerBtn">등록</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: RECORD INSPECTION -->
+    <div class="modal-backdrop" id="inspectionModalBackdrop">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>복사기 점검 기록 등록</h2>
+                <button class="close-btn" onclick="closeInspectionModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="inspectionForm">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="inspectionCustomerSelect">고객사 선택 <span style="color:var(--danger)">*</span></label>
+                        <select id="inspectionCustomerSelect" class="form-control" required>
+                            <option value="">-- 고객사를 선택하세요 --</option>
+                            <!-- Dynamically populated -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="inspectionDate">점검일자 <span style="color:var(--danger)">*</span></label>
+                        <input type="date" id="inspectionDate" class="form-control" required>
+                    </div>
+                    <div id="previousCountersInfo" style="margin-bottom: 1.25rem; font-size: 0.85rem; color: var(--text-secondary); background: rgba(255,255,255,0.03); padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: none;">
+                        <!-- Dynamically shows previous counters to help the user check sanity -->
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="bwCounter">흑백 카운터 (현재) <span style="color:var(--danger)">*</span></label>
+                            <input type="number" id="bwCounter" class="form-control" required min="0" placeholder="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="colorCounter">컬러 카운터 (현재) <span style="color:var(--danger)">*</span></label>
+                            <input type="number" id="colorCounter" class="form-control" required min="0" placeholder="0">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="inspectionNotes">특이사항 및 점검 메모</label>
+                        <textarea id="inspectionNotes" class="form-control" rows="3" placeholder="예: 토너 교체 완료, 급지 롤러 세척 등"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeInspectionModal()">취소</button>
+                    <button type="submit" class="btn btn-primary">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 3: CUSTOMER DETAIL VIEW WITH INSPECTION HISTORY -->
+    <div class="modal-backdrop" id="detailModalBackdrop">
+        <div class="modal" style="width: 750px; max-width: 95%;">
+            <div class="modal-header">
+                <h2>고객 상세 정보 및 점검 이력</h2>
+                <button class="close-btn" onclick="closeDetailModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="customer-detail-grid">
+                    <!-- Left: Customer Info -->
+                    <div style="border-right: 1px solid var(--border-color); padding-right: 1.5rem;">
+                        <h3 id="detailCustomerName" style="font-size: 1.4rem; font-weight: 700; margin-bottom: 1rem; color: var(--primary);">고객명</h3>
+                        <ul class="info-list">
+                            <li>
+                                <span class="label">복사기 모델</span>
+                                <span class="value" id="detailCopierModel">-</span>
+                            </li>
+                            <li>
+                                <span class="label">일련번호 (S/N)</span>
+                                <span class="value" id="detailSerial">-</span>
+                            </li>
+                            <li>
+                                <span class="label">연락처</span>
+                                <span class="value" id="detailContact">-</span>
+                            </li>
+                            <li>
+                                <span class="label">설치 위치 및 메모</span>
+                                <span class="value" id="detailLocation">-</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <!-- Right: History List -->
+                    <div>
+                        <h4 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                            <span>점검 이력</span>
+                            <span class="badge badge-info" id="detailHistoryCount">0건</span>
+                        </h4>
+                        <div style="max-height: 300px; overflow-y: auto; padding-right: 0.5rem;" id="detailHistoryList">
+                            <!-- Dynamically populated mini cards -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeDetailModal()">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Logic Script -->
+    <script src="app.js"></script>
+</body>
+</html>
