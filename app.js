@@ -344,7 +344,7 @@ function renderRecentInspections() {
     const sorted = [...state.inspections].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
 
     if (sorted.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">점검 기록이 없습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">점검 기록이 없습니다.</td></tr>';
         return;
     }
 
@@ -389,6 +389,12 @@ function renderRecentInspections() {
                 ${colorBadge}
             </td>
             <td data-label="특이사항"><span style="font-size:0.85rem; color:var(--text-secondary);">${insp.notes || '-'}</span></td>
+            <td data-label="관리">
+                <div style="display:flex; gap:0.35rem;">
+                    <button class="btn-icon btn-secondary" onclick="openInspectionModal('${insp.id}')" title="수정"><i class="fa-solid fa-pen-to-square" style="color: var(--warning);"></i></button>
+                    <button class="btn-icon btn-danger" onclick="deleteInspection('${insp.id}', '${insp.customerId}')" title="삭제"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            </td>
         `;
         tbody.appendChild(tr);
     });
@@ -852,7 +858,17 @@ function handleInspectionFormSubmit(e) {
     }
 
     closeInspectionModal();
-    renderInspectionsTable();
+    refreshAllViews();
+}
+
+function refreshAllViews() {
+    if (currentView === 'dashboard') {
+        renderDashboard();
+    } else if (currentView === 'customers') {
+        renderCustomersTable();
+    } else if (currentView === 'inspections') {
+        renderInspectionsTable();
+    }
 }
 
 function deleteInspection(id, customerId) {
@@ -863,7 +879,23 @@ function deleteInspection(id, customerId) {
         // Recalculate usage for this customer because chronological order changed
         recalculateUsageForCustomer(customerId);
         
-        renderInspectionsTable();
+        refreshAllViews();
+    }
+}
+
+function editInspectionFromDetail(id, customerId) {
+    closeDetailModal();
+    openInspectionModal(id);
+}
+
+function deleteInspectionFromDetail(id, customerId) {
+    if (confirm('이 점검 기록을 삭제하시겠습니까? 삭제 후 사용량(증감)이 재계산됩니다.')) {
+        state.inspections = state.inspections.filter(i => i.id !== id);
+        saveToStorage();
+        
+        recalculateUsageForCustomer(customerId);
+        openDetailModal(customerId); // refresh detail popup
+        refreshAllViews();
     }
 }
 
@@ -1044,9 +1076,15 @@ function openDetailModal(customerId) {
                     </span>
                     ${insp.notes ? `<span style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">메모: ${insp.notes}</span>` : ''}
                 </div>
-                <div class="counters">
-                    <div class="bw">흑백: ${insp.bwCounter.toLocaleString()}</div>
-                    <div class="color">컬러: ${insp.colorCounter.toLocaleString()}</div>
+                <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.5rem;">
+                    <div class="counters" style="text-align:right;">
+                        <div class="bw">흑백: ${insp.bwCounter.toLocaleString()}</div>
+                        <div class="color">컬러: ${insp.colorCounter.toLocaleString()}</div>
+                    </div>
+                    <div style="display:flex; gap:0.25rem;">
+                        <button class="btn-icon btn-secondary" style="padding:0.25rem 0.4rem; font-size:0.75rem;" onclick="editInspectionFromDetail('${insp.id}', '${customerId}')" title="수정"><i class="fa-solid fa-pen-to-square" style="color: var(--warning);"></i></button>
+                        <button class="btn-icon btn-danger" style="padding:0.25rem 0.4rem; font-size:0.75rem;" onclick="deleteInspectionFromDetail('${insp.id}', '${customerId}')" title="삭제"><i class="fa-solid fa-trash"></i></button>
+                    </div>
                 </div>
             `;
             listContainer.appendChild(card);
