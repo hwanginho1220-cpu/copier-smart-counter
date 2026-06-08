@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartCounter - 복사기 점검 & 카운터 관리</title>
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="style.css?v=1.0.3">
+    <link rel="stylesheet" href="style.css?v=1.0.4">
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Chart.js for visualization -->
@@ -211,7 +211,7 @@
                                     <th>흑백 카운터 (사용량)</th>
                                     <th>컬러 카운터 (사용량)</th>
                                     <th>특이사항 / 메모</th>
-                                    <th>삭제</th>
+                                    <th>관리</th>
                                 </tr>
                             </thead>
                             <tbody id="inspectionsTbody">
@@ -279,10 +279,11 @@
     <div class="modal-backdrop" id="inspectionModalBackdrop">
         <div class="modal">
             <div class="modal-header">
-                <h2>복사기 점검 기록 등록</h2>
+                <h2 id="inspectionModalTitle">복사기 점검 기록 등록</h2>
                 <button class="close-btn" onclick="closeInspectionModal()"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <form id="inspectionForm">
+                <input type="hidden" id="inspectionId">
                 <div class="modal-body">
                     <div class="form-group">
                         <label for="inspectionCustomerSelect">고객사 선택 <span style="color:var(--danger)">*</span></label>
@@ -375,6 +376,6 @@
     </div>
 
     <!-- Application Logic Script -->
-    <script src="app.js?v=1.0.3"></script>
+    <script src="app.js?v=1.0.4"></script>
 </body>
 </html>

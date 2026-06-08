@@ -112,7 +112,8 @@ function setupEventListeners() {
 
     // Dynamic select field details in inspection form
     document.getElementById('inspectionCustomerSelect').addEventListener('change', (e) => {
-        updatePreviousCountersInfo(e.target.value);
+        const id = document.getElementById('inspectionId').value || null;
+        updatePreviousCountersInfo(e.target.value, id);
     });
 
     // Search & Filters
@@ -774,10 +775,15 @@ function renderInspectionsTable() {
                 ${colorBadge}
             </td>
             <td data-label="특이사항 / 메모"><span style="font-size: 0.85rem; color: var(--text-secondary);">${insp.notes || '-'}</span></td>
-            <td data-label="삭제">
-                <button class="btn-icon btn-danger" onclick="deleteInspection('${insp.id}', '${insp.customerId}')" title="삭제">
-                    <i class="fa-solid fa-trash"></i>
-                </button>
+            <td data-label="관리">
+                <div style="display:flex; gap:0.35rem;">
+                    <button class="btn-icon btn-secondary" onclick="openInspectionModal('${insp.id}')" title="수정">
+                        <i class="fa-solid fa-pen-to-square" style="color: var(--warning);"></i>
+                    </button>
+                    <button class="btn-icon btn-danger" onclick="deleteInspection('${insp.id}', '${insp.customerId}')" title="삭제">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
             </td>
         `;
         tbody.appendChild(tr);
@@ -787,6 +793,7 @@ function renderInspectionsTable() {
 function handleInspectionFormSubmit(e) {
     e.preventDefault();
 
+    const id = document.getElementById('inspectionId').value;
     const customerId = document.getElementById('inspectionCustomerSelect').value;
     const date = document.getElementById('inspectionDate').value;
     const bwCounter = parseInt(document.getElementById('bwCounter').value, 10);
@@ -795,32 +802,54 @@ function handleInspectionFormSubmit(e) {
 
     if (!customerId || !date || isNaN(bwCounter) || isNaN(colorCounter)) return;
 
-    // Check for duplicate inspections for the same customer on the same date
-    const duplicate = state.inspections.find(i => i.customerId === customerId && i.date === date);
-    if (duplicate) {
-        if (!confirm('해당 날짜에 이미 등록된 점검 기록이 있습니다. 덮어쓰시겠습니까?')) {
-            return;
+    if (id) {
+        // Edit Mode
+        const insp = state.inspections.find(i => i.id === id);
+        if (insp) {
+            const oldCustomerId = insp.customerId;
+            insp.customerId = customerId;
+            insp.date = date;
+            insp.bwCounter = bwCounter;
+            insp.colorCounter = colorCounter;
+            insp.notes = notes;
+
+            saveToStorage();
+            
+            // Recalculate for both old and new customers in case the customer was changed
+            recalculateUsageForCustomer(oldCustomerId);
+            if (oldCustomerId !== customerId) {
+                recalculateUsageForCustomer(customerId);
+            }
         }
-        // Delete the duplicate first
-        state.inspections = state.inspections.filter(i => i.id !== duplicate.id);
+    } else {
+        // Add Mode
+        // Check for duplicate inspections for the same customer on the same date
+        const duplicate = state.inspections.find(i => i.customerId === customerId && i.date === date);
+        if (duplicate) {
+            if (!confirm('해당 날짜에 이미 등록된 점검 기록이 있습니다. 덮어쓰시겠습니까?')) {
+                return;
+            }
+            // Delete the duplicate first
+            state.inspections = state.inspections.filter(i => i.id !== duplicate.id);
+        }
+
+        const newInspection = {
+            id: 'insp-' + Date.now(),
+            customerId: customerId,
+            date: date,
+            bwCounter: bwCounter,
+            colorCounter: colorCounter,
+            bwUsage: 0, // Will be calculated below
+            colorUsage: 0, // Will be calculated below
+            notes: notes
+        };
+
+        state.inspections.push(newInspection);
+        saveToStorage();
+
+        // Recalculate usage for this customer (this handles chronological order automatically!)
+        recalculateUsageForCustomer(customerId);
     }
-
-    const newInspection = {
-        id: 'insp-' + Date.now(),
-        customerId: customerId,
-        date: date,
-        bwCounter: bwCounter,
-        colorCounter: colorCounter,
-        bwUsage: 0, // Will be calculated below
-        colorUsage: 0, // Will be calculated below
-        notes: notes
-    };
-
-    state.inspections.push(newInspection);
-    saveToStorage();
-
-    // Recalculate usage for this customer (this handles chronological order automatically!)
-    recalculateUsageForCustomer(customerId);
 
     closeInspectionModal();
     renderInspectionsTable();
@@ -879,15 +908,14 @@ function closeCustomerModal() {
 }
 
 // Inspection Modal
-function openInspectionModal() {
+function openInspectionModal(id = null) {
     const modal = document.getElementById('inspectionModalBackdrop');
     const form = document.getElementById('inspectionForm');
-    form.reset();
+    const title = document.getElementById('inspectionModalTitle');
     
-    // Set default date to today
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('inspectionDate').value = today;
-
+    form.reset();
+    document.getElementById('inspectionId').value = '';
+    
     // Populated customer select dropdown
     const select = document.getElementById('inspectionCustomerSelect');
     select.innerHTML = '<option value="">-- 고객사를 선택하세요 --</option>';
@@ -902,7 +930,27 @@ function openInspectionModal() {
         select.appendChild(option);
     });
 
-    document.getElementById('previousCountersInfo').style.display = 'none';
+    if (id) {
+        title.textContent = '복사기 점검 기록 수정';
+        const insp = state.inspections.find(i => i.id === id);
+        if (insp) {
+            document.getElementById('inspectionId').value = insp.id;
+            document.getElementById('inspectionCustomerSelect').value = insp.customerId;
+            document.getElementById('inspectionDate').value = insp.date;
+            document.getElementById('bwCounter').value = insp.bwCounter;
+            document.getElementById('colorCounter').value = insp.colorCounter;
+            document.getElementById('inspectionNotes').value = insp.notes || '';
+            
+            // Show previous info (excluding this record)
+            updatePreviousCountersInfo(insp.customerId, insp.id);
+        }
+    } else {
+        title.textContent = '복사기 점검 기록 등록';
+        // Set default date to today
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('inspectionDate').value = today;
+        document.getElementById('previousCountersInfo').style.display = 'none';
+    }
 
     modal.classList.add('active');
 }
@@ -914,7 +962,7 @@ function closeInspectionModal() {
 /**
  * Show previous month's counters in the modal when a customer is selected.
  */
-function updatePreviousCountersInfo(customerId) {
+function updatePreviousCountersInfo(customerId, excludeId = null) {
     const infoBox = document.getElementById('previousCountersInfo');
     if (!customerId) {
         infoBox.style.display = 'none';
@@ -924,7 +972,7 @@ function updatePreviousCountersInfo(customerId) {
     const dateVal = document.getElementById('inspectionDate').value;
     
     // Find the closest previous inspection
-    const prev = getPreviousInspection(customerId, dateVal || new Date().toISOString().split('T')[0]);
+    const prev = getPreviousInspection(customerId, dateVal || new Date().toISOString().split('T')[0], excludeId);
 
     if (prev) {
         infoBox.style.display = 'block';
