@@ -17,35 +17,8 @@ let usageChart = null;
 
 // --- Demo Data ---
 const demoData = {
-    customers: [
-        { id: 'cust-1', name: '(주)미래기획', copierModel: 'Canon iR ADV DX C3826', serialNumber: 'CNB12345', contact: '010-1234-5678', location: '2층 관리부 사무실', createdAt: '2026-03-01', contractBw: 2000, contractColor: 300 },
-        { id: 'cust-2', name: '현대법률사무소', copierModel: 'HP Color LaserJet E78330', serialNumber: 'HP987654', contact: '02-555-1234', location: '5층 회의실 앞', createdAt: '2026-03-05', contractBw: 5000, contractColor: 500 },
-        { id: 'cust-3', name: '디자인연구소 숲', copierModel: 'Epson WorkForce C879R', serialNumber: 'EP881122', contact: '010-9876-5432', location: '3층 디자인실', createdAt: '2026-03-10', contractBw: 1500, contractColor: 3000 },
-        { id: 'cust-4', name: '아이비 학원', copierModel: 'Sindoh D420', serialNumber: 'SD009988', contact: '031-777-8888', location: '1층 안내데스크', createdAt: '2026-03-12', contractBw: 3000, contractColor: 100 }
-    ],
-    inspections: [
-        // March 2026
-        { id: 'insp-1', customerId: 'cust-1', date: '2026-03-20', bwCounter: 5000, colorCounter: 1500, bwUsage: 0, colorUsage: 0, notes: '신규 점검 개시 - 기준 카운터 설정' },
-        { id: 'insp-2', customerId: 'cust-2', date: '2026-03-21', bwCounter: 12000, colorCounter: 800, bwUsage: 0, colorUsage: 0, notes: '신규 점검 개시' },
-        { id: 'insp-3', customerId: 'cust-3', date: '2026-03-22', bwCounter: 3200, colorCounter: 4500, bwUsage: 0, colorUsage: 0, notes: '신규 점검 개시' },
-        { id: 'insp-4', customerId: 'cust-4', date: '2026-03-23', bwCounter: 8200, colorCounter: 200, bwUsage: 0, colorUsage: 0, notes: '신규 점검 개시' },
-        
-        // April 2026
-        { id: 'insp-5', customerId: 'cust-1', date: '2026-04-20', bwCounter: 6200, colorCounter: 1850, bwUsage: 1200, colorUsage: 350, notes: '정기 점검. 흑백 토너 교체 완료.' },
-        { id: 'insp-6', customerId: 'cust-2', date: '2026-04-21', bwCounter: 15400, colorCounter: 1100, bwUsage: 3400, colorUsage: 300, notes: '정기 점검. 급지 롤러 클리닝.' },
-        { id: 'insp-7', customerId: 'cust-3', date: '2026-04-22', bwCounter: 4100, colorCounter: 6800, bwUsage: 900, colorUsage: 2300, notes: '정기 점검. 고사용 인쇄 패턴 확인.' },
-        { id: 'insp-8', customerId: 'cust-4', date: '2026-04-23', bwCounter: 10500, colorCounter: 320, bwUsage: 2300, colorUsage: 120, notes: '정기 점검. 이상 없음.' },
-
-        // May 2026
-        { id: 'insp-9', customerId: 'cust-1', date: '2026-05-20', bwCounter: 7650, colorCounter: 2280, bwUsage: 1450, colorUsage: 430, notes: '정기 점검. 액정 화면 클리닝.' },
-        { id: 'insp-10', customerId: 'cust-2', date: '2026-05-21', bwCounter: 19100, colorCounter: 1450, bwUsage: 3700, colorUsage: 350, notes: '정기 점검. 폐토너통 교체.' },
-        { id: 'insp-11', customerId: 'cust-3', date: '2026-05-22', bwCounter: 5050, colorCounter: 9350, bwUsage: 950, colorUsage: 2550, notes: '정기 점검. 컬러 출력 많음.' },
-        { id: 'insp-12', customerId: 'cust-4', date: '2026-05-23', bwCounter: 13100, colorCounter: 480, bwUsage: 2600, colorUsage: 160, notes: '정기 점검. 테스트 페이지 인쇄 양호.' },
-
-        // June 2026 (Current Month)
-        { id: 'insp-13', customerId: 'cust-1', date: '2026-06-05', bwCounter: 8450, colorCounter: 2510, bwUsage: 800, colorUsage: 230, notes: '정기 점검. 기기 상태 양호.' },
-        { id: 'insp-14', customerId: 'cust-2', date: '2026-06-07', bwCounter: 21200, colorCounter: 1690, bwUsage: 2100, colorUsage: 240, notes: '정기 점검. 용지 걸림 빈번 보고로 급지부 패드 교체.' }
-    ]
+    customers: [],
+    inspections: []
 };
 
 // --- Initialization ---
@@ -124,6 +97,15 @@ function setupEventListeners() {
     // Backup & Restore
     document.getElementById('exportDataBtn').addEventListener('click', exportData);
     document.getElementById('importDataFile').addEventListener('change', importData);
+    document.getElementById('clearAllDataBtn').addEventListener('click', () => {
+        if (confirm('저장된 모든 고객 정보와 점검 기록이 영구적으로 삭제됩니다. 계속하시겠습니까?')) {
+            state.customers = [];
+            state.inspections = [];
+            saveToStorage();
+            alert('모든 데이터가 초기화되었습니다.');
+            location.reload();
+        }
+    });
 
     // Customer Add button inside customer view
     document.getElementById('addCustomerBtn').addEventListener('click', () => openCustomerModal());

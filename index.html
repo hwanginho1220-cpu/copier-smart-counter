@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartCounter - 복사기 점검 & 카운터 관리</title>
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="style.css?v=1.0.6">
+    <link rel="stylesheet" href="style.css?v=1.0.7">
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Chart.js for visualization -->
@@ -40,6 +40,9 @@
                     </button>
                     <input type="file" id="importDataFile" accept=".json">
                 </div>
+                <button class="backup-btn" id="clearAllDataBtn" style="width: 100%; margin-top: 0.5rem; background: rgba(239, 68, 68, 0.08); color: #fca5a5; border: 1px dashed rgba(239, 68, 68, 0.3);">
+                    <i class="fa-solid fa-trash-can"></i><span>전체 데이터 초기화</span>
+                </button>
             </div>
         </aside>
 
@@ -378,6 +381,6 @@
     </div>
 
     <!-- Application Logic Script -->
-    <script src="app.js?v=1.0.6"></script>
+    <script src="app.js?v=1.0.7"></script>
 </body>
 </html>
