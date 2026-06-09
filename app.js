@@ -22,6 +22,9 @@ let isCloudMode = false;
 let customersUnsubscribe = null;
 let inspectionsUnsubscribe = null;
 
+// Global state for uploaded serial photo Base64
+let currentSerialImageBase64 = null;
+
 // --- Demo Data ---
 const demoData = {
     customers: [],
@@ -141,6 +144,35 @@ function setupEventListeners() {
     document.getElementById('openFirebaseModalBtn').addEventListener('click', openFirebaseModal);
     document.getElementById('firebaseConfigForm').addEventListener('submit', handleFirebaseConfigSubmit);
     document.getElementById('clearFirebaseConfigBtn').addEventListener('click', clearFirebaseConfig);
+
+    // Serial Image Upload Trigger
+    document.getElementById('serialImageInput').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+            const previewContainer = document.getElementById('serialImagePreviewContainer');
+            const previewImg = document.getElementById('serialImagePreview');
+
+            // Set loading spinner SVG
+            previewImg.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="%230ea5e9" d="M12,4V2A10,10,0,0,0,2,12H4A8,8,0,0,1,12,4Z"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></path></svg>';
+            previewContainer.style.display = 'block';
+
+            const compressedBase64 = await compressSerialImage(file);
+            currentSerialImageBase64 = compressedBase64;
+            previewImg.src = compressedBase64;
+        } catch (err) {
+            console.error("사진 압축 가공 에러:", err);
+            alert("사진을 첨부하는 중 오류가 발생했습니다.");
+        }
+    });
+
+    document.getElementById('deleteSerialImageBtn').addEventListener('click', () => {
+        currentSerialImageBase64 = null;
+        document.getElementById('serialImageInput').value = '';
+        document.getElementById('serialImagePreviewContainer').style.display = 'none';
+        document.getElementById('serialImagePreview').src = '';
+    });
 }
 
 function initDateInputs() {
@@ -704,7 +736,8 @@ async function handleCustomerFormSubmit(e) {
         contact: contact,
         contractBw: contractBw,
         contractColor: contractColor,
-        location: location
+        location: location,
+        serialImage: currentSerialImageBase64
     };
 
     if (id) {
@@ -1029,6 +1062,12 @@ function openCustomerModal(id = null) {
     form.reset();
     document.getElementById('customerId').value = '';
 
+    // Reset image preview state
+    currentSerialImageBase64 = null;
+    document.getElementById('serialImageInput').value = '';
+    document.getElementById('serialImagePreviewContainer').style.display = 'none';
+    document.getElementById('serialImagePreview').src = '';
+
     if (id) {
         title.textContent = '고객사 정보 수정';
         saveBtn.textContent = '수정 완료';
@@ -1042,6 +1081,13 @@ function openCustomerModal(id = null) {
             document.getElementById('contractBw').value = customer.contractBw || '';
             document.getElementById('contractColor').value = customer.contractColor || '';
             document.getElementById('customerLocation').value = customer.location || '';
+            
+            // Populate photo thumbnail if exists
+            if (customer.serialImage) {
+                currentSerialImageBase64 = customer.serialImage;
+                document.getElementById('serialImagePreview').src = customer.serialImage;
+                document.getElementById('serialImagePreviewContainer').style.display = 'block';
+            }
         }
     } else {
         title.textContent = '고객사 신규 등록';
@@ -1161,6 +1207,18 @@ function openDetailModal(customerId) {
     document.getElementById('detailCopierModel').textContent = customer.copierModel;
     document.getElementById('detailSerial').textContent = customer.serialNumber || '-';
     document.getElementById('detailContact').textContent = customer.contact || '-';
+    
+    // Fill serial image thumbnail if exists
+    const detailImgContainer = document.getElementById('detailSerialImageContainer');
+    const detailImgEl = document.getElementById('detailSerialImage');
+    if (customer.serialImage) {
+        detailImgEl.src = customer.serialImage;
+        detailImgContainer.style.display = 'block';
+        detailImgContainer.onclick = () => openImageViewer(customer.serialImage);
+    } else {
+        detailImgContainer.style.display = 'none';
+        detailImgContainer.onclick = null;
+    }
     
     const bwContractText = customer.contractBw ? `${customer.contractBw.toLocaleString()}매` : '0매';
     const colorContractText = customer.contractColor ? `${customer.contractColor.toLocaleString()}매` : '0매';
@@ -1513,4 +1571,55 @@ function clearFirebaseConfig() {
     refreshAllViews();
     closeFirebaseModal();
     alert('클라우드 연동이 해제되었습니다. 로컬 모드로 전환합니다.');
+}
+
+// --- Image Compression & Viewer Helpers ---
+
+function compressSerialImage(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = function(event) {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 600;
+                let width = img.width;
+                let height = img.height;
+                
+                if (width > MAX_WIDTH) {
+                    height *= MAX_WIDTH / width;
+                    width = MAX_WIDTH;
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Compress to JPEG with 60% quality
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+                resolve(dataUrl);
+            };
+            img.onerror = reject;
+        };
+        reader.onerror = reject;
+    });
+}
+
+function openImageViewer(base64) {
+    const backdrop = document.getElementById('imageViewerBackdrop');
+    const img = document.getElementById('viewerImage');
+    img.src = base64;
+    backdrop.classList.add('active');
+}
+
+function closeImageViewer() {
+    const backdrop = document.getElementById('imageViewerBackdrop');
+    const img = document.getElementById('viewerImage');
+    backdrop.classList.remove('active');
+    setTimeout(() => {
+        img.src = '';
+    }, 300);
 }

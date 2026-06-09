@@ -879,3 +879,17 @@ tr:hover td {
     color: #fca5a5;
     border: 1px solid rgba(239, 68, 68, 0.3);
 }
+
+/* Serial Number Photo & Viewer Styles */
+#detailSerialImageContainer:hover .hover-overlay {
+    opacity: 1 !important;
+}
+
+#imageViewerBackdrop img {
+    transform: scale(0.95);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#imageViewerBackdrop.active img {
+    transform: scale(1);
+}

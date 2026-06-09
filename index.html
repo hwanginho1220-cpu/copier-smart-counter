@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartCounter - 복사기 점검 & 카운터 관리</title>
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="style.css?v=1.0.9">
+    <link rel="stylesheet" href="style.css?v=1.0.10">
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Chart.js for visualization -->
@@ -258,7 +258,19 @@
                         </div>
                         <div class="form-group">
                             <label for="serialNumber">일련번호 (S/N)</label>
-                            <input type="text" id="serialNumber" class="form-control" placeholder="예: SN12345678">
+                            <div style="display:flex; gap:0.5rem; align-items:center;">
+                                <input type="text" id="serialNumber" class="form-control" placeholder="예: SN12345678" style="flex:1;">
+                                <button type="button" class="btn btn-secondary" style="padding: 0.75rem 1.05rem;" onclick="document.getElementById('serialImageInput').click()" title="일련번호 사진 촬영/첨부">
+                                    <i class="fa-solid fa-camera"></i>
+                                </button>
+                            </div>
+                            <input type="file" id="serialImageInput" accept="image/*" style="display:none;">
+                            <div id="serialImagePreviewContainer" style="margin-top: 0.5rem; display:none; position:relative; width:80px; height:80px; border-radius: var(--radius-sm); border:1px solid var(--border-color); overflow:hidden;">
+                                <img id="serialImagePreview" src="" style="width:100%; height:100%; object-fit:cover;">
+                                <button type="button" id="deleteSerialImageBtn" style="position:absolute; top:4px; right:4px; width:20px; height:20px; border-radius:50%; background:rgba(0,0,0,0.6); border:none; color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.7rem;">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="form-group">
@@ -355,6 +367,12 @@
                             <li>
                                 <span class="label">일련번호 (S/N)</span>
                                 <span class="value" id="detailSerial">-</span>
+                                <div id="detailSerialImageContainer" style="margin-top: 0.35rem; display:none; cursor:pointer; position:relative; width: 70px; height: 70px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); overflow:hidden;">
+                                    <img id="detailSerialImage" src="" style="width:100%; height:100%; object-fit:cover;">
+                                    <div style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; color:#fff; font-size:0.75rem; font-weight:600; opacity:0; transition:var(--transition);" class="hover-overlay">
+                                        <i class="fa-solid fa-magnifying-glass-plus"></i>
+                                    </div>
+                                </div>
                             </li>
                             <li>
                                 <span class="label">연락처</span>
@@ -433,7 +451,15 @@
         </div>
     </div>
 
+    <!-- MODAL 5: IMAGE VIEWER OVERLAY -->
+    <div class="modal-backdrop" id="imageViewerBackdrop" style="z-index: 2000;" onclick="closeImageViewer()">
+        <div style="position:relative; max-width:90%; max-height:90%;" onclick="event.stopPropagation()">
+            <img id="viewerImage" src="" style="max-width:100%; max-height:85vh; border-radius:var(--radius-md); box-shadow:var(--shadow-lg); object-fit:contain;">
+            <button type="button" class="close-btn" style="position:absolute; top:-40px; right:0; color:#fff; font-size:1.8rem; background:transparent; border:none; cursor:pointer;" onclick="closeImageViewer()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+    </div>
+
     <!-- Application Logic Script -->
-    <script src="app.js?v=1.0.9"></script>
+    <script src="app.js?v=1.0.10"></script>
 </body>
 </html>
