@@ -664,7 +664,7 @@ function renderCustomersTable() {
     });
 
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 3rem 0;">등록된 고객사가 없거나 검색 결과가 없습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 3rem 0;">등록된 고객사가 없거나 검색 결과가 없습니다.</td></tr>';
         return;
     }
 
@@ -690,11 +690,8 @@ function renderCustomersTable() {
         tr.innerHTML = `
             <td data-label="고객사명"><span style="font-weight: 600; font-size:1rem; cursor:pointer; color:var(--primary);" onclick="openDetailModal('${cust.id}')">${cust.name}</span></td>
             <td data-label="복사기 모델"><span style="font-weight:500;">${cust.copierModel}</span></td>
-            <td data-label="계약 매수">
-                <div style="font-size:0.9rem; color:var(--text-secondary);">
-                    흑백 ${(cust.contractBw || 0).toLocaleString()} / 컬러 ${(cust.contractColor || 0).toLocaleString()}
-                </div>
-            </td>
+            <td data-label="계약 흑백"><span style="font-weight: 500;">${(cust.contractBw || 0).toLocaleString()} 매</span></td>
+            <td data-label="계약 컬러"><span style="font-weight: 500; color: #c084fc;">${(cust.contractColor || 0).toLocaleString()} 매</span></td>
             <td data-label="일련번호(S/N)"><code style="color:var(--text-secondary); font-family: monospace;">${cust.serialNumber || '-'}</code></td>
             <td data-label="연락처">${cust.contact || '-'}</td>
             <td data-label="최근 점검일">${lastInspectionDate}</td>
