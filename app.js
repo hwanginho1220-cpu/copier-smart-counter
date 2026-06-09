@@ -450,12 +450,16 @@ function renderRecentInspections() {
             <td data-label="흑백 카운터">${insp.bwCounter.toLocaleString()}</td>
             <td data-label="컬러 카운터" style="color:#d8b4fe;">${insp.colorCounter.toLocaleString()}</td>
             <td data-label="흑백 사용량">
-                <span style="font-weight:600;">${insp.bwUsage.toLocaleString()}</span>
-                ${bwBadge}
+                <div style="display: flex; align-items: center; gap: 0.35rem; justify-content: flex-end;">
+                    <span style="font-weight:600;">${insp.bwUsage.toLocaleString()}</span>
+                    ${bwBadge}
+                </div>
             </td>
             <td data-label="컬러 사용량">
-                <span style="font-weight:600;">${insp.colorUsage.toLocaleString()}</span>
-                ${colorBadge}
+                <div style="display: flex; align-items: center; gap: 0.35rem; justify-content: flex-end;">
+                    <span style="font-weight:600;">${insp.colorUsage.toLocaleString()}</span>
+                    ${colorBadge}
+                </div>
             </td>
             <td data-label="특이사항"><span style="font-size:0.85rem; color:var(--text-secondary);">${insp.notes || '-'}</span></td>
             <td data-label="관리">
@@ -871,12 +875,16 @@ function renderInspectionsTable() {
             <td data-label="고객사명"><span style="font-weight: 600;">${customerName}</span></td>
             <td data-label="복사기 모델">${model}</td>
             <td data-label="흑백 카운터">
-                <div>${insp.bwCounter.toLocaleString()}</div>
-                ${bwBadge}
+                <div style="display: flex; align-items: center; gap: 0.35rem;">
+                    <span>${insp.bwCounter.toLocaleString()}</span>
+                    ${bwBadge}
+                </div>
             </td>
             <td data-label="컬러 카운터">
-                <div>${insp.colorCounter.toLocaleString()}</div>
-                ${colorBadge}
+                <div style="display: flex; align-items: center; gap: 0.35rem;">
+                    <span>${insp.colorCounter.toLocaleString()}</span>
+                    ${colorBadge}
+                </div>
             </td>
             <td data-label="특이사항 / 메모"><span style="font-size: 0.85rem; color: var(--text-secondary);">${insp.notes || '-'}</span></td>
             <td data-label="관리">
