@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartCounter - 복사기 점검 & 카운터 관리</title>
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="style.css?v=1.0.16">
+    <link rel="stylesheet" href="style.css?v=1.0.17">
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Chart.js for visualization -->
@@ -97,7 +97,7 @@
                             <div class="diff" id="monthlyColorDiffVal"></div>
                         </div>
                     </div>
-                    <div class="card metric-card">
+                    <div class="card metric-card" id="inspectionProgressCard" onclick="openUninspectedModal()">
                         <div class="metric-icon orange">
                             <i class="fa-solid fa-calendar-check"></i>
                         </div>
@@ -497,7 +497,28 @@
         </div>
     </div>
 
+    <!-- MODAL 6: UNINSPECTED CUSTOMERS LIST -->
+    <div class="modal-backdrop" id="uninspectedModalBackdrop">
+        <div class="modal" style="width: 550px; max-width: 95%;">
+            <div class="modal-header">
+                <h2>이번 달 미점검 업체 목록</h2>
+                <button class="close-btn" onclick="closeUninspectedModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem;">
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
+                    이번 달 정기점검 대상 중 아직 점검 기록이 등록되지 않은 업체 목록입니다. (총 <span id="uninspectedCount" style="font-weight:700; color:var(--warning);">0</span>개소)
+                </p>
+                <div style="max-height: 350px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 0.25rem;" id="uninspectedListContainer">
+                    <!-- Dynamically populated uninspected list items -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeUninspectedModal()">닫기</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Application Logic Script -->
-    <script src="app.js?v=1.0.16"></script>
+    <script src="app.js?v=1.0.17"></script>
 </body>
 </html>

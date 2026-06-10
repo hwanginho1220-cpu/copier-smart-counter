@@ -1124,7 +1124,7 @@ function closeCustomerModal() {
 }
 
 // Inspection Modal
-function openInspectionModal(id = null) {
+function openInspectionModal(id = null, customerId = null) {
     const modal = document.getElementById('inspectionModalBackdrop');
     const form = document.getElementById('inspectionForm');
     const title = document.getElementById('inspectionModalTitle');
@@ -1166,6 +1166,11 @@ function openInspectionModal(id = null) {
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('inspectionDate').value = today;
         document.getElementById('previousCountersInfo').style.display = 'none';
+        
+        if (customerId) {
+            document.getElementById('inspectionCustomerSelect').value = customerId;
+            updatePreviousCountersInfo(customerId, null);
+        }
     }
 
     modal.classList.add('active');
@@ -1671,3 +1676,70 @@ function closeImageViewer() {
         img.src = '';
     }, 300);
 }
+
+// --- Logic & Helpers for Uninspected Customers modal (Triggered by Dashboard Progress card) ---
+window.openUninspectedModal = function() {
+    const modal = document.getElementById('uninspectedModalBackdrop');
+    const container = document.getElementById('uninspectedListContainer');
+    const countSpan = document.getElementById('uninspectedCount');
+    
+    container.innerHTML = '';
+    
+    // Get current year and month
+    const today = new Date();
+    const currentMonthStr = today.toISOString().substring(0, 7); // "YYYY-MM"
+    
+    // Filter target customers (isMonthlyInspection !== false)
+    const targetCustomers = state.customers.filter(c => c.isMonthlyInspection !== false);
+    
+    // Get inspected customer IDs this month
+    const thisMonthInsps = state.inspections.filter(i => i.date.startsWith(currentMonthStr));
+    const inspectedIds = new Set(thisMonthInsps.map(i => i.customerId));
+    
+    // Filter uninspected customers
+    const uninspected = targetCustomers.filter(c => !inspectedIds.has(c.id));
+    
+    // Sort alphabetically
+    uninspected.sort((a, b) => a.name.localeCompare(b.name));
+    
+    countSpan.textContent = uninspected.length;
+    
+    if (uninspected.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; margin-top: 2rem;">이번 달 점검 대상 업체의 점검이 모두 완료되었습니다! 🎉</p>';
+    } else {
+        uninspected.forEach(cust => {
+            const card = document.createElement('div');
+            card.style.display = 'flex';
+            card.style.justifyContent = 'space-between';
+            card.style.alignItems = 'center';
+            card.style.padding = '0.85rem 1rem';
+            card.style.background = 'rgba(255, 255, 255, 0.02)';
+            card.style.border = '1px solid var(--border-color)';
+            card.style.borderRadius = 'var(--radius-md)';
+            card.style.gap = '1rem';
+            
+            card.innerHTML = `
+                <div style="display:flex; flex-direction:column; gap:0.25rem;">
+                    <span style="font-weight:600; font-size:0.95rem; color:var(--text-primary);">${cust.name}</span>
+                    <span style="font-size:0.8rem; color:var(--text-secondary);">${cust.copierModel} | ${cust.location || '위치 미지정'}</span>
+                    ${cust.contact ? `<span style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-solid fa-phone" style="margin-right:0.25rem;"></i>${cust.contact}</span>` : ''}
+                </div>
+                <button type="button" class="btn btn-primary" style="padding:0.4rem 0.75rem; font-size:0.8rem; border-radius:6px; flex-shrink:0; cursor:pointer;" onclick="registerInspectionForCustomer('${cust.id}')">
+                    <i class="fa-solid fa-file-signature"></i> 점검
+                </button>
+            `;
+            container.appendChild(card);
+        });
+    }
+    
+    modal.classList.add('active');
+};
+
+window.closeUninspectedModal = function() {
+    document.getElementById('uninspectedModalBackdrop').classList.remove('active');
+};
+
+window.registerInspectionForCustomer = function(customerId) {
+    window.closeUninspectedModal();
+    openInspectionModal(null, customerId);
+};

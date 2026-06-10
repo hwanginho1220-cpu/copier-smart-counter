@@ -289,6 +289,18 @@ header h1 {
     gap: 1.25rem;
 }
 
+#inspectionProgressCard {
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+#inspectionProgressCard:hover {
+    background: var(--bg-card-hover);
+    border-color: rgba(245, 158, 11, 0.45);
+    box-shadow: 0 8px 30px rgba(245, 158, 11, 0.12);
+    transform: translateY(-2px);
+}
+
 .metric-icon {
     width: 54px;
     height: 54px;
