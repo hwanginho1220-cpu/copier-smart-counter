@@ -142,6 +142,10 @@ function setupEventListeners() {
 
     // Firebase Settings Trigger
     document.getElementById('openFirebaseModalBtn').addEventListener('click', openFirebaseModal);
+    const headerSettingsBtn = document.getElementById('headerSettingsBtn');
+    if (headerSettingsBtn) {
+        headerSettingsBtn.addEventListener('click', openFirebaseModal);
+    }
     document.getElementById('firebaseConfigForm').addEventListener('submit', handleFirebaseConfigSubmit);
     document.getElementById('clearFirebaseConfigBtn').addEventListener('click', clearFirebaseConfig);
 
@@ -1461,12 +1465,40 @@ function openFirebaseModal() {
     }
     
     updateSyncStatusUI();
+    
+    // Always default to the cloud tab when opening settings modal
+    if (window.switchSettingsTab) {
+        window.switchSettingsTab('cloud');
+    }
+    
     modal.classList.add('active');
 }
 
 function closeFirebaseModal() {
     document.getElementById('firebaseModalBackdrop').classList.remove('active');
 }
+
+// Global settings modal tab switching function
+window.switchSettingsTab = function(tabName) {
+    const cloudBtn = document.getElementById('settingsTabCloudBtn');
+    const backupBtn = document.getElementById('settingsTabBackupBtn');
+    const cloudTab = document.getElementById('settingsTabCloud');
+    const backupTab = document.getElementById('settingsTabBackup');
+
+    if (!cloudBtn || !backupBtn || !cloudTab || !backupTab) return;
+
+    if (tabName === 'cloud') {
+        cloudBtn.classList.add('active');
+        backupBtn.classList.remove('active');
+        cloudTab.style.display = 'block';
+        backupTab.style.display = 'none';
+    } else if (tabName === 'backup') {
+        cloudBtn.classList.remove('active');
+        backupBtn.classList.add('active');
+        cloudTab.style.display = 'none';
+        backupTab.style.display = 'block';
+    }
+};
 
 async function handleFirebaseConfigSubmit(e) {
     e.preventDefault();

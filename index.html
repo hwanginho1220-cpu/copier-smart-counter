@@ -34,20 +34,8 @@
                 </li>
             </ul>
             <div class="sidebar-footer">
-                <button class="backup-btn" id="exportDataBtn">
-                    <i class="fa-solid fa-download"></i><span>백업 파일 내보내기</span>
-                </button>
-                <div class="file-input-wrapper" style="width: 100%; margin-top: 0.5rem;">
-                    <button class="backup-btn" style="width: 100%;">
-                        <i class="fa-solid fa-upload"></i><span>백업 복구 (가져오기)</span>
-                    </button>
-                    <input type="file" id="importDataFile" accept=".json">
-                </div>
-                <button class="backup-btn" id="clearAllDataBtn" style="width: 100%; margin-top: 0.5rem; background: rgba(239, 68, 68, 0.08); color: #fca5a5; border: 1px dashed rgba(239, 68, 68, 0.3);">
-                    <i class="fa-solid fa-trash-can"></i><span>전체 데이터 초기화</span>
-                </button>
-                <button class="backup-btn" id="openFirebaseModalBtn" style="width: 100%; margin-top: 0.5rem; border-color: var(--border-color-active); color: var(--primary);">
-                    <i class="fa-solid fa-cloud"></i><span>클라우드 동기화 설정</span>
+                <button class="backup-btn" id="openFirebaseModalBtn" style="width: 100%; border-color: var(--border-color-active); color: var(--primary);">
+                    <i class="fa-solid fa-gear"></i><span>시스템 설정</span>
                 </button>
             </div>
         </aside>
@@ -56,9 +44,14 @@
         <main class="main-content">
             <!-- HEADER -->
             <header>
-                <div>
-                    <h1 id="viewTitle">대시보드</h1>
-                    <p style="color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.25rem;" id="viewSubtitle">복사기 사용량 및 월간 점검 현황 요약</p>
+                <div class="header-title-wrapper">
+                    <div>
+                        <h1 id="viewTitle">대시보드</h1>
+                        <p style="color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.25rem;" id="viewSubtitle">복사기 사용량 및 월간 점검 현황 요약</p>
+                    </div>
+                    <button class="btn btn-secondary btn-icon" id="headerSettingsBtn" onclick="openFirebaseModal()" title="설정">
+                        <i class="fa-solid fa-gear"></i>
+                    </button>
                 </div>
                 <div class="header-actions" style="display: flex; align-items: center; gap: 1rem;">
                     <span class="badge badge-info" id="syncStatusBadge" style="cursor: pointer; padding: 0.5rem 0.75rem; font-size: 0.85rem;" onclick="openFirebaseModal()">
@@ -205,12 +198,12 @@
             <section id="inspectionsView" class="view-section">
                 <div class="card table-card">
                     <div class="table-header-row">
-                        <div class="search-input-wrapper" style="display: flex; gap: 0.5rem; width: auto;">
-                            <div style="position: relative; width: 200px;">
+                        <div class="table-search-filters">
+                            <div class="search-input-wrapper">
                                 <i class="fa-solid fa-magnifying-glass"></i>
                                 <input type="text" id="inspectionSearchInput" class="search-input" placeholder="고객사명 검색...">
                             </div>
-                            <input type="month" id="inspectionMonthFilter" class="form-control" style="width: 160px; height: 100%;">
+                            <input type="month" id="inspectionMonthFilter" class="form-control">
                         </div>
                         <button class="btn btn-primary" id="addInspectionBtn">
                             <i class="fa-solid fa-file-signature"></i>점검 기록 등록
@@ -363,7 +356,7 @@
             <div class="modal-body">
                 <div class="customer-detail-grid">
                     <!-- Left: Customer Info -->
-                    <div style="border-right: 1px solid var(--border-color); padding-right: 1.5rem;">
+                    <div class="detail-info-pane">
                         <h3 id="detailCustomerName" style="font-size: 1.4rem; font-weight: 700; margin-bottom: 1rem; color: var(--primary);">고객명</h3>
                         <ul class="info-list">
                             <li>
@@ -395,7 +388,7 @@
                         </ul>
                     </div>
                     <!-- Right: History List -->
-                    <div>
+                    <div class="detail-history-pane">
                         <h4 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
                             <span>점검 이력</span>
                             <span class="badge badge-info" id="detailHistoryCount">0건</span>
@@ -414,46 +407,85 @@
     </div>
 
     <!-- MODAL 4: FIREBASE SETTINGS -->
+    <!-- MODAL 4: UNIFIED SYSTEM SETTINGS -->
     <div class="modal-backdrop" id="firebaseModalBackdrop">
-        <div class="modal" style="width: 550px;">
+        <div class="modal" style="width: 500px;">
             <div class="modal-header">
-                <h2>클라우드 동기화 설정 (Firebase)</h2>
+                <h2>시스템 설정</h2>
                 <button class="close-btn" onclick="closeFirebaseModal()"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <form id="firebaseConfigForm">
-                <div class="modal-body">
-                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.6;">
-                        구글 Firebase Firestore 연동을 설정하면 PC와 스마트폰 간에 실시간으로 데이터가 동기화됩니다.<br>
-                        설정이 완료되면 기존 로컬 데이터가 자동으로 클라우드에 복사되어 연동됩니다.
-                    </p>
-                    <div class="form-group">
-                        <label for="fbConfigJson">Firebase 웹 앱 설정 객체 (JSON) <span style="color:var(--danger)">*</span></label>
-                        <textarea id="fbConfigJson" class="form-control" rows="8" required placeholder='{
-  "apiKey": "AIzaSy...",
+            
+            <div class="modal-tabs">
+                <button type="button" id="settingsTabCloudBtn" class="modal-tab-btn active" onclick="switchSettingsTab('cloud')">
+                    <i class="fa-solid fa-cloud"></i> 클라우드 동기화
+                </button>
+                <button type="button" id="settingsTabBackupBtn" class="modal-tab-btn" onclick="switchSettingsTab('backup')">
+                    <i class="fa-solid fa-database"></i> 데이터 관리
+                </button>
+            </div>
+            
+            <div class="modal-body" style="padding: 1.25rem 1.5rem 1.5rem 1.5rem;">
+                <!-- Tab Panel 1: Cloud -->
+                <div id="settingsTabCloud" class="settings-tab-panel">
+                    <form id="firebaseConfigForm">
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.6;">
+                            구글 Firebase Firestore 연동을 설정하면 PC와 스마트폰 간에 실시간으로 데이터가 동기화됩니다.<br>
+                            설정이 완료되면 기존 로컬 데이터가 자동으로 클라우드에 복사되어 연동됩니다.
+                        </p>
+                        <div class="form-group">
+                            <label for="fbConfigJson">Firebase 웹 앱 설정 객체 (JSON) <span style="color:var(--danger)">*</span></label>
+                            <textarea id="fbConfigJson" class="form-control" rows="7" required placeholder='{
+  "apiKey": "...",
   "authDomain": "...",
   "projectId": "...",
   "storageBucket": "...",
   "messagingSenderId": "...",
   "appId": "..."
 }'></textarea>
-                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top: 0.5rem; line-height: 1.5;">
-                            * Firebase 콘솔의 웹 앱 등록 화면에서 발급되는 <code>const firebaseConfig = { ... }</code> 코드 블록 내부의 JSON 데이터만 입력해 주세요.
+                            <div style="font-size:0.75rem; color:var(--text-muted); margin-top: 0.5rem; line-height: 1.5;">
+                                * Firebase 콘솔의 웹 앱 등록 화면에서 발급되는 <code>const firebaseConfig = { ... }</code> 코드 블록 내부의 JSON 데이터만 입력해 주세요.
+                            </div>
                         </div>
-                    </div>
-                    <div id="firebaseConnectionTestResult" style="display:none; font-size:0.85rem; padding:0.75rem; border-radius:var(--radius-sm); margin-top:1rem;">
-                        <!-- Connection test results -->
+                        <div id="firebaseConnectionTestResult" style="display:none; font-size:0.85rem; padding:0.75rem; border-radius:var(--radius-sm); margin-top:1rem;">
+                            <!-- Connection test results -->
+                        </div>
+                        <div class="modal-footer" style="padding: 1.25rem 0 0 0; border-top: none; justify-content: space-between; align-items: center;">
+                            <div>
+                                <button type="button" class="btn btn-danger" id="clearFirebaseConfigBtn" style="display:none; padding: 0.6rem 1rem; font-size: 0.9rem;">연동 해제</button>
+                            </div>
+                            <div style="display:flex; gap:0.5rem;">
+                                <button type="button" class="btn btn-secondary" onclick="closeFirebaseModal()">취소</button>
+                                <button type="submit" class="btn btn-primary" id="saveFirebaseConfigBtn">연동 및 저장</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                
+                <!-- Tab Panel 2: Backup & Reset -->
+                <div id="settingsTabBackup" class="settings-tab-panel" style="display:none;">
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.6;">
+                        로컬 브라우저에 저장된 데이터를 파일로 안전하게 백업하거나, 이전에 백업해둔 데이터 파일을 복구할 수 있습니다.
+                    </p>
+                    <div style="display:flex; flex-direction:column; gap:0.75rem;">
+                        <button type="button" class="backup-btn" id="exportDataBtn" style="width: 100%; padding:0.85rem; border:1px solid var(--border-color); background:rgba(255,255,255,0.03); color:var(--text-primary); cursor:pointer;">
+                            <i class="fa-solid fa-download" style="color:var(--primary); margin-right:0.5rem;"></i><span>백업 파일 내보내기 (JSON)</span>
+                        </button>
+                        
+                        <div class="file-input-wrapper" style="width: 100%;">
+                            <button type="button" class="backup-btn" style="width: 100%; padding:0.85rem; border:1px solid var(--border-color); background:rgba(255,255,255,0.03); color:var(--text-primary); cursor:pointer;">
+                                <i class="fa-solid fa-upload" style="color:#c084fc; margin-right:0.5rem;"></i><span>백업 복구 (가져오기)</span>
+                            </button>
+                            <input type="file" id="importDataFile" accept=".json">
+                        </div>
+                        
+                        <hr style="border:0; border-top:1px solid var(--border-color); margin:0.5rem 0;">
+                        
+                        <button type="button" class="backup-btn" id="clearAllDataBtn" style="width: 100%; padding:0.85rem; background: rgba(239, 68, 68, 0.08); color: #fca5a5; border: 1px dashed rgba(239, 68, 68, 0.3); cursor:pointer;">
+                            <i class="fa-solid fa-trash-can" style="margin-right:0.5rem;"></i><span>전체 데이터 초기화</span>
+                        </button>
                     </div>
                 </div>
-                <div class="modal-footer" style="justify-content: space-between; align-items: center;">
-                    <div>
-                        <button type="button" class="btn btn-danger" id="clearFirebaseConfigBtn" style="display:none; padding: 0.6rem 1rem; font-size: 0.9rem;">연동 해제</button>
-                    </div>
-                    <div style="display:flex; gap:0.5rem;">
-                        <button type="button" class="btn btn-secondary" onclick="closeFirebaseModal()">취소</button>
-                        <button type="submit" class="btn btn-primary" id="saveFirebaseConfigBtn">연동 및 저장</button>
-                    </div>
-                </div>
-            </form>
+            </div>
         </div>
     </div>
 
