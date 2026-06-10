@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartCounter - 복사기 점검 & 카운터 관리</title>
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="style.css?v=1.0.17">
+    <link rel="stylesheet" href="style.css?v=1.0.18">
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Chart.js for visualization -->
@@ -31,6 +31,9 @@
                 </li>
                 <li data-view="inspections">
                     <a href="#"><i class="fa-solid fa-clipboard-check"></i><span>점검 대장</span></a>
+                </li>
+                <li data-view="parts">
+                    <a href="#"><i class="fa-solid fa-screwdriver-wrench"></i><span>부품 관리</span></a>
                 </li>
             </ul>
             <div class="sidebar-footer">
@@ -229,6 +232,37 @@
                     </div>
                 </div>
             </section>
+
+            <!-- 4. PARTS VIEW -->
+            <section id="partsView" class="view-section">
+                <div class="card table-card">
+                    <div class="table-header-row">
+                        <div class="search-input-wrapper">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="partSearchInput" class="search-input" placeholder="부품명 검색...">
+                        </div>
+                        <button class="btn btn-primary" id="addPartBtn">
+                            <i class="fa-solid fa-plus"></i>부품 등록
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>부품명 (품목)</th>
+                                    <th>가격 (단가)</th>
+                                    <th style="width: 120px;">관리</th>
+                                </tr>
+                            </thead>
+                            <tbody id="partsTbody">
+                                <tr>
+                                    <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 3rem 0;">부품 데이터가 없습니다.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
@@ -336,6 +370,20 @@
                     <div class="form-group">
                         <label for="inspectionNotes">특이사항 및 점검 메모</label>
                         <textarea id="inspectionNotes" class="form-control" rows="3" placeholder="예: 토너 교체 완료, 급지 롤러 세척 등"></textarea>
+                    </div>
+                    <div style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary); font-weight: 500; font-size: 0.9rem;">교체 부품 등록</label>
+                        <div style="display:flex; gap:0.5rem; margin-bottom:0.75rem; align-items:center;">
+                            <select id="inspectionPartSelect" class="form-control" style="flex:2;">
+                                <option value="">-- 부품을 선택하세요 --</option>
+                                <!-- Dynamically populated -->
+                            </select>
+                            <input type="number" id="inspectionPartQty" class="form-control" style="flex:1; min-width:60px;" min="1" value="1" placeholder="수량">
+                            <button type="button" class="btn btn-secondary" id="addInspectionPartBtn" style="padding: 0.75rem 1rem; flex-shrink:0;">추가</button>
+                        </div>
+                        <div id="addedPartsListContainer" style="display:flex; flex-direction:column; gap:0.5rem; max-height: 150px; overflow-y: auto;">
+                            <!-- List of parts added to this inspection -->
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -518,7 +566,34 @@
         </div>
     </div>
 
+    <!-- MODAL 7: ADD/EDIT PART -->
+    <div class="modal-backdrop" id="partModalBackdrop">
+        <div class="modal" style="width: 450px;">
+            <div class="modal-header">
+                <h2 id="partModalTitle">부품 등록</h2>
+                <button class="close-btn" onclick="closePartModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="partForm">
+                <input type="hidden" id="partId">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="partName">부품명 (품목) <span style="color:var(--danger)">*</span></label>
+                        <input type="text" id="partName" class="form-control" required placeholder="예: 토너(검정), 드럼 유닛">
+                    </div>
+                    <div class="form-group">
+                        <label for="partPrice">가격 (단가) <span style="color:var(--danger)">*</span></label>
+                        <input type="number" id="partPrice" class="form-control" required min="0" placeholder="예: 45000">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closePartModal()">취소</button>
+                    <button type="submit" class="btn btn-primary" id="savePartBtn">등록</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Application Logic Script -->
-    <script src="app.js?v=1.0.17"></script>
+    <script src="app.js?v=1.0.18"></script>
 </body>
 </html>

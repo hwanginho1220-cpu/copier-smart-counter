@@ -1154,3 +1154,34 @@ select.form-control option {
 #imageViewerBackdrop.active img {
     transform: scale(1);
 }
+
+/* Added parts list styling in inspection modal */
+.added-part-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    gap: 0.5rem;
+}
+
+.added-part-item .remove-btn {
+    background: transparent;
+    border: none;
+    color: var(--danger);
+    cursor: pointer;
+    font-size: 0.95rem;
+    padding: 0.2rem;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.added-part-item .remove-btn:hover {
+    color: #fca5a5;
+    transform: scale(1.1);
+}

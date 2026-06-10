@@ -3,7 +3,8 @@
 // --- State and Constants ---
 let state = {
     customers: [],
-    inspections: []
+    inspections: [],
+    parts: []
 };
 
 // Storage keys
@@ -21,14 +22,17 @@ let db = null;
 let isCloudMode = false;
 let customersUnsubscribe = null;
 let inspectionsUnsubscribe = null;
+let partsUnsubscribe = null;
 
 // Global state for uploaded serial photo Base64
 let currentSerialImageBase64 = null;
+let currentInspectionParts = [];
 
 // --- Demo Data ---
 const demoData = {
     customers: [],
-    inspections: []
+    inspections: [],
+    parts: []
 };
 
 // --- Initialization ---
@@ -48,6 +52,7 @@ function loadData() {
             // Verify structure
             if (!state.customers) state.customers = [];
             if (!state.inspections) state.inspections = [];
+            if (!state.parts) state.parts = [];
         } catch (e) {
             console.error('Failed to parse localStorage data', e);
             loadDemoData();
@@ -59,6 +64,7 @@ function loadData() {
 
 function loadDemoData() {
     state = JSON.parse(JSON.stringify(demoData)); // Deep clone
+    if (!state.parts) state.parts = [];
     saveToStorage();
 }
 
@@ -82,6 +88,8 @@ function setupEventListeners() {
     headerActionBtn.addEventListener('click', () => {
         if (currentView === 'customers') {
             openCustomerModal();
+        } else if (currentView === 'parts') {
+            openPartModal();
         } else {
             openInspectionModal();
         }
@@ -139,6 +147,26 @@ function setupEventListeners() {
     // Customer Add button inside customer view
     document.getElementById('addCustomerBtn').addEventListener('click', () => openCustomerModal());
     document.getElementById('addInspectionBtn').addEventListener('click', () => openInspectionModal());
+
+    // Parts Event Listeners
+    const addPartBtn = document.getElementById('addPartBtn');
+    if (addPartBtn) {
+        addPartBtn.addEventListener('click', () => openPartModal());
+    }
+    const partSearchInput = document.getElementById('partSearchInput');
+    if (partSearchInput) {
+        partSearchInput.addEventListener('input', renderPartsTable);
+    }
+    const partForm = document.getElementById('partForm');
+    if (partForm) {
+        partForm.addEventListener('submit', handlePartFormSubmit);
+    }
+    
+    // Replaced parts in inspection modal
+    const addInspectionPartBtn = document.getElementById('addInspectionPartBtn');
+    if (addInspectionPartBtn) {
+        addInspectionPartBtn.addEventListener('click', addInspectionPart);
+    }
 
     // Firebase Settings Trigger
     document.getElementById('openFirebaseModalBtn').addEventListener('click', openFirebaseModal);
@@ -230,6 +258,11 @@ function switchView(viewName) {
         viewSubtitle.textContent = '월별 전체 복사기 점검 내역 및 사용량 증감';
         headerActionBtn.innerHTML = '<i class="fa-solid fa-file-signature"></i><span>점검 기록 등록</span>';
         renderInspectionsTable();
+    } else if (viewName === 'parts') {
+        viewTitle.textContent = '부품 관리';
+        viewSubtitle.textContent = '복사기 점검 시 사용하는 교체 부품의 품목 및 단가 관리';
+        headerActionBtn.innerHTML = '<i class="fa-solid fa-plus"></i><span>부품 등록</span>';
+        renderPartsTable();
     }
 }
 
@@ -470,7 +503,19 @@ function renderRecentInspections() {
                     ${colorBadge}
                 </div>
             </td>
-            <td data-label="특이사항"><span style="font-size:0.85rem; color:var(--text-secondary);">${insp.notes || '-'}</span></td>
+            <td data-label="특이사항">
+                <span style="font-size:0.85rem; color:var(--text-secondary);">${insp.notes || '-'}</span>
+                ${insp.parts && insp.parts.length > 0 ? `
+                    <div style="margin-top: 0.35rem; display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                        ${insp.parts.map(p => `
+                            <span class="badge badge-info" style="font-size: 0.75rem; background-color: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); padding: 0.15rem 0.35rem; display: inline-flex; align-items: center; gap: 0.15rem;">
+                                <i class="fa-solid fa-screwdriver-wrench" style="font-size:0.65rem;"></i>
+                                ${p.name} (${p.quantity}개)
+                            </span>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            </td>
             <td data-label="관리">
                 <div style="display:flex; gap:0.35rem;">
                     <button class="btn-icon btn-secondary" onclick="openInspectionModal('${insp.id}')" title="수정"><i class="fa-solid fa-pen-to-square" style="color: var(--warning);"></i></button>
@@ -896,7 +941,19 @@ function renderInspectionsTable() {
                     ${colorBadge}
                 </div>
             </td>
-            <td data-label="특이사항 / 메모"><span style="font-size: 0.85rem; color: var(--text-secondary);">${insp.notes || '-'}</span></td>
+            <td data-label="특이사항 / 메모">
+                <span style="font-size: 0.85rem; color: var(--text-secondary);">${insp.notes || '-'}</span>
+                ${insp.parts && insp.parts.length > 0 ? `
+                    <div style="margin-top: 0.35rem; display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                        ${insp.parts.map(p => `
+                            <span class="badge badge-info" style="font-size: 0.75rem; background-color: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); padding: 0.15rem 0.35rem; display: inline-flex; align-items: center; gap: 0.15rem;">
+                                <i class="fa-solid fa-screwdriver-wrench" style="font-size:0.65rem;"></i>
+                                ${p.name} (${p.quantity}개)
+                            </span>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            </td>
             <td data-label="관리">
                 <div style="display:flex; gap:0.35rem;">
                     <button class="btn-icon btn-secondary" onclick="openInspectionModal('${insp.id}')" title="수정">
@@ -951,7 +1008,8 @@ async function handleInspectionFormSubmit(e) {
         colorCounter: colorCounter,
         bwUsage: 0,
         colorUsage: 0,
-        notes: notes
+        notes: notes,
+        parts: currentInspectionParts
     };
 
     if (isCloudMode && db) {
@@ -992,6 +1050,7 @@ async function handleInspectionFormSubmit(e) {
                 insp.bwCounter = bwCounter;
                 insp.colorCounter = colorCounter;
                 insp.notes = notes;
+                insp.parts = currentInspectionParts;
 
                 saveToStorage();
                 recalculateUsageForCustomer(oldCustomerId);
@@ -1017,6 +1076,8 @@ function refreshAllViews() {
         renderCustomersTable();
     } else if (currentView === 'inspections') {
         renderInspectionsTable();
+    } else if (currentView === 'parts') {
+        renderPartsTable();
     }
 }
 
@@ -1123,6 +1184,220 @@ function closeCustomerModal() {
     document.getElementById('customerModalBackdrop').classList.remove('active');
 }
 
+// --- Parts Management Logic ---
+
+function renderPartsTable() {
+    const tbody = document.getElementById('partsTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const query = document.getElementById('partSearchInput') ? document.getElementById('partSearchInput').value.toLowerCase().trim() : '';
+
+    // Filter parts
+    const filtered = state.parts.filter(part => {
+        return part.name.toLowerCase().includes(query);
+    });
+
+    // Sort parts alphabetically
+    filtered.sort((a, b) => a.name.localeCompare(b.name));
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 3rem 0;">부품 데이터가 없거나 검색 필터와 일치하는 내역이 없습니다.</td></tr>';
+        return;
+    }
+
+    filtered.forEach(part => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td data-label="부품명 (품목)" style="font-weight: 600;">${part.name}</td>
+            <td data-label="가격 (단가)">₩${part.price.toLocaleString()}</td>
+            <td data-label="관리">
+                <div style="display:flex; gap:0.35rem;">
+                    <button class="btn-icon btn-secondary" onclick="openPartModal('${part.id}')" title="수정">
+                        <i class="fa-solid fa-pen-to-square" style="color: var(--warning);"></i>
+                    </button>
+                    <button class="btn-icon btn-danger" onclick="deletePart('${part.id}')" title="삭제">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function openPartModal(id = null) {
+    const modal = document.getElementById('partModalBackdrop');
+    const form = document.getElementById('partForm');
+    const title = document.getElementById('partModalTitle');
+    const saveBtn = document.getElementById('savePartBtn');
+
+    form.reset();
+    document.getElementById('partId').value = '';
+
+    if (id) {
+        title.textContent = '부품 수정';
+        saveBtn.textContent = '수정';
+        const part = state.parts.find(p => p.id === id);
+        if (part) {
+            document.getElementById('partId').value = part.id;
+            document.getElementById('partName').value = part.name;
+            document.getElementById('partPrice').value = part.price;
+        }
+    } else {
+        title.textContent = '부품 등록';
+        saveBtn.textContent = '등록';
+    }
+
+    modal.classList.add('active');
+}
+
+function closePartModal() {
+    document.getElementById('partModalBackdrop').classList.remove('active');
+}
+
+async function handlePartFormSubmit(e) {
+    e.preventDefault();
+
+    const id = document.getElementById('partId').value;
+    const name = document.getElementById('partName').value.trim();
+    const price = parseInt(document.getElementById('partPrice').value, 10) || 0;
+
+    if (!name) {
+        alert('부품명을 입력해 주세요.');
+        return;
+    }
+
+    const partData = {
+        id: id || 'part-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+        name: name,
+        price: price
+    };
+
+    if (isCloudMode && db) {
+        try {
+            await db.collection('parts').doc(partData.id).set(partData);
+        } catch (err) {
+            console.error('부품 저장 실패:', err);
+            alert('클라우드에 부품을 저장하는 데 실패했습니다: ' + err.message);
+            return;
+        }
+    } else {
+        if (id) {
+            // Edit
+            const idx = state.parts.findIndex(p => p.id === id);
+            if (idx > -1) {
+                state.parts[idx] = partData;
+            }
+        } else {
+            // Add new
+            state.parts.push(partData);
+        }
+        saveToStorage();
+        renderPartsTable();
+    }
+
+    closePartModal();
+}
+
+async function deletePart(id) {
+    if (!confirm('정말로 이 부품을 삭제하시겠습니까?')) return;
+
+    if (isCloudMode && db) {
+        try {
+            await db.collection('parts').doc(id).delete();
+        } catch (err) {
+            console.error('부품 삭제 실패:', err);
+            alert('클라우드에서 부품을 삭제하는 데 실패했습니다: ' + err.message);
+        }
+    } else {
+        state.parts = state.parts.filter(p => p.id !== id);
+        saveToStorage();
+        renderPartsTable();
+    }
+}
+
+// --- Inspection Replaced Parts Helper Logic ---
+
+function updateInspectionPartDropdown() {
+    const select = document.getElementById('inspectionPartSelect');
+    if (!select) return;
+    select.innerHTML = '<option value="">-- 부품을 선택하세요 --</option>';
+
+    // Sort parts alphabetically
+    const sortedParts = [...state.parts].sort((a, b) => a.name.localeCompare(b.name));
+
+    sortedParts.forEach(part => {
+        const option = document.createElement('option');
+        option.value = part.id;
+        option.textContent = `${part.name} (₩${part.price.toLocaleString()})`;
+        select.appendChild(option);
+    });
+}
+
+function addInspectionPart() {
+    const partSelect = document.getElementById('inspectionPartSelect');
+    const partQtyInput = document.getElementById('inspectionPartQty');
+    if (!partSelect || !partQtyInput) return;
+
+    const partId = partSelect.value;
+    const qty = parseInt(partQtyInput.value, 10) || 1;
+
+    if (!partId) {
+        alert('추가할 부품을 선택해 주세요.');
+        return;
+    }
+    if (qty < 1) {
+        alert('수량은 1개 이상이어야 합니다.');
+        return;
+    }
+
+    const part = state.parts.find(p => p.id === partId);
+    if (!part) return;
+
+    // Check if already exists in current inspection parts list
+    const existing = currentInspectionParts.find(p => p.id === partId);
+    if (existing) {
+        existing.quantity += qty;
+    } else {
+        currentInspectionParts.push({
+            id: part.id,
+            name: part.name,
+            price: part.price,
+            quantity: qty
+        });
+    }
+
+    // Reset dropdown and qty
+    partSelect.value = '';
+    partQtyInput.value = 1;
+
+    renderAddedPartsList();
+}
+
+function removeInspectionPart(partId) {
+    currentInspectionParts = currentInspectionParts.filter(p => p.id !== partId);
+    renderAddedPartsList();
+}
+
+function renderAddedPartsList() {
+    const container = document.getElementById('addedPartsListContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    currentInspectionParts.forEach(part => {
+        const div = document.createElement('div');
+        div.className = 'added-part-item';
+        div.innerHTML = `
+            <span>${part.name} x ${part.quantity} (₩${(part.price * part.quantity).toLocaleString()})</span>
+            <button type="button" class="remove-btn" onclick="removeInspectionPart('${part.id}')" title="삭제">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        `;
+        container.appendChild(div);
+    });
+}
+
 // Inspection Modal
 function openInspectionModal(id = null, customerId = null) {
     const modal = document.getElementById('inspectionModalBackdrop');
@@ -1146,6 +1421,15 @@ function openInspectionModal(id = null, customerId = null) {
         select.appendChild(option);
     });
 
+    // Populate parts select dropdown
+    updateInspectionPartDropdown();
+
+    // Reset part inputs inside modal
+    const partQty = document.getElementById('inspectionPartQty');
+    if (partQty) partQty.value = 1;
+    const partSelect = document.getElementById('inspectionPartSelect');
+    if (partSelect) partSelect.value = '';
+
     if (id) {
         title.textContent = '복사기 점검 기록 수정';
         const insp = state.inspections.find(i => i.id === id);
@@ -1159,6 +1443,9 @@ function openInspectionModal(id = null, customerId = null) {
             
             // Show previous info (excluding this record)
             updatePreviousCountersInfo(insp.customerId, insp.id);
+            
+            // Load existing parts
+            currentInspectionParts = insp.parts ? [...insp.parts] : [];
         }
     } else {
         title.textContent = '복사기 점검 기록 등록';
@@ -1171,8 +1458,12 @@ function openInspectionModal(id = null, customerId = null) {
             document.getElementById('inspectionCustomerSelect').value = customerId;
             updatePreviousCountersInfo(customerId, null);
         }
+
+        // Reset inspection parts
+        currentInspectionParts = [];
     }
 
+    renderAddedPartsList();
     modal.classList.add('active');
 }
 
@@ -1276,6 +1567,16 @@ function openDetailModal(customerId) {
                         컬러 <strong style="color:#d8b4fe;">+${insp.colorUsage.toLocaleString()}</strong>
                     </span>
                     ${insp.notes ? `<span style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">메모: ${insp.notes}</span>` : ''}
+                    ${insp.parts && insp.parts.length > 0 ? `
+                        <div style="margin-top: 0.35rem; display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                            ${insp.parts.map(p => `
+                                <span class="badge badge-info" style="font-size: 0.75rem; background-color: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); padding: 0.15rem 0.35rem; display: inline-flex; align-items: center; gap: 0.15rem;">
+                                    <i class="fa-solid fa-screwdriver-wrench" style="font-size:0.65rem;"></i>
+                                    ${p.name} (${p.quantity}개)
+                                </span>
+                            `).join('')}
+                        </div>
+                    ` : ''}
                 </div>
                 <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.5rem;">
                     <div class="counters" style="text-align:right;">
@@ -1341,6 +1642,9 @@ function importData(e) {
             }
 
             if (confirm('백업 파일을 가져오시겠습니까? 가져오면 현재 저장된 데이터가 모두 덮어써집니다.')) {
+                if (!parsed.parts || !Array.isArray(parsed.parts)) {
+                    parsed.parts = [];
+                }
                 state = parsed;
                 saveToStorage();
                 
@@ -1396,6 +1700,7 @@ function initFirebase() {
 function setupFirebaseListeners() {
     if (customersUnsubscribe) customersUnsubscribe();
     if (inspectionsUnsubscribe) inspectionsUnsubscribe();
+    if (partsUnsubscribe) partsUnsubscribe();
 
     customersUnsubscribe = db.collection('customers').onSnapshot(snapshot => {
         const customersList = [];
@@ -1420,6 +1725,19 @@ function setupFirebaseListeners() {
         refreshAllViews();
     }, error => {
         console.error("점검기록 동기화 실패:", error);
+        updateSyncStatusUI(error);
+    });
+
+    partsUnsubscribe = db.collection('parts').onSnapshot(snapshot => {
+        const partsList = [];
+        snapshot.forEach(doc => {
+            partsList.push(doc.data());
+        });
+        state.parts = partsList;
+        saveToStorage();
+        refreshAllViews();
+    }, error => {
+        console.error("부품 동기화 실패:", error);
         updateSyncStatusUI(error);
     });
 }
@@ -1593,6 +1911,16 @@ async function migrateLocalDataToCloud() {
         });
         await batch.commit();
     }
+
+    for (let i = 0; i < state.parts.length; i += batchSize) {
+        const batch = db.batch();
+        const chunk = state.parts.slice(i, i + batchSize);
+        chunk.forEach(part => {
+            const docRef = db.collection('parts').doc(part.id);
+            batch.set(docRef, part);
+        });
+        await batch.commit();
+    }
 }
 
 function clearFirebaseConfig() {
@@ -1607,6 +1935,10 @@ function clearFirebaseConfig() {
     if (inspectionsUnsubscribe) {
         inspectionsUnsubscribe();
         inspectionsUnsubscribe = null;
+    }
+    if (partsUnsubscribe) {
+        partsUnsubscribe();
+        partsUnsubscribe = null;
     }
 
     if (firebase.apps.length > 0) {
