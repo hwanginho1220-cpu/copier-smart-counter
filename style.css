@@ -521,6 +521,11 @@ tr:hover td {
     background: rgba(255, 255, 255, 0.08);
 }
 
+select.form-control option {
+    background-color: #ffffff;
+    color: #000000;
+}
+
 .form-row {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
