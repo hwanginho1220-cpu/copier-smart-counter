@@ -486,6 +486,11 @@ tr:hover td {
     color: var(--danger);
 }
 
+.badge-secondary {
+    background: rgba(148, 163, 184, 0.15);
+    color: var(--text-secondary);
+}
+
 /* Form Styles */
 .form-group {
     margin-bottom: 1.25rem;

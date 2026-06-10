@@ -385,15 +385,20 @@ function renderDashboard() {
         colorDiffEl.innerHTML = '전월 대비 동일';
     }
 
-    // Stat 4: Inspection Progress (Inspected Customers this month / Total Customers)
+    // Stat 4: Inspection Progress (Inspected TARGET Customers this month / Total TARGET Customers)
+    const targetCustomers = state.customers.filter(c => c.isMonthlyInspection !== false);
+    const totalTargetCount = targetCustomers.length;
+    const targetCustomerIds = new Set(targetCustomers.map(c => c.id));
+    
     const inspectedCustomerIds = new Set(thisMonthInsps.map(i => i.customerId));
-    const inspectedCount = inspectedCustomerIds.size;
-    const progressPercent = totalCustomers > 0 ? Math.round((inspectedCount / totalCustomers) * 100) : 0;
+    const inspectedTargetCount = [...inspectedCustomerIds].filter(id => targetCustomerIds.has(id)).length;
+    
+    const progressPercent = totalTargetCount > 0 ? Math.round((inspectedTargetCount / totalTargetCount) * 100) : 0;
     
     document.getElementById('inspectionProgressVal').textContent = `${progressPercent}%`;
     const progressDiffEl = document.getElementById('inspectionProgressDiffVal');
     progressDiffEl.className = 'diff zero';
-    progressDiffEl.innerHTML = `점검 완료: ${inspectedCount} / 전체: ${totalCustomers} 개소`;
+    progressDiffEl.innerHTML = `점검 완료: ${inspectedTargetCount} / 전체 대상: ${totalTargetCount} 개소`;
 
     // Render Recent Inspections Table
     renderRecentInspections();
@@ -696,9 +701,11 @@ function renderCustomersTable() {
             <td data-label="연락처">${cust.contact || '-'}</td>
             <td data-label="최근 점검일">${lastInspectionDate}</td>
             <td data-label="점검 여부">
-                ${isInspectedThisMonth 
-                    ? '<span class="badge badge-success"><i class="fa-solid fa-circle-check"></i> 완료</span>' 
-                    : '<span class="badge badge-warning"><i class="fa-solid fa-circle-minus"></i> 예정</span>'}
+                ${cust.isMonthlyInspection === false
+                    ? '<span class="badge badge-secondary"><i class="fa-solid fa-circle-minus"></i> 제외</span>'
+                    : (isInspectedThisMonth 
+                        ? '<span class="badge badge-success"><i class="fa-solid fa-circle-check"></i> 완료</span>' 
+                        : '<span class="badge badge-warning"><i class="fa-solid fa-circle-minus"></i> 예정</span>')}
             </td>
             <td data-label="관리">
                 <div style="display:flex; gap:0.35rem;">
@@ -723,6 +730,7 @@ async function handleCustomerFormSubmit(e) {
     const contractBw = parseInt(document.getElementById('contractBw').value, 10) || 0;
     const contractColor = parseInt(document.getElementById('contractColor').value, 10) || 0;
     const location = document.getElementById('customerLocation').value.trim();
+    const isMonthly = document.getElementById('isMonthlyInspection').checked;
 
     if (!name || !model) return;
 
@@ -738,7 +746,8 @@ async function handleCustomerFormSubmit(e) {
         contractBw: contractBw,
         contractColor: contractColor,
         location: location,
-        serialImage: currentSerialImageBase64
+        serialImage: currentSerialImageBase64,
+        isMonthlyInspection: isMonthly
     };
 
     if (id) {
@@ -1086,6 +1095,7 @@ function openCustomerModal(id = null) {
             document.getElementById('contractBw').value = customer.contractBw || '';
             document.getElementById('contractColor').value = customer.contractColor || '';
             document.getElementById('customerLocation').value = customer.location || '';
+            document.getElementById('isMonthlyInspection').checked = customer.isMonthlyInspection !== false;
             
             // Populate photo thumbnail if exists
             if (customer.serialImage) {
@@ -1099,6 +1109,7 @@ function openCustomerModal(id = null) {
         saveBtn.textContent = '등록';
         document.getElementById('contractBw').value = '';
         document.getElementById('contractColor').value = '';
+        document.getElementById('isMonthlyInspection').checked = true;
     }
 
     modal.classList.add('active');
