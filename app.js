@@ -2306,6 +2306,31 @@ function downloadReportPdf() {
     downloadBtn.disabled = true;
     downloadBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> PDF 생성 중...';
 
+    // 1. Create a clone of the report element
+    const clone = element.cloneNode(true);
+    clone.id = 'reportPrintAreaClone';
+    
+    // 2. Style the clone explicitly for A4 rendering, positioning it absolute at document origin
+    // to bypass any viewport scrolls, overflow cuts, or margins.
+    clone.style.position = 'absolute';
+    clone.style.left = '0';
+    clone.style.top = '0';
+    clone.style.width = '820px';
+    clone.style.height = 'auto';
+    clone.style.margin = '0';
+    clone.style.padding = '2.5rem';
+    clone.style.boxShadow = 'none';
+    clone.style.borderRadius = '0';
+    clone.style.background = '#ffffff';
+    clone.style.color = '#0f172a';
+    clone.style.zIndex = '-9999'; // Hide behind main viewport
+    clone.style.transform = 'none';
+    clone.style.visibility = 'visible';
+    clone.style.display = 'block';
+
+    // 3. Append to body temporarily
+    document.body.appendChild(clone);
+
     function runExport() {
         const opt = {
             margin:       0, // Zero margin to prevent double-margin offsets since the paper has internal padding
@@ -2323,13 +2348,17 @@ function downloadReportPdf() {
             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
-        // Execute html2pdf conversion
-        html2pdf().set(opt).from(element).save().then(() => {
+        // Execute html2pdf conversion targeting the clone
+        html2pdf().set(opt).from(clone).save().then(() => {
+            // Clean up the clone
+            clone.remove();
             downloadBtn.disabled = false;
             downloadBtn.innerHTML = originalText;
         }).catch(err => {
             console.error("PDF 다운로드 에러:", err);
             alert("PDF 파일 생성에 실패했습니다: " + err.message);
+            // Clean up the clone on error
+            clone.remove();
             downloadBtn.disabled = false;
             downloadBtn.innerHTML = originalText;
         });
@@ -2341,6 +2370,7 @@ function downloadReportPdf() {
         script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
         script.onload = runExport;
         script.onerror = () => {
+            clone.remove();
             alert('PDF 생성 라이브러리를 로드하지 못했습니다. 인터넷 연결 상태를 확인해주세요.');
             downloadBtn.disabled = false;
             downloadBtn.innerHTML = originalText;
