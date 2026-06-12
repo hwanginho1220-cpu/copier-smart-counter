@@ -2173,31 +2173,35 @@ function generateMonthlyReport() {
         const bwOver = Math.max(0, insp.bwUsage - contractBwLimit);
         const colorOver = Math.max(0, insp.colorUsage - contractColorLimit);
 
-        const bwOverBadge = bwOver > 0 ? `<span class="paper-badge paper-badge-danger">초과 +${bwOver.toLocaleString()}</span>` : '';
-        const colorOverBadge = colorOver > 0 ? `<span class="paper-badge paper-badge-danger">초과 +${colorOver.toLocaleString()}</span>` : '';
+        const bwOverBadge = bwOver > 0 ? `<span class="paper-badge paper-badge-danger">+${bwOver.toLocaleString()}</span>` : '';
+        const colorOverBadge = colorOver > 0 ? `<span class="paper-badge paper-badge-danger">+${colorOver.toLocaleString()}</span>` : '';
 
         // Formatted parts column
         let partsText = '-';
         if (insp.parts && insp.parts.length > 0) {
-            partsText = insp.parts.map(p => `${p.name} x ${p.quantity} (₩${(p.price * p.quantity).toLocaleString()})`).join('<br>');
+            partsText = insp.parts.map(p => `${p.name} x${p.quantity}<br>(₩${(p.price * p.quantity).toLocaleString()})`).join('<br>');
         }
 
         tableRowsHtml += `
             <tr>
                 <td class="center">${idx + 1}</td>
-                <td class="center">${insp.date}</td>
-                <td style="font-weight:600;">${customerName}</td>
-                <td class="center" style="font-size:0.75rem; color:#475569;">${model}</td>
-                <td class="right">
-                    ${insp.bwCounter.toLocaleString()}<br>
-                    <span style="font-size:0.75rem; color:#22c55e;">+${insp.bwUsage.toLocaleString()}</span>${bwOverBadge}
+                <td class="center" style="font-size:0.68rem; letter-spacing:-0.5px;">${insp.date}</td>
+                <td style="font-weight:600; font-size:0.75rem; word-break:break-all;">${customerName}</td>
+                <td class="center" style="font-size:0.68rem; color:#475569;">${model}</td>
+                <td class="right" style="line-height:1.25;">
+                    <div style="font-weight:600;">${insp.bwCounter.toLocaleString()}</div>
+                    <div style="font-size:0.65rem; color:#22c55e; display:flex; align-items:center; justify-content:flex-end; gap:0.15rem; margin-top:0.1rem;">
+                        <span>+${insp.bwUsage.toLocaleString()}</span>${bwOverBadge}
+                    </div>
                 </td>
-                <td class="right">
-                    ${insp.colorCounter.toLocaleString()}<br>
-                    <span style="font-size:0.75rem; color:#a855f7;">+${insp.colorUsage.toLocaleString()}</span>${colorOverBadge}
+                <td class="right" style="line-height:1.25;">
+                    <div style="font-weight:600;">${insp.colorCounter.toLocaleString()}</div>
+                    <div style="font-size:0.65rem; color:#a855f7; display:flex; align-items:center; justify-content:flex-end; gap:0.15rem; margin-top:0.1rem;">
+                        <span>+${insp.colorUsage.toLocaleString()}</span>${colorOverBadge}
+                    </div>
                 </td>
-                <td style="font-size:0.75rem; line-height:1.2;">${partsText}</td>
-                <td style="font-size:0.75rem; color:#475569;">${insp.notes || '-'}</td>
+                <td style="font-size:0.65rem; line-height:1.2; word-break:break-all;">${partsText}</td>
+                <td style="font-size:0.65rem; color:#475569; word-break:break-all; line-height:1.2;">${insp.notes || '-'}</td>
             </tr>
         `;
     });
@@ -2225,21 +2229,21 @@ function generateMonthlyReport() {
             </div>
             <div class="report-summary-card">
                 <h4>총 복사 사용량</h4>
-                <div class="value" style="font-size:1.1rem; line-height:1.3;">
+                <div class="value" style="font-size:1.05rem; line-height:1.3;">
                     흑백: ${totalBwUsage.toLocaleString()}매<br>
                     컬러: ${totalColorUsage.toLocaleString()}매
                 </div>
             </div>
             <div class="report-summary-card">
                 <h4>계약 초과 사용량</h4>
-                <div class="value" style="font-size:1.1rem; line-height:1.3; color:#ef4444;">
+                <div class="value" style="font-size:1.05rem; line-height:1.3; color:#ef4444;">
                     흑백: +${totalBwOver.toLocaleString()}매<br>
                     컬러: +${totalColorOver.toLocaleString()}매
                 </div>
             </div>
             <div class="report-summary-card">
                 <h4>총 부품 교체 비용</h4>
-                <div class="value" style="color:#2563eb;">₩${totalPartCost.toLocaleString()}</div>
+                <div class="value" style="color:#2563eb; font-size:1.1rem;">₩${totalPartCost.toLocaleString()}</div>
                 <div class="sub-value">교체 부품 정산 금액 합계</div>
             </div>
         </div>
@@ -2254,11 +2258,11 @@ function generateMonthlyReport() {
                     <tr>
                         <th style="width: 30px;">순번</th>
                         <th style="width: 75px;">점검일</th>
-                        <th style="width: 130px;">고객사명</th>
-                        <th style="width: 85px;">복사기 모델</th>
-                        <th>흑백 카운터 / 사용량</th>
-                        <th>컬러 카운터 / 사용량</th>
-                        <th style="width: 170px;">교체 부품 (비용)</th>
+                        <th style="width: 125px;">고객사명</th>
+                        <th style="width: 70px;">기기 모델</th>
+                        <th style="width: 130px;">흑백 카운터 / 사용량</th>
+                        <th style="width: 130px;">컬러 카운터 / 사용량</th>
+                        <th style="width: 160px;">교체 부품 (비용)</th>
                         <th>특이사항 / 메모</th>
                     </tr>
                 </thead>
@@ -2269,7 +2273,7 @@ function generateMonthlyReport() {
         </div>
 
         <div class="report-signature-section">
-            <div style="font-weight: 700; font-size: 0.95rem; color:#0f172a; margin-bottom: 0.5rem;">
+            <div style="font-weight: 700; font-size: 0.85rem; color:#0f172a; margin-bottom: 0.5rem; line-height:1.4;">
                 위와 같이 ${reportYear}년 ${reportMonth}월 정기 점검 사용 카운터 및 소모 부품 내역을 보고하며, 해당 내용을 상호 확인합니다.
             </div>
             <table class="report-signature-table">
@@ -2304,10 +2308,16 @@ function downloadReportPdf() {
 
     function runExport() {
         const opt = {
-            margin:       [12, 12, 12, 12],
+            margin:       [10, 10, 10, 10],
             filename:     `SmartCounter_Report_${selectedMonth}.pdf`,
             image:        { type: 'jpeg', quality: 0.98 },
-            html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+            html2canvas:  { 
+                scale: 2, 
+                useCORS: true, 
+                letterRendering: true,
+                width: 820,
+                windowWidth: 820
+            },
             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
