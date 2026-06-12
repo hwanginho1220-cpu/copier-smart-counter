@@ -1185,3 +1185,240 @@ select.form-control option {
     color: #fca5a5;
     transform: scale(1.1);
 }
+
+/* ==========================================================================
+   5. Monthly Report View Styling
+   ========================================================================== */
+
+/* Report Paper Container */
+.report-paper-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 1.5rem;
+    overflow-x: auto;
+    padding: 1.5rem 0.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+}
+
+/* Paper Style for WYSIWYG Rendering */
+.report-paper {
+    background: #ffffff;
+    color: #0f172a;
+    width: 820px; /* A4 aspect ratio representation */
+    min-height: 1160px;
+    padding: 2.5rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    font-family: 'Malgun Gothic', 'Dotum', sans-serif;
+    position: relative;
+    border-radius: 4px;
+}
+
+.report-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: #94a3b8;
+    text-align: center;
+    padding: 10rem 0;
+}
+
+.report-placeholder p {
+    font-size: 1.05rem;
+    margin-top: 0.5rem;
+}
+
+/* Report Header */
+.report-header-section {
+    border-bottom: 2px solid #0f172a;
+    padding-bottom: 1.5rem;
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.report-header-section h1 {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 0.75rem;
+    letter-spacing: -0.5px;
+}
+
+.report-meta-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    color: #475569;
+    margin-top: 1rem;
+}
+
+/* Report Summary Grid */
+.report-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+}
+
+.report-summary-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 1rem;
+    text-align: center;
+}
+
+.report-summary-card h4 {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.report-summary-card .value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.report-summary-card .sub-value {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin-top: 0.25rem;
+}
+
+/* Report Tables */
+.report-section-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 0.75rem;
+    border-left: 4px solid #3b82f6;
+    padding-left: 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.report-table-wrapper {
+    margin-bottom: 2.5rem;
+}
+
+.report-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    text-align: left;
+}
+
+.report-table th,
+.report-table td {
+    padding: 0.65rem 0.5rem;
+    border: 1px solid #cbd5e1;
+}
+
+.report-table th {
+    background: #f1f5f9;
+    color: #1e293b;
+    font-weight: 700;
+    text-align: center;
+}
+
+.report-table tbody tr:nth-child(even) {
+    background: #f8fafc;
+}
+
+.report-table td.center {
+    text-align: center;
+}
+
+.report-table td.right {
+    text-align: right;
+}
+
+/* Red / Blue badge accents on Paper */
+.paper-badge {
+    display: inline-block;
+    padding: 0.15rem 0.35rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: 3px;
+    margin-left: 0.25rem;
+}
+
+.paper-badge-danger {
+    background-color: #fee2e2;
+    color: #ef4444;
+    border: 1px solid #fecaca;
+}
+
+.paper-badge-info {
+    background-color: #dbeafe;
+    color: #2563eb;
+    border: 1px solid #bfdbfe;
+}
+
+/* Report Footer Signature Area */
+.report-signature-section {
+    margin-top: auto;
+    padding-top: 3rem;
+    border-top: 1px dashed #cbd5e1;
+}
+
+.report-signature-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-top: 1.5rem;
+}
+
+.report-signature-table td {
+    border: 1px solid #cbd5e1;
+    padding: 1rem;
+    text-align: center;
+    width: 50%;
+}
+
+.report-signature-table .signature-box {
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    font-style: italic;
+    font-size: 0.8rem;
+}
+
+/* Print CSS Stylesheet */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    
+    #reportPrintArea,
+    #reportPrintArea * {
+        visibility: visible;
+    }
+    
+    #reportPrintArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        box-shadow: none;
+        padding: 0;
+    }
+    
+    .report-paper-container {
+        padding: 0;
+        background: transparent;
+        border: none;
+    }
+}
+

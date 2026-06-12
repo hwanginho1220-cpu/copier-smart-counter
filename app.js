@@ -205,6 +205,16 @@ function setupEventListeners() {
         document.getElementById('serialImagePreviewContainer').style.display = 'none';
         document.getElementById('serialImagePreview').src = '';
     });
+
+    // Report Event Listeners
+    const generateReportBtn = document.getElementById('generateReportBtn');
+    if (generateReportBtn) {
+        generateReportBtn.addEventListener('click', generateMonthlyReport);
+    }
+    const downloadPdfBtn = document.getElementById('downloadPdfBtn');
+    if (downloadPdfBtn) {
+        downloadPdfBtn.addEventListener('click', downloadReportPdf);
+    }
 }
 
 function initDateInputs() {
@@ -214,6 +224,11 @@ function initDateInputs() {
     // Set default month filter to current year/month
     const currentYearMonth = today.substring(0, 7); // "YYYY-MM"
     document.getElementById('inspectionMonthFilter').value = currentYearMonth;
+    
+    const reportMonthFilter = document.getElementById('reportMonthFilter');
+    if (reportMonthFilter) {
+        reportMonthFilter.value = currentYearMonth;
+    }
 }
 
 function switchView(viewName) {
@@ -243,6 +258,9 @@ function switchView(viewName) {
     const viewSubtitle = document.getElementById('viewSubtitle');
     const headerActionBtn = document.getElementById('headerActionBtn');
 
+    // Reset action button display by default
+    headerActionBtn.style.display = 'inline-flex';
+
     if (viewName === 'dashboard') {
         viewTitle.textContent = '대시보드';
         viewSubtitle.textContent = '복사기 사용량 및 월간 점검 현황 요약';
@@ -263,6 +281,10 @@ function switchView(viewName) {
         viewSubtitle.textContent = '복사기 점검 시 사용하는 교체 부품의 품목 및 단가 관리';
         headerActionBtn.innerHTML = '<i class="fa-solid fa-plus"></i><span>부품 등록</span>';
         renderPartsTable();
+    } else if (viewName === 'report') {
+        viewTitle.textContent = '월간 리포트';
+        viewSubtitle.textContent = '월별 전체 점검 및 정산 보고서 인쇄 및 PDF 내보내기';
+        headerActionBtn.style.display = 'none';
     }
 }
 
@@ -2075,3 +2097,244 @@ window.registerInspectionForCustomer = function(customerId) {
     window.closeUninspectedModal();
     openInspectionModal(null, customerId);
 };
+
+// --- Monthly Report Generation & Export PDF ---
+
+function generateMonthlyReport() {
+    const selectedMonth = document.getElementById('reportMonthFilter').value;
+    const printArea = document.getElementById('reportPrintArea');
+    const downloadBtn = document.getElementById('downloadPdfBtn');
+    
+    if (!selectedMonth) {
+        alert('대상 월을 선택해 주세요.');
+        return;
+    }
+
+    // Filter inspections for the selected month
+    const filteredInsps = state.inspections.filter(i => i.date.startsWith(selectedMonth));
+    
+    if (filteredInsps.length === 0) {
+        printArea.innerHTML = `
+            <div class="report-placeholder">
+                <i class="fa-solid fa-triangle-exclamation" style="font-size: 3rem; margin-bottom: 1rem; color: var(--warning);"></i>
+                <p>선택하신 월(${selectedMonth})에 등록된 점검 기록이 없습니다.</p>
+            </div>
+        `;
+        if (downloadBtn) downloadBtn.style.display = 'none';
+        return;
+    }
+
+    // Sort inspections chronologically by date
+    filteredInsps.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Calculate metrics
+    const totalCustomers = state.customers.filter(c => c.isMonthlyInspection !== false).length;
+    const inspectedCount = filteredInsps.length;
+    const progressRate = totalCustomers > 0 ? Math.round((inspectedCount / totalCustomers) * 100) : 0;
+    
+    const totalBwUsage = filteredInsps.reduce((sum, i) => sum + i.bwUsage, 0);
+    const totalColorUsage = filteredInsps.reduce((sum, i) => sum + i.colorUsage, 0);
+    
+    // Calculate total excesses and parts costs
+    let totalBwOver = 0;
+    let totalColorOver = 0;
+    let totalPartCost = 0;
+
+    filteredInsps.forEach(insp => {
+        const cust = state.customers.find(c => c.id === insp.customerId);
+        if (cust) {
+            const bwOver = Math.max(0, insp.bwUsage - cust.contractBw);
+            const colorOver = Math.max(0, insp.colorUsage - cust.contractColor);
+            totalBwOver += bwOver;
+            totalColorOver += colorOver;
+        }
+        
+        if (insp.parts) {
+            insp.parts.forEach(p => {
+                totalPartCost += (p.price * p.quantity);
+            });
+        }
+    });
+
+    // Formatting date strings
+    const reportYear = selectedMonth.split('-')[0];
+    const reportMonth = selectedMonth.split('-')[1];
+    const today = new Date().toISOString().split('T')[0];
+
+    // Build Report Content HTML
+    let tableRowsHtml = '';
+    filteredInsps.forEach((insp, idx) => {
+        const cust = state.customers.find(c => c.id === insp.customerId);
+        const customerName = cust ? cust.name : '알 수 없음';
+        const model = cust ? cust.copierModel : '-';
+        const contractBwLimit = cust ? cust.contractBw : 0;
+        const contractColorLimit = cust ? cust.contractColor : 0;
+
+        const bwOver = Math.max(0, insp.bwUsage - contractBwLimit);
+        const colorOver = Math.max(0, insp.colorUsage - contractColorLimit);
+
+        const bwOverBadge = bwOver > 0 ? `<span class="paper-badge paper-badge-danger">초과 +${bwOver.toLocaleString()}</span>` : '';
+        const colorOverBadge = colorOver > 0 ? `<span class="paper-badge paper-badge-danger">초과 +${colorOver.toLocaleString()}</span>` : '';
+
+        // Formatted parts column
+        let partsText = '-';
+        if (insp.parts && insp.parts.length > 0) {
+            partsText = insp.parts.map(p => `${p.name} x ${p.quantity} (₩${(p.price * p.quantity).toLocaleString()})`).join('<br>');
+        }
+
+        tableRowsHtml += `
+            <tr>
+                <td class="center">${idx + 1}</td>
+                <td class="center">${insp.date}</td>
+                <td style="font-weight:600;">${customerName}</td>
+                <td class="center" style="font-size:0.75rem; color:#475569;">${model}</td>
+                <td class="right">
+                    ${insp.bwCounter.toLocaleString()}<br>
+                    <span style="font-size:0.75rem; color:#22c55e;">+${insp.bwUsage.toLocaleString()}</span>${bwOverBadge}
+                </td>
+                <td class="right">
+                    ${insp.colorCounter.toLocaleString()}<br>
+                    <span style="font-size:0.75rem; color:#a855f7;">+${insp.colorUsage.toLocaleString()}</span>${colorOverBadge}
+                </td>
+                <td style="font-size:0.75rem; line-height:1.2;">${partsText}</td>
+                <td style="font-size:0.75rem; color:#475569;">${insp.notes || '-'}</td>
+            </tr>
+        `;
+    });
+
+    const reportHtml = `
+        <div class="report-header-section">
+            <h1>복사기 정기점검 및 사용량 보고서</h1>
+            <div style="font-size: 1.15rem; font-weight: 600; color: #1e293b; margin-top: 0.5rem;">
+                - ${reportYear}년 ${reportMonth}월분 전체 사용 결과 보고 -
+            </div>
+            <div class="report-meta-info">
+                <span>보고서 생성일: ${today}</span>
+                <span style="font-weight: 600;">점검 책임 업체: SmartCounter 관리부</span>
+            </div>
+        </div>
+
+        <div class="report-section-title">
+            <span><i class="fa-solid fa-chart-column"></i> 월간 점검 요약 지표</span>
+        </div>
+        <div class="report-summary-grid">
+            <div class="report-summary-card">
+                <h4>점검 진행 현황</h4>
+                <div class="value">${inspectedCount} / ${totalCustomers} 개소</div>
+                <div class="sub-value">정기점검 진행률 ${progressRate}%</div>
+            </div>
+            <div class="report-summary-card">
+                <h4>총 복사 사용량</h4>
+                <div class="value" style="font-size:1.1rem; line-height:1.3;">
+                    흑백: ${totalBwUsage.toLocaleString()}매<br>
+                    컬러: ${totalColorUsage.toLocaleString()}매
+                </div>
+            </div>
+            <div class="report-summary-card">
+                <h4>계약 초과 사용량</h4>
+                <div class="value" style="font-size:1.1rem; line-height:1.3; color:#ef4444;">
+                    흑백: +${totalBwOver.toLocaleString()}매<br>
+                    컬러: +${totalColorOver.toLocaleString()}매
+                </div>
+            </div>
+            <div class="report-summary-card">
+                <h4>총 부품 교체 비용</h4>
+                <div class="value" style="color:#2563eb;">₩${totalPartCost.toLocaleString()}</div>
+                <div class="sub-value">교체 부품 정산 금액 합계</div>
+            </div>
+        </div>
+
+        <div class="report-section-title">
+            <span><i class="fa-solid fa-list-check"></i> 고객사별 점검 및 복사기 사용 상세 내역</span>
+            <span style="font-size:0.75rem; color:#64748b; font-weight:normal;">* 사용량은 직전 점검 카운터 기준 차이값입니다.</span>
+        </div>
+        <div class="report-table-wrapper">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th style="width: 30px;">순번</th>
+                        <th style="width: 75px;">점검일</th>
+                        <th style="width: 130px;">고객사명</th>
+                        <th style="width: 85px;">복사기 모델</th>
+                        <th>흑백 카운터 / 사용량</th>
+                        <th>컬러 카운터 / 사용량</th>
+                        <th style="width: 170px;">교체 부품 (비용)</th>
+                        <th>특이사항 / 메모</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableRowsHtml}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="report-signature-section">
+            <div style="font-weight: 700; font-size: 0.95rem; color:#0f172a; margin-bottom: 0.5rem;">
+                위와 같이 ${reportYear}년 ${reportMonth}월 정기 점검 사용 카운터 및 소모 부품 내역을 보고하며, 해당 내용을 상호 확인합니다.
+            </div>
+            <table class="report-signature-table">
+                <tr>
+                    <td>
+                        <div style="font-weight:700; margin-bottom:0.75rem;">보고자 (점검 수탁인)</div>
+                        <div class="signature-box">SmartCounter 점검원 (서명/인)</div>
+                    </td>
+                    <td>
+                        <div style="font-weight:700; margin-bottom:0.75rem;">확인자 (관리 위탁인)</div>
+                        <div class="signature-box">고객사 관리 담당자 (서명/인)</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    `;
+
+    printArea.innerHTML = reportHtml;
+    if (downloadBtn) downloadBtn.style.display = 'block';
+}
+
+function downloadReportPdf() {
+    const selectedMonth = document.getElementById('reportMonthFilter').value;
+    const element = document.getElementById('reportPrintArea');
+    
+    if (!selectedMonth) return;
+
+    const downloadBtn = document.getElementById('downloadPdfBtn');
+    const originalText = downloadBtn.innerHTML;
+    downloadBtn.disabled = true;
+    downloadBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> PDF 생성 중...';
+
+    function runExport() {
+        const opt = {
+            margin:       [12, 12, 12, 12],
+            filename:     `SmartCounter_Report_${selectedMonth}.pdf`,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        // Execute html2pdf conversion
+        html2pdf().set(opt).from(element).save().then(() => {
+            downloadBtn.disabled = false;
+            downloadBtn.innerHTML = originalText;
+        }).catch(err => {
+            console.error("PDF 다운로드 에러:", err);
+            alert("PDF 파일 생성에 실패했습니다: " + err.message);
+            downloadBtn.disabled = false;
+            downloadBtn.innerHTML = originalText;
+        });
+    }
+
+    // Check if html2pdf is loaded, if not, load dynamically
+    if (typeof html2pdf === 'undefined') {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+        script.onload = runExport;
+        script.onerror = () => {
+            alert('PDF 생성 라이브러리를 로드하지 못했습니다. 인터넷 연결 상태를 확인해주세요.');
+            downloadBtn.disabled = false;
+            downloadBtn.innerHTML = originalText;
+        };
+        document.head.appendChild(script);
+    } else {
+        runExport();
+    }
+}

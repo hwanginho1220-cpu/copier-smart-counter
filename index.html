@@ -35,6 +35,9 @@
                 <li data-view="parts">
                     <a href="#"><i class="fa-solid fa-screwdriver-wrench"></i><span>부품 관리</span></a>
                 </li>
+                <li data-view="report">
+                    <a href="#"><i class="fa-solid fa-file-pdf"></i><span>월간 리포트</span></a>
+                </li>
             </ul>
             <div class="sidebar-footer">
                 <button class="backup-btn" id="openFirebaseModalBtn" style="width: 100%; border-color: var(--border-color-active); color: var(--primary);">
@@ -260,6 +263,34 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5. REPORT VIEW -->
+            <section id="reportView" class="view-section">
+                <div class="card table-card">
+                    <div class="table-header-row" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+                        <div style="display:flex; gap:0.5rem; align-items:center;">
+                            <label for="reportMonthFilter" style="font-weight:600; font-size:0.95rem; white-space:nowrap; margin-bottom:0; color:var(--text-primary);">대상 월 선택:</label>
+                            <input type="month" id="reportMonthFilter" class="form-control" style="width: auto;">
+                            <button class="btn btn-primary" id="generateReportBtn" style="padding: 0.75rem 1.25rem;">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>리포트 생성
+                            </button>
+                        </div>
+                        <button class="btn btn-secondary" id="downloadPdfBtn" style="display: none; background: #60a5fa; color: #0f172a; border-color: #60a5fa; font-weight: 600;">
+                            <i class="fa-solid fa-download"></i>PDF 다운로드
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Report Paper Container (WYSIWYG layout) -->
+                <div class="report-paper-container">
+                    <div id="reportPrintArea" class="report-paper">
+                        <div class="report-placeholder">
+                            <i class="fa-solid fa-file-invoice" style="font-size: 3rem; margin-bottom: 1rem; color: var(--border-color-active);"></i>
+                            <p>대상 월을 선택하고 [리포트 생성] 버튼을 클릭해 주세요.</p>
+                        </div>
                     </div>
                 </div>
             </section>
