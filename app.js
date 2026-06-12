@@ -2306,15 +2306,31 @@ function downloadReportPdf() {
     downloadBtn.disabled = true;
     downloadBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> PDF 생성 중...';
 
+    // Save current style to restore later
+    const originalStyle = element.getAttribute('style') || '';
+
+    // Apply temporary fixed positioning off-screen to avoid clipping and viewport scroll issues
+    element.style.position = 'fixed';
+    element.style.left = '0';
+    element.style.top = '0';
+    element.style.width = '820px';
+    element.style.zIndex = '-9999';
+    element.style.margin = '0';
+    element.style.boxShadow = 'none';
+    element.style.borderRadius = '0';
+    element.style.transform = 'none';
+
     function runExport() {
         const opt = {
-            margin:       [10, 10, 10, 10],
+            margin:       0, // Zero margin since the paper layout already has internal 2.5rem padding
             filename:     `SmartCounter_Report_${selectedMonth}.pdf`,
             image:        { type: 'jpeg', quality: 0.98 },
             html2canvas:  { 
                 scale: 2, 
                 useCORS: true, 
                 letterRendering: true,
+                scrollX: 0,
+                scrollY: 0,
                 width: 820,
                 windowWidth: 820
             },
@@ -2323,11 +2339,13 @@ function downloadReportPdf() {
 
         // Execute html2pdf conversion
         html2pdf().set(opt).from(element).save().then(() => {
+            element.setAttribute('style', originalStyle);
             downloadBtn.disabled = false;
             downloadBtn.innerHTML = originalText;
         }).catch(err => {
             console.error("PDF 다운로드 에러:", err);
             alert("PDF 파일 생성에 실패했습니다: " + err.message);
+            element.setAttribute('style', originalStyle);
             downloadBtn.disabled = false;
             downloadBtn.innerHTML = originalText;
         });
@@ -2339,6 +2357,7 @@ function downloadReportPdf() {
         script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
         script.onload = runExport;
         script.onerror = () => {
+            element.setAttribute('style', originalStyle);
             alert('PDF 생성 라이브러리를 로드하지 못했습니다. 인터넷 연결 상태를 확인해주세요.');
             downloadBtn.disabled = false;
             downloadBtn.innerHTML = originalText;
