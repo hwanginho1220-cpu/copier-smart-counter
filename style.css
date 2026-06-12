@@ -1195,11 +1195,13 @@ select.form-control option {
     display: flex;
     justify-content: center;
     margin-top: 1.5rem;
-    overflow-x: auto;
+    overflow: hidden; /* Prevent scrollbar in scaled state */
     padding: 1.5rem 0.5rem;
     background: rgba(0, 0, 0, 0.2);
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-color);
+    position: relative;
+    transition: height 0.15s ease-out;
 }
 
 /* Paper Style for WYSIWYG Rendering */
@@ -1216,6 +1218,25 @@ select.form-control option {
     font-family: 'Malgun Gothic', 'Dotum', sans-serif;
     position: relative;
     border-radius: 4px;
+    transform-origin: top center;
+    transition: transform 0.15s ease-out;
+    flex-shrink: 0; /* Prevent squishing */
+}
+
+/* Exporting state overrides */
+.report-exporting.report-paper-container {
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    transition: none !important;
+}
+
+.report-exporting .report-paper {
+    transform: none !important;
+    transition: none !important;
+    box-shadow: none !important;
 }
 
 .report-placeholder {
@@ -1402,6 +1423,14 @@ select.form-control option {
 
 /* Print CSS Stylesheet */
 @media print {
+    html, body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+    
     body * {
         visibility: hidden;
     }
@@ -1412,18 +1441,86 @@ select.form-control option {
     }
     
     #reportPrintArea {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        box-shadow: none;
-        padding: 0;
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        transform: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: #ffffff !important;
+        color: #000000 !important;
     }
     
     .report-paper-container {
-        padding: 0;
-        background: transparent;
-        border: none;
+        position: static !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: transparent !important;
+        border: none !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
     }
+}
+
+/* PDF Exporting Loading Overlay */
+.pdf-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.85);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+.pdf-loading-card {
+    text-align: center;
+    padding: 2rem;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    max-width: 90%;
+    width: 320px;
+    animation: pdfScaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.pdf-loading-spinner {
+    font-size: 2.5rem;
+    color: var(--primary);
+    margin-bottom: 1.25rem;
+}
+
+.pdf-loading-card h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.pdf-loading-card .desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 0.25rem;
+}
+
+.pdf-loading-card .sub-desc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 0;
+}
+
+@keyframes pdfScaleUp {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
 }
 

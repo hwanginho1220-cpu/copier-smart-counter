@@ -215,6 +215,19 @@ function setupEventListeners() {
     if (downloadPdfBtn) {
         downloadPdfBtn.addEventListener('click', downloadReportPdf);
     }
+    const printReportBtn = document.getElementById('printReportBtn');
+    if (printReportBtn) {
+        printReportBtn.addEventListener('click', () => {
+            window.print();
+        });
+    }
+    // Window resize event for report scaling
+    window.addEventListener('resize', () => {
+        const reportView = document.getElementById('reportView');
+        if (reportView && reportView.classList.contains('active')) {
+            adjustReportScale();
+        }
+    });
 }
 
 function initDateInputs() {
@@ -285,6 +298,7 @@ function switchView(viewName) {
         viewTitle.textContent = '월간 리포트';
         viewSubtitle.textContent = '월별 전체 점검 및 정산 보고서 인쇄 및 PDF 내보내기';
         headerActionBtn.style.display = 'none';
+        setTimeout(adjustReportScale, 50);
     }
 }
 
@@ -2100,10 +2114,38 @@ window.registerInspectionForCustomer = function(customerId) {
 
 // --- Monthly Report Generation & Export PDF ---
 
+function adjustReportScale() {
+    const container = document.querySelector('.report-paper-container');
+    const paper = document.getElementById('reportPrintArea');
+    if (!container || !paper) return;
+    
+    // Skip scaling adjustments while exporting PDF
+    if (container.classList.contains('report-exporting')) return;
+    
+    const containerWidth = container.offsetWidth;
+    const targetWidth = 820; // Original width of report-paper
+    const availableWidth = containerWidth - 16; // 8px margin on each side
+    
+    if (availableWidth < targetWidth && availableWidth > 100) {
+        const scaleVal = availableWidth / targetWidth;
+        paper.style.transform = `scale(${scaleVal})`;
+        
+        // Scale reduces visual size but does not change layout box flow.
+        // We must calculate original height and scale it to prevent giant blank space under the paper.
+        const paperHeight = paper.scrollHeight;
+        container.style.height = (paperHeight * scaleVal + 32) + 'px';
+    } else {
+        paper.style.transform = 'none';
+        container.style.height = 'auto';
+    }
+}
+
 function generateMonthlyReport() {
     const selectedMonth = document.getElementById('reportMonthFilter').value;
     const printArea = document.getElementById('reportPrintArea');
     const downloadBtn = document.getElementById('downloadPdfBtn');
+    const printBtn = document.getElementById('printReportBtn');
+    const guideBanner = document.getElementById('reportGuideBanner');
     
     if (!selectedMonth) {
         alert('대상 월을 선택해 주세요.');
@@ -2121,6 +2163,15 @@ function generateMonthlyReport() {
             </div>
         `;
         if (downloadBtn) downloadBtn.style.display = 'none';
+        if (printBtn) printBtn.style.display = 'none';
+        if (guideBanner) guideBanner.style.display = 'none';
+        
+        // Reset scale style
+        const container = document.querySelector('.report-paper-container');
+        if (container) {
+            container.style.height = 'auto';
+            printArea.style.transform = 'none';
+        }
         return;
     }
 
@@ -2293,48 +2344,44 @@ function generateMonthlyReport() {
 
     printArea.innerHTML = reportHtml;
     if (downloadBtn) downloadBtn.style.display = 'block';
+    if (printBtn) printBtn.style.display = 'block';
+    if (guideBanner) guideBanner.style.display = 'flex';
+    
+    // Recalculate scaling for current screen width
+    setTimeout(adjustReportScale, 20);
 }
 
 function downloadReportPdf() {
     const selectedMonth = document.getElementById('reportMonthFilter').value;
     const element = document.getElementById('reportPrintArea');
+    const container = document.querySelector('.report-paper-container');
     
-    if (!selectedMonth) return;
+    if (!selectedMonth || !element || !container) return;
 
     const downloadBtn = document.getElementById('downloadPdfBtn');
-    const originalText = downloadBtn.innerHTML;
-    downloadBtn.disabled = true;
-    downloadBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> PDF 생성 중...';
-
-    // 1. Create a clone of the report element
-    const clone = element.cloneNode(true);
-    clone.id = 'reportPrintAreaClone';
+    const printBtn = document.getElementById('printReportBtn');
+    const loadingOverlay = document.getElementById('pdfLoadingOverlay');
     
-    // 2. Style the clone: Place it far left off-screen (left: -9999px)
-    // Keep it visibility: visible and display: block, but push it out of the visible screen.
-    // Do NOT use a negative z-index that puts it underneath dark app container backgrounds.
-    clone.style.position = 'absolute';
-    clone.style.left = '-9999px';
-    clone.style.top = '0';
-    clone.style.width = '820px';
-    clone.style.height = 'auto';
-    clone.style.margin = '0';
-    clone.style.padding = '2.5rem';
-    clone.style.boxShadow = 'none';
-    clone.style.borderRadius = '0';
-    clone.style.background = '#ffffff';
-    clone.style.color = '#0f172a';
-    clone.style.zIndex = '9999'; // Put it on top, but out of bounds (-9999px) so it doesn't cover anything
-    clone.style.transform = 'none';
-    clone.style.visibility = 'visible';
-    clone.style.display = 'block';
+    const originalText = downloadBtn.innerHTML;
+    
+    // Enable loading overlay and disable actions
+    downloadBtn.disabled = true;
+    if (printBtn) printBtn.disabled = true;
+    if (loadingOverlay) loadingOverlay.style.display = 'flex';
 
-    // 3. Append to body temporarily
-    document.body.appendChild(clone);
+    // 1. Temporarily scroll to top (crucial for html2canvas to capture full view offset correctly)
+    const originalScrollY = window.scrollY;
+    const originalScrollX = window.scrollX;
+    window.scrollTo(0, 0);
+
+    // 2. Temporarily reset scaling styles of the live DOM element for capturing
+    container.classList.add('report-exporting');
+    element.style.transform = 'none';
+    container.style.height = 'auto';
 
     function runExport() {
         const opt = {
-            margin:       0, // Zero margin since the paper layout already has internal 2.5rem padding
+            margin:       0,
             filename:     `SmartCounter_Report_${selectedMonth}.pdf`,
             image:        { type: 'jpeg', quality: 0.98 },
             html2canvas:  { 
@@ -2349,38 +2396,50 @@ function downloadReportPdf() {
             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
-        // Execute html2pdf conversion targeting the clone
-        html2pdf().set(opt).from(clone).save().then(() => {
-            // Clean up the clone
-            clone.remove();
-            downloadBtn.disabled = false;
-            downloadBtn.innerHTML = originalText;
+        // 3. Export PDF using the actual live DOM element (avoiding offscreen culling / blank page bugs)
+        html2pdf().set(opt).from(element).save().then(() => {
+            finalizeExport();
         }).catch(err => {
             console.error("PDF 다운로드 에러:", err);
-            alert("PDF 파일 생성에 실패했습니다: " + err.message);
-            // Clean up the clone on error
-            clone.remove();
-            downloadBtn.disabled = false;
-            downloadBtn.innerHTML = originalText;
+            alert("PDF 생성을 진행할 수 없습니다. 네이티브 'PDF 인쇄/저장' 방식을 호출합니다.");
+            finalizeExport();
+            // Fallback to native print
+            window.print();
         });
     }
 
-    // Give browser a 150ms delay to render the clone in DOM tree before capture
+    function finalizeExport() {
+        // 4. Restore original layout states
+        container.classList.remove('report-exporting');
+        
+        // Restore scroll position
+        window.scrollTo(originalScrollX, originalScrollY);
+        
+        // Hide loading overlay
+        if (loadingOverlay) loadingOverlay.style.display = 'none';
+        
+        downloadBtn.disabled = false;
+        downloadBtn.innerHTML = originalText;
+        if (printBtn) printBtn.disabled = false;
+        
+        // Recalculate scaling
+        adjustReportScale();
+    }
+
+    // Give browser 200ms to repaint the report element to 820px scale before capturing
     setTimeout(() => {
-        // Check if html2pdf is loaded, if not, load dynamically
         if (typeof html2pdf === 'undefined') {
             const script = document.createElement('script');
             script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
             script.onload = runExport;
             script.onerror = () => {
-                clone.remove();
-                alert('PDF 생성 라이브러리를 로드하지 못했습니다. 인터넷 연결 상태를 확인해주세요.');
-                downloadBtn.disabled = false;
-                downloadBtn.innerHTML = originalText;
+                finalizeExport();
+                alert('PDF 생성 라이브러리를 로드할 수 없습니다. 대신 네이티브 인쇄 창을 띄웁니다.');
+                window.print();
             };
             document.head.appendChild(script);
         } else {
             runExport();
         }
-    }, 150);
+    }, 200);
 }
