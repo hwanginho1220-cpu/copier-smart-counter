@@ -2310,10 +2310,11 @@ function downloadReportPdf() {
     const clone = element.cloneNode(true);
     clone.id = 'reportPrintAreaClone';
     
-    // 2. Style the clone explicitly for A4 rendering, positioning it absolute at document origin
-    // to bypass any viewport scrolls, overflow cuts, or margins.
+    // 2. Style the clone: Place it far left off-screen (left: -9999px)
+    // Keep it visibility: visible and display: block, but push it out of the visible screen.
+    // Do NOT use a negative z-index that puts it underneath dark app container backgrounds.
     clone.style.position = 'absolute';
-    clone.style.left = '0';
+    clone.style.left = '-9999px';
     clone.style.top = '0';
     clone.style.width = '820px';
     clone.style.height = 'auto';
@@ -2323,7 +2324,7 @@ function downloadReportPdf() {
     clone.style.borderRadius = '0';
     clone.style.background = '#ffffff';
     clone.style.color = '#0f172a';
-    clone.style.zIndex = '-9999'; // Hide behind main viewport
+    clone.style.zIndex = '9999'; // Put it on top, but out of bounds (-9999px) so it doesn't cover anything
     clone.style.transform = 'none';
     clone.style.visibility = 'visible';
     clone.style.display = 'block';
@@ -2333,7 +2334,7 @@ function downloadReportPdf() {
 
     function runExport() {
         const opt = {
-            margin:       0, // Zero margin to prevent double-margin offsets since the paper has internal padding
+            margin:       0, // Zero margin since the paper layout already has internal 2.5rem padding
             filename:     `SmartCounter_Report_${selectedMonth}.pdf`,
             image:        { type: 'jpeg', quality: 0.98 },
             html2canvas:  { 
@@ -2364,19 +2365,22 @@ function downloadReportPdf() {
         });
     }
 
-    // Check if html2pdf is loaded, if not, load dynamically
-    if (typeof html2pdf === 'undefined') {
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-        script.onload = runExport;
-        script.onerror = () => {
-            clone.remove();
-            alert('PDF 생성 라이브러리를 로드하지 못했습니다. 인터넷 연결 상태를 확인해주세요.');
-            downloadBtn.disabled = false;
-            downloadBtn.innerHTML = originalText;
-        };
-        document.head.appendChild(script);
-    } else {
-        runExport();
-    }
+    // Give browser a 150ms delay to render the clone in DOM tree before capture
+    setTimeout(() => {
+        // Check if html2pdf is loaded, if not, load dynamically
+        if (typeof html2pdf === 'undefined') {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+            script.onload = runExport;
+            script.onerror = () => {
+                clone.remove();
+                alert('PDF 생성 라이브러리를 로드하지 못했습니다. 인터넷 연결 상태를 확인해주세요.');
+                downloadBtn.disabled = false;
+                downloadBtn.innerHTML = originalText;
+            };
+            document.head.appendChild(script);
+        } else {
+            runExport();
+        }
+    }, 150);
 }
