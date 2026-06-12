@@ -211,9 +211,9 @@ function setupEventListeners() {
     if (generateReportBtn) {
         generateReportBtn.addEventListener('click', generateMonthlyReport);
     }
-    const downloadPdfBtn = document.getElementById('downloadPdfBtn');
-    if (downloadPdfBtn) {
-        downloadPdfBtn.addEventListener('click', downloadReportPdf);
+    const downloadImageBtn = document.getElementById('downloadImageBtn');
+    if (downloadImageBtn) {
+        downloadImageBtn.addEventListener('click', downloadReportImage);
     }
     const printReportBtn = document.getElementById('printReportBtn');
     if (printReportBtn) {
@@ -2351,16 +2351,16 @@ function generateMonthlyReport() {
     setTimeout(adjustReportScale, 20);
 }
 
-function downloadReportPdf() {
+function downloadReportImage() {
     const selectedMonth = document.getElementById('reportMonthFilter').value;
     const element = document.getElementById('reportPrintArea');
     const container = document.querySelector('.report-paper-container');
     
     if (!selectedMonth || !element || !container) return;
 
-    const downloadBtn = document.getElementById('downloadPdfBtn');
+    const downloadBtn = document.getElementById('downloadImageBtn');
     const printBtn = document.getElementById('printReportBtn');
-    const loadingOverlay = document.getElementById('pdfLoadingOverlay');
+    const loadingOverlay = document.getElementById('imageLoadingOverlay');
     
     const originalText = downloadBtn.innerHTML;
     
@@ -2381,27 +2381,25 @@ function downloadReportPdf() {
 
     function runExport() {
         const opt = {
-            margin:       0,
-            filename:     `SmartCounter_Report_${selectedMonth}.pdf`,
-            image:        { type: 'jpeg', quality: 0.98 },
-            html2canvas:  { 
-                scale: 2, 
-                useCORS: true, 
-                letterRendering: true,
-                scrollX: 0,
-                scrollY: 0,
-                width: 820,
-                windowWidth: 820
-            },
-            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            scale: 2, 
+            useCORS: true, 
+            letterRendering: true,
+            scrollX: 0,
+            scrollY: 0,
+            width: 820,
+            windowWidth: 820
         };
 
-        // 3. Export PDF using the actual live DOM element (avoiding offscreen culling / blank page bugs)
-        html2pdf().set(opt).from(element).save().then(() => {
+        // 3. Export Image using html2canvas directly
+        html2canvas(element, opt).then(canvas => {
+            const link = document.createElement('a');
+            link.download = `SmartCounter_Report_${selectedMonth}.jpg`;
+            link.href = canvas.toDataURL('image/jpeg', 0.98);
+            link.click();
             finalizeExport();
         }).catch(err => {
-            console.error("PDF 다운로드 에러:", err);
-            alert("PDF 생성을 진행할 수 없습니다. 네이티브 'PDF 인쇄/저장' 방식을 호출합니다.");
+            console.error("이미지 다운로드 에러:", err);
+            alert("이미지 생성을 진행할 수 없습니다. 네이티브 '인쇄/저장' 방식을 호출합니다.");
             finalizeExport();
             // Fallback to native print
             window.print();
@@ -2426,20 +2424,20 @@ function downloadReportPdf() {
         adjustReportScale();
     }
 
-    // Give browser 200ms to repaint the report element to 820px scale before capturing
+    // Give browser 400ms to repaint the report element to 820px scale before capturing
     setTimeout(() => {
-        if (typeof html2pdf === 'undefined') {
+        if (typeof html2canvas === 'undefined') {
             const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
             script.onload = runExport;
             script.onerror = () => {
                 finalizeExport();
-                alert('PDF 생성 라이브러리를 로드할 수 없습니다. 대신 네이티브 인쇄 창을 띄웁니다.');
+                alert('이미지 생성 라이브러리를 로드할 수 없습니다. 대신 네이티브 인쇄 창을 띄웁니다.');
                 window.print();
             };
             document.head.appendChild(script);
         } else {
             runExport();
         }
-    }, 200);
+    }, 400);
 }

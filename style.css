@@ -971,18 +971,23 @@ select.form-control option {
         margin-bottom: 1rem;
     }
 
-    /* 모바일용 테이블 반응형 카드 뷰 변환 */
-    table, thead, tbody, th, td, tr {
+    /* 모바일용 테이블 반응형 카드 뷰 변환 (리포트 테이블은 제외) */
+    table:not(.report-table), 
+    table:not(.report-table) thead, 
+    table:not(.report-table) tbody, 
+    table:not(.report-table) th, 
+    table:not(.report-table) td, 
+    table:not(.report-table) tr {
         display: block;
     }
     
-    thead tr {
+    table:not(.report-table) thead tr {
         position: absolute;
         top: -9999px;
         left: -9999px;
     }
     
-    tr {
+    table:not(.report-table) tr {
         margin-bottom: 1.25rem;
         border: 1px solid var(--border-color);
         border-radius: var(--radius-md);
@@ -991,7 +996,7 @@ select.form-control option {
         box-shadow: var(--shadow-sm);
     }
     
-    td {
+    table:not(.report-table) td {
         border: none;
         border-bottom: 1px solid rgba(255, 255, 255, 0.04);
         position: relative;
@@ -1006,11 +1011,11 @@ select.form-control option {
         text-align: right;
     }
     
-    td:last-child {
+    table:not(.report-table) td:last-child {
         border-bottom: 0;
     }
     
-    td::before {
+    table:not(.report-table) td::before {
         content: attr(data-label);
         position: static;
         width: auto;

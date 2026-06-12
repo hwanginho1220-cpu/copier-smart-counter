@@ -129,6 +129,7 @@
                         <h2 style="font-size: 1.1rem; font-weight:600; margin-bottom: 1.25rem; font-family: var(--font-heading);">
                             <i class="fa-solid fa-fire" style="color: #fca5a5; margin-right: 0.5rem;"></i>사용량 많은 고객사 (이번 달)
                         </h2>
+
                         <div id="topUsageCustomers" style="flex: 1; display:flex; flex-direction:column; gap:0.75rem; justify-content:flex-start;">
                             <!-- Dynamically filled -->
                             <p style="color: var(--text-muted); text-align: center; margin-top: 3rem;">이번 달 사용 기록이 없습니다.</p>
@@ -279,8 +280,8 @@
                             </button>
                         </div>
                         <div style="display:flex; gap:0.5rem;">
-                            <button class="btn btn-secondary" id="downloadPdfBtn" style="display: none; background: #60a5fa; color: #0f172a; border-color: #60a5fa; font-weight: 600;">
-                                <i class="fa-solid fa-download"></i>PDF 다운로드
+                            <button class="btn btn-secondary" id="downloadImageBtn" style="display: none; background: #60a5fa; color: #0f172a; border-color: #60a5fa; font-weight: 600;">
+                                <i class="fa-solid fa-image"></i>이미지 다운로드
                             </button>
                             <button class="btn btn-secondary" id="printReportBtn" style="display: none; background: #34d399; color: #0f172a; border-color: #34d399; font-weight: 600;">
                                 <i class="fa-solid fa-print"></i>PDF 인쇄/저장
@@ -291,7 +292,7 @@
                 
                 <div class="report-info-banner" style="display: none; align-items: center; gap: 0.5rem; margin-top: 0.75rem; padding: 0.75rem 1rem; background: rgba(96, 165, 250, 0.08); border: 1px solid rgba(96, 165, 250, 0.2); border-radius: var(--radius-sm); font-size: 0.85rem; color: #93c5fd; line-height: 1.4; margin-bottom: 0.75rem;" id="reportGuideBanner">
                     <i class="fa-solid fa-circle-info" style="font-size: 1rem; flex-shrink: 0; color: #60a5fa;"></i>
-                    <span>모바일 환경에서 PDF 파일이 저장되지 않을 경우, 바로 옆의 <strong>[PDF 인쇄/저장]</strong> 버튼을 탭하고 인쇄 창에서 'PDF로 저장'을 선택해 주세요.</span>
+                    <span>모바일 환경에서 이미지 파일이 저장되지 않을 경우, 바로 옆의 <strong>[PDF 인쇄/저장]</strong> 버튼을 탭하고 인쇄 창에서 'PDF로 저장'을 선택해 주세요.</span>
                 </div>
                 
                 <!-- Report Paper Container (WYSIWYG layout) -->
@@ -634,12 +635,12 @@
         </div>
     </div>
 
-    <!-- PDF Exporting Loading Overlay -->
-    <div class="pdf-loading-overlay" id="pdfLoadingOverlay" style="display: none;">
+    <!-- Image Exporting Loading Overlay -->
+    <div class="pdf-loading-overlay" id="imageLoadingOverlay" style="display: none;">
         <div class="pdf-loading-card">
             <i class="fa-solid fa-spinner fa-spin pdf-loading-spinner"></i>
-            <h3>PDF 리포트 생성 중</h3>
-            <p class="desc">화면 캡처 및 PDF 저장을 진행하고 있습니다.</p>
+            <h3>리포트 이미지 생성 중</h3>
+            <p class="desc">화면 캡처 및 이미지 저장을 진행하고 있습니다.</p>
             <p class="sub-desc">잠시만 기다려 주세요. (약 3~5초 소요)</p>
         </div>
     </div>
