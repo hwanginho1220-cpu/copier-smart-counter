@@ -2143,7 +2143,7 @@ function adjustReportScale() {
 function generateMonthlyReport() {
     const selectedMonth = document.getElementById('reportMonthFilter').value;
     const printArea = document.getElementById('reportPrintArea');
-    const downloadBtn = document.getElementById('downloadPdfBtn');
+    const downloadBtn = document.getElementById('downloadImageBtn');
     const printBtn = document.getElementById('printReportBtn');
     const guideBanner = document.getElementById('reportGuideBanner');
     
