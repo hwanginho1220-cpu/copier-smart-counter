@@ -322,26 +322,16 @@
                         <label for="customerName">고객사명 <span style="color:var(--danger)">*</span></label>
                         <input type="text" id="customerName" class="form-control" required placeholder="예: (주)에이비씨">
                     </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="copierModel">복사기 모델 <span style="color:var(--danger)">*</span></label>
-                            <input type="text" id="copierModel" class="form-control" required placeholder="예: Canon C3525">
+                    <!-- Dynamic Devices Container -->
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.25rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <label style="margin-bottom: 0;">등록 기기 목록 <span style="color:var(--danger)">*</span></label>
+                            <button type="button" class="btn btn-secondary" onclick="addCustomerDeviceForm()" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">
+                                <i class="fa-solid fa-plus"></i> 기기 추가
+                            </button>
                         </div>
-                        <div class="form-group">
-                            <label for="serialNumber">일련번호 (S/N)</label>
-                            <div style="display:flex; gap:0.5rem; align-items:center;">
-                                <input type="text" id="serialNumber" class="form-control" placeholder="예: SN12345678" style="flex:1;">
-                                <button type="button" class="btn btn-secondary" style="padding: 0.75rem 1.05rem;" onclick="document.getElementById('serialImageInput').click()" title="일련번호 사진 촬영/첨부">
-                                    <i class="fa-solid fa-camera"></i>
-                                </button>
-                            </div>
-                            <input type="file" id="serialImageInput" accept="image/*" style="display:none;">
-                            <div id="serialImagePreviewContainer" style="margin-top: 0.5rem; display:none; position:relative; width:80px; height:80px; border-radius: var(--radius-sm); border:1px solid var(--border-color); overflow:hidden;">
-                                <img id="serialImagePreview" src="" style="width:100%; height:100%; object-fit:cover;">
-                                <button type="button" id="deleteSerialImageBtn" style="position:absolute; top:4px; right:4px; width:20px; height:20px; border-radius:50%; background:rgba(0,0,0,0.6); border:none; color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.7rem;">
-                                    <i class="fa-solid fa-xmark"></i>
-                                </button>
-                            </div>
+                        <div id="customerDevicesContainer">
+                            <!-- Device forms will be injected here -->
                         </div>
                     </div>
                     <div class="form-group">
@@ -360,7 +350,8 @@
                     </div>
                     
                     <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 1.5rem 0;">
-                    <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem; color: var(--text-primary);"><i class="fa-solid fa-won-sign" style="color: #10b981; margin-right: 0.5rem;"></i>계약 및 청구 설정</h3>
+                    <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem; color: var(--text-primary);"><i class="fa-solid fa-won-sign" style="color: #10b981; margin-right: 0.5rem;"></i>계약 및 전체 청구 설정</h3>
+                    <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom: 1rem;">* 전체 기기의 총합계에 대한 설정입니다. 개별 기기의 단가는 위 기기 목록에서 설정하세요.</p>
                     
                     <div class="form-group">
                         <label for="contractAmount">월 기본 임대료 (원)</label>
@@ -412,8 +403,15 @@
                 <div class="modal-body">
                     <div class="form-group">
                         <label for="inspectionCustomerSelect">고객사 선택 <span style="color:var(--danger)">*</span></label>
-                        <select id="inspectionCustomerSelect" class="form-control" required>
+                        <select id="inspectionCustomerSelect" class="form-control" required onchange="handleInspectionCustomerChange()">
                             <option value="">-- 고객사를 선택하세요 --</option>
+                            <!-- Dynamically populated -->
+                        </select>
+                    </div>
+                    <div class="form-group" id="inspectionDeviceSelectGroup" style="display:none;">
+                        <label for="inspectionDeviceSelect">기기 선택 <span style="color:var(--danger)">*</span></label>
+                        <select id="inspectionDeviceSelect" class="form-control" required onchange="updatePreviousCountersInfo()">
+                            <option value="">-- 기기를 선택하세요 --</option>
                             <!-- Dynamically populated -->
                         </select>
                     </div>
@@ -610,64 +608,74 @@
 
     <!-- MODAL: INVOICE VIEWER -->
     <div class="modal-backdrop" id="invoiceModalBackdrop">
-        <div class="modal" style="max-width: 850px; background: transparent; box-shadow: none;">
+        <div class="modal" style="max-width: 900px; background: transparent; box-shadow: none;">
             <div class="modal-header" style="background: var(--bg-card); border-radius: var(--radius-md) var(--radius-md) 0 0; padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color);">
                 <h2 id="invoiceModalTitle">거래명세서 발급</h2>
                 <button class="close-btn" onclick="closeInvoiceModal()"><i class="fa-solid fa-xmark"></i></button>
             </div>
             
-            <div style="background: var(--bg-body); padding: 1rem; overflow-y: auto; max-height: 70vh;">
+            <div style="background: var(--bg-body); padding: 2rem; overflow-y: auto; max-height: 70vh; display: flex; justify-content: center;">
                 <!-- A4 Paper Container -->
                 <div class="invoice-paper-container">
-                    <div id="invoicePrintArea" class="invoice-paper">
-                        <div class="invoice-header">
-                            <h1 style="text-align: center; font-size: 2rem; letter-spacing: 5px; margin-bottom: 1.5rem; border-bottom: 2px solid #333; padding-bottom: 0.5rem;">거 래 명 세 서</h1>
-                            
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
-                                <div style="flex: 1; margin-right: 1rem;">
-                                    <table class="invoice-meta-table">
-                                        <tr>
-                                            <th style="width: 80px;">공급받는자</th>
-                                            <td id="invCustomerName" style="font-weight: bold; font-size: 1.1rem;">-</td>
-                                        </tr>
-                                        <tr>
-                                            <th>현장(위치)</th>
-                                            <td id="invCustomerLocation">-</td>
-                                        </tr>
-                                        <tr>
-                                            <th>담당(연락)</th>
-                                            <td id="invCustomerContact">-</td>
-                                        </tr>
-                                    </table>
-                                </div>
-                                <div style="flex: 1;">
-                                    <table class="invoice-meta-table">
-                                        <tr>
-                                            <th style="width: 80px;">공급자</th>
-                                            <td style="font-weight: bold; font-size: 1.1rem;">SmartCounter 관리부</td>
-                                        </tr>
-                                        <tr>
-                                            <th>발급일자</th>
-                                            <td id="invIssueDate">-</td>
-                                        </tr>
-                                        <tr>
-                                            <th>합계금액</th>
-                                            <td id="invTotalAmountTop" style="font-weight: bold; color: #ef4444;">-</td>
-                                        </tr>
-                                    </table>
-                                </div>
+                    <div id="invoicePrintArea" class="traditional-invoice">
+                        <div class="ti-header">
+                            <h1 class="ti-title">거 래 명 세 표</h1>
+                            <div class="ti-supplier-area">
+                                <div class="ti-vertical-label">공급자</div>
+                                <table class="ti-supplier-table">
+                                    <tr>
+                                        <th>등록번호</th>
+                                        <td colspan="3" style="font-weight: bold; font-size: 1.1em; letter-spacing: 2px;">119-20-43750</td>
+                                    </tr>
+                                    <tr>
+                                        <th>상호<br>(법인명)</th>
+                                        <td style="font-weight: bold;">하영통신</td>
+                                        <th>성명<br>(대표자)</th>
+                                        <td style="position: relative; padding-right: 40px;">
+                                            <span style="font-weight: bold;">황인호</span>
+                                            <div class="ti-stamp">
+                                                <div class="ti-stamp-inner">
+                                                    하영<br>통신<br>인
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th>사업장<br>소재지</th>
+                                        <td colspan="3">서울 금천구 독산동 146-24 (2층)</td>
+                                    </tr>
+                                    <tr>
+                                        <th>업태</th>
+                                        <td>도소매</td>
+                                        <th>종목</th>
+                                        <td>사무기기</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
 
-                        <table class="invoice-item-table">
+                        <div class="ti-customer-area">
+                            <div class="ti-date" id="invIssueDate">2024년 06월 15일</div>
+                            <div class="ti-customer">
+                                <span id="invCustomerName" class="ti-customer-name">-</span> <span class="ti-customer-suffix">귀하</span>
+                            </div>
+                            <div class="ti-total-amount">
+                                <span class="ti-amount-label">합계금액(공급가액+세액)</span>
+                                <span id="invTotalAmountText" class="ti-amount-text">일금 영 원정</span>
+                                <span id="invTotalAmountNum" class="ti-amount-num">₩0</span>
+                            </div>
+                        </div>
+
+                        <table class="ti-item-table">
                             <thead>
                                 <tr>
-                                    <th style="width: 5%;">No</th>
-                                    <th style="width: 35%;">품목 (기기 및 점검 월)</th>
-                                    <th style="width: 15%;">수량/매수</th>
-                                    <th style="width: 15%;">단가</th>
-                                    <th style="width: 20%;">공급가액</th>
-                                    <th style="width: 10%;">비고</th>
+                                    <th style="width: 5%;">월/일</th>
+                                    <th style="width: 35%;">품목</th>
+                                    <th style="width: 10%;">규격</th>
+                                    <th style="width: 8%;">수량</th>
+                                    <th style="width: 12%;">단가</th>
+                                    <th style="width: 15%;">공급가액</th>
+                                    <th style="width: 15%;">비고</th>
                                 </tr>
                             </thead>
                             <tbody id="invItemBody">
@@ -678,9 +686,13 @@
                             </tfoot>
                         </table>
                         
-                        <div style="margin-top: 2rem; text-align: center; color: #555; font-size: 0.9rem;">
-                            <p>위와 같이 청구하오니 기일 내 입금 부탁드립니다.</p>
-                            <p style="margin-top: 0.5rem; font-weight: bold;">[계좌번호] 국민은행 123456-01-789012 (예금주: SmartCounter)</p>
+                        <div class="ti-counter-area" id="invCounterArea">
+                            <!-- Counter details injected here -->
+                        </div>
+
+                        <div class="ti-footer">
+                            <p>위와 같이 계산하오니 청구하여 주시기 바랍니다.</p>
+                            <p class="ti-account"><strong>국민은행 012345-01-678901 (예금주: 하영통신)</strong></p>
                         </div>
                     </div>
                 </div>

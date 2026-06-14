@@ -60,6 +60,50 @@ function loadData() {
     } else {
         loadDemoData();
     }
+    migrateState();
+}
+
+function migrateState() {
+    let migrated = false;
+    
+    // Migrate customers
+    state.customers.forEach(c => {
+        if (!c.devices) {
+            c.devices = [{
+                id: c.id + '-dev1',
+                type: '복사기',
+                name: '복사기 기본',
+                model: c.copierModel || '미지정',
+                serial: c.serialNumber || '',
+                image: c.serialImage || '',
+                price: 0
+            }];
+            // Cleanup old properties
+            delete c.copierModel;
+            delete c.serialNumber;
+            delete c.serialImage;
+            
+            migrated = true;
+            if (isCloudMode && db) {
+                db.collection('customers').doc(c.id).set(c, {merge: true});
+            }
+        }
+    });
+
+    // Migrate inspections
+    state.inspections.forEach(i => {
+        if (!i.deviceId) {
+            i.deviceId = i.customerId + '-dev1';
+            migrated = true;
+            if (isCloudMode && db) {
+                db.collection('inspections').doc(i.id).set(i, {merge: true});
+            }
+        }
+    });
+
+    if (migrated && !isCloudMode) {
+        saveToStorage();
+    }
 }
 
 function loadDemoData() {
@@ -320,21 +364,27 @@ async function recalculateUsageForCustomer(customerId) {
 
     const changedInspections = [];
 
-    // Recalculate diffs
-    custInspections.forEach((insp, index) => {
-        let newBwUsage = 0;
-        let newColorUsage = 0;
-        if (index > 0) {
-            const prev = custInspections[index - 1];
-            newBwUsage = insp.bwCounter - prev.bwCounter;
-            newColorUsage = insp.colorCounter - prev.colorCounter;
-        }
+    // Group by deviceId
+    const deviceIds = [...new Set(custInspections.map(i => i.deviceId))];
 
-        if (insp.bwUsage !== newBwUsage || insp.colorUsage !== newColorUsage) {
-            insp.bwUsage = newBwUsage;
-            insp.colorUsage = newColorUsage;
-            changedInspections.push(insp);
-        }
+    deviceIds.forEach(devId => {
+        const devInspections = custInspections.filter(i => i.deviceId === devId);
+        
+        devInspections.forEach((insp, index) => {
+            let newBwUsage = 0;
+            let newColorUsage = 0;
+            if (index > 0) {
+                const prev = devInspections[index - 1];
+                newBwUsage = insp.bwCounter - prev.bwCounter;
+                newColorUsage = insp.colorCounter - prev.colorCounter;
+            }
+
+            if (insp.bwUsage !== newBwUsage || insp.colorUsage !== newColorUsage) {
+                insp.bwUsage = newBwUsage;
+                insp.colorUsage = newColorUsage;
+                changedInspections.push(insp);
+            }
+        });
     });
 
     // Update main state array
@@ -369,11 +419,11 @@ async function recalculateUsageForCustomer(customerId) {
 /**
  * Gets the latest inspection prior to a given date for a customer.
  */
-function getPreviousInspection(customerId, beforeDateStr, excludeId = null) {
+function getPreviousInspection(deviceId, beforeDateStr, excludeId = null) {
     const beforeDate = new Date(beforeDateStr);
     
     const candidates = state.inspections.filter(i => {
-        if (i.customerId !== customerId) return false;
+        if (i.deviceId !== deviceId) return false;
         if (excludeId && i.id === excludeId) return false;
         return new Date(i.date) < beforeDate;
     });
@@ -804,13 +854,51 @@ function renderCustomersTable() {
     });
 }
 
+let customerDevicesCount = 0;
+
+function addCustomerDeviceForm(device = null) {
+    const container = document.getElementById('customerDevicesContainer');
+    const id = `dev_${Date.now()}_${customerDevicesCount++}`;
+    
+    const div = document.createElement('div');
+    div.className = 'device-entry';
+    div.style.cssText = 'background: rgba(0,0,0,0.1); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 0.75rem; position: relative;';
+    
+    div.innerHTML = `
+        <button type="button" class="btn-icon btn-danger" style="position: absolute; top: 0.5rem; right: 0.5rem;" onclick="this.parentElement.remove()" title="기기 삭제">
+            <i class="fa-solid fa-trash"></i>
+        </button>
+        <input type="hidden" class="dev-id" value="${device ? device.id : id}">
+        
+        <div class="form-row">
+            <div class="form-group">
+                <label>품목명 (예: 복사기 RT) <span style="color:var(--danger)">*</span></label>
+                <input type="text" class="form-control dev-name" required placeholder="명세서에 출력될 이름" value="${device ? device.name : '복사기 RT'}">
+            </div>
+            <div class="form-group">
+                <label>기기 모델</label>
+                <input type="text" class="form-control dev-model" placeholder="예: Canon C3525" value="${device ? device.model : ''}">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>일련번호 (S/N)</label>
+                <input type="text" class="form-control dev-serial" placeholder="예: SN12345678" value="${device ? device.serial : ''}">
+            </div>
+            <div class="form-group">
+                <label>기기별 단가 (기본료 외 추가시)</label>
+                <input type="number" class="form-control dev-price" min="0" placeholder="예: 210000" value="${device ? device.price || 0 : 0}">
+            </div>
+        </div>
+    `;
+    container.appendChild(div);
+}
+
 async function handleCustomerFormSubmit(e) {
     e.preventDefault();
     
     const id = document.getElementById('customerId').value;
     const name = document.getElementById('customerName').value.trim();
-    const model = document.getElementById('copierModel').value.trim();
-    const serial = document.getElementById('serialNumber').value.trim();
     const contact = document.getElementById('customerContact').value.trim();
     const contractBw = parseInt(document.getElementById('contractBw').value, 10) || 0;
     const contractColor = parseInt(document.getElementById('contractColor').value, 10) || 0;
@@ -821,7 +909,24 @@ async function handleCustomerFormSubmit(e) {
     const location = document.getElementById('customerLocation').value.trim();
     const isMonthly = document.getElementById('isMonthlyInspection').checked;
 
-    if (!name || !model) return;
+    // Parse devices
+    const deviceEntries = document.querySelectorAll('.device-entry');
+    const devices = [];
+    deviceEntries.forEach(entry => {
+        devices.push({
+            id: entry.querySelector('.dev-id').value,
+            name: entry.querySelector('.dev-name').value.trim(),
+            model: entry.querySelector('.dev-model').value.trim(),
+            serial: entry.querySelector('.dev-serial').value.trim(),
+            price: parseInt(entry.querySelector('.dev-price').value, 10) || 0,
+            image: '' // image logic simplified or removed per device for now to focus on the form
+        });
+    });
+
+    if (!name || devices.length === 0) {
+        alert("고객사명과 최소 1개 이상의 기기를 등록해주세요.");
+        return;
+    }
 
     let targetId = id || 'cust-' + Date.now();
     let createdAt = new Date().toISOString().split('T')[0];
@@ -829,8 +934,7 @@ async function handleCustomerFormSubmit(e) {
     const customerData = {
         id: targetId,
         name: name,
-        copierModel: model,
-        serialNumber: serial,
+        devices: devices,
         contact: contact,
         contractBw: contractBw,
         contractColor: contractColor,
@@ -839,7 +943,6 @@ async function handleCustomerFormSubmit(e) {
         overColorPrice: overColorPrice,
         vatEnabled: vatEnabled,
         location: location,
-        serialImage: currentSerialImageBase64,
         isMonthlyInspection: isMonthly
     };
 
@@ -1018,17 +1121,21 @@ async function handleInspectionFormSubmit(e) {
 
     const id = document.getElementById('inspectionId').value;
     const customerId = document.getElementById('inspectionCustomerSelect').value;
+    const deviceId = document.getElementById('inspectionDeviceSelect').value;
     const date = document.getElementById('inspectionDate').value;
     const bwCounter = parseInt(document.getElementById('bwCounter').value, 10);
     const colorCounter = parseInt(document.getElementById('colorCounter').value, 10);
     const notes = document.getElementById('inspectionNotes').value.trim();
 
-    if (!customerId || !date || isNaN(bwCounter) || isNaN(colorCounter)) return;
+    if (!customerId || !deviceId || !date || isNaN(bwCounter) || isNaN(colorCounter)) {
+        alert("모든 필수 항목을 입력해주세요.");
+        return;
+    }
 
     if (!id) {
-        const duplicate = state.inspections.find(i => i.customerId === customerId && i.date === date);
+        const duplicate = state.inspections.find(i => i.deviceId === deviceId && i.date === date);
         if (duplicate) {
-            if (!confirm('해당 날짜에 이미 등록된 점검 기록이 있습니다. 덮어쓰시겠습니까?')) {
+            if (!confirm('해당 기기에 이미 등록된 같은 날짜의 점검 기록이 있습니다. 덮어쓰시겠습니까?')) {
                 return;
             }
             if (isCloudMode && db) {
@@ -1047,6 +1154,7 @@ async function handleInspectionFormSubmit(e) {
     const inspectionData = {
         id: targetId,
         customerId: customerId,
+        deviceId: deviceId,
         date: date,
         bwCounter: bwCounter,
         colorCounter: colorCounter,
@@ -1090,6 +1198,7 @@ async function handleInspectionFormSubmit(e) {
             if (insp) {
                 const oldCustomerId = insp.customerId;
                 insp.customerId = customerId;
+                insp.deviceId = deviceId;
                 insp.date = date;
                 insp.bwCounter = bwCounter;
                 insp.colorCounter = colorCounter;
@@ -1185,11 +1294,7 @@ function openCustomerModal(id = null) {
     form.reset();
     document.getElementById('customerId').value = '';
 
-    // Reset image preview state
-    currentSerialImageBase64 = null;
-    document.getElementById('serialImageInput').value = '';
-    document.getElementById('serialImagePreviewContainer').style.display = 'none';
-    document.getElementById('serialImagePreview').src = '';
+    document.getElementById('customerDevicesContainer').innerHTML = '';
 
     if (id) {
         title.textContent = '고객사 정보 수정';
@@ -1198,8 +1303,6 @@ function openCustomerModal(id = null) {
         if (customer) {
             document.getElementById('customerId').value = customer.id;
             document.getElementById('customerName').value = customer.name;
-            document.getElementById('copierModel').value = customer.copierModel;
-            document.getElementById('serialNumber').value = customer.serialNumber || '';
             document.getElementById('customerContact').value = customer.contact || '';
             document.getElementById('contractBw').value = customer.contractBw || '';
             document.getElementById('contractColor').value = customer.contractColor || '';
@@ -1210,11 +1313,12 @@ function openCustomerModal(id = null) {
             document.getElementById('customerLocation').value = customer.location || '';
             document.getElementById('isMonthlyInspection').checked = customer.isMonthlyInspection !== false;
             
-            // Populate photo thumbnail if exists
-            if (customer.serialImage) {
-                currentSerialImageBase64 = customer.serialImage;
-                document.getElementById('serialImagePreview').src = customer.serialImage;
-                document.getElementById('serialImagePreviewContainer').style.display = 'block';
+            if (customer.devices && customer.devices.length > 0) {
+                customer.devices.forEach(dev => {
+                    addCustomerDeviceForm(dev);
+                });
+            } else {
+                addCustomerDeviceForm();
             }
         }
     } else {
@@ -1227,6 +1331,8 @@ function openCustomerModal(id = null) {
         document.getElementById('overColorPrice').value = '';
         document.getElementById('vatEnabled').checked = true;
         document.getElementById('isMonthlyInspection').checked = true;
+        
+        addCustomerDeviceForm();
     }
 
     modal.classList.add('active');
@@ -1469,9 +1575,12 @@ function openInspectionModal(id = null, customerId = null) {
     sortedCustomers.forEach(cust => {
         const option = document.createElement('option');
         option.value = cust.id;
-        option.textContent = `${cust.name} (${cust.copierModel})`;
+        option.textContent = cust.name;
         select.appendChild(option);
     });
+
+    document.getElementById('inspectionDeviceSelectGroup').style.display = 'none';
+    document.getElementById('inspectionDeviceSelect').innerHTML = '<option value="">-- 기기를 선택하세요 --</option>';
 
     // Populate parts select dropdown
     updateInspectionPartDropdown();
@@ -1488,13 +1597,16 @@ function openInspectionModal(id = null, customerId = null) {
         if (insp) {
             document.getElementById('inspectionId').value = insp.id;
             document.getElementById('inspectionCustomerSelect').value = insp.customerId;
+            handleInspectionCustomerChange();
+            document.getElementById('inspectionDeviceSelect').value = insp.deviceId;
+            
             document.getElementById('inspectionDate').value = insp.date;
             document.getElementById('bwCounter').value = insp.bwCounter;
             document.getElementById('colorCounter').value = insp.colorCounter;
             document.getElementById('inspectionNotes').value = insp.notes || '';
             
             // Show previous info (excluding this record)
-            updatePreviousCountersInfo(insp.customerId, insp.id);
+            updatePreviousCountersInfo(insp.deviceId, insp.id);
             
             // Load existing parts
             currentInspectionParts = insp.parts ? [...insp.parts] : [];
@@ -1508,7 +1620,7 @@ function openInspectionModal(id = null, customerId = null) {
         
         if (customerId) {
             document.getElementById('inspectionCustomerSelect').value = customerId;
-            updatePreviousCountersInfo(customerId, null);
+            handleInspectionCustomerChange();
         }
 
         // Reset inspection parts
@@ -1523,12 +1635,50 @@ function closeInspectionModal() {
     document.getElementById('inspectionModalBackdrop').classList.remove('active');
 }
 
-/**
- * Show previous month's counters in the modal when a customer is selected.
- */
-function updatePreviousCountersInfo(customerId, excludeId = null) {
+function handleInspectionCustomerChange() {
+    const customerId = document.getElementById('inspectionCustomerSelect').value;
+    const deviceSelect = document.getElementById('inspectionDeviceSelect');
+    const deviceGroup = document.getElementById('inspectionDeviceSelectGroup');
     const infoBox = document.getElementById('previousCountersInfo');
+    
+    deviceSelect.innerHTML = '<option value="">-- 기기를 선택하세요 --</option>';
+    infoBox.style.display = 'none';
+    document.getElementById('bwCounter').placeholder = '0';
+    document.getElementById('colorCounter').placeholder = '0';
+
     if (!customerId) {
+        deviceGroup.style.display = 'none';
+        return;
+    }
+
+    const customer = state.customers.find(c => c.id === customerId);
+    if (customer && customer.devices && customer.devices.length > 0) {
+        customer.devices.forEach(dev => {
+            const option = document.createElement('option');
+            option.value = dev.id;
+            option.textContent = `${dev.name} (${dev.model})`;
+            deviceSelect.appendChild(option);
+        });
+        deviceGroup.style.display = 'block';
+        
+        // Auto-select if only 1 device
+        if (customer.devices.length === 1) {
+            deviceSelect.value = customer.devices[0].id;
+            updatePreviousCountersInfo();
+        }
+    } else {
+        deviceGroup.style.display = 'none';
+    }
+}
+
+/**
+ * Show previous month's counters in the modal when a device is selected.
+ */
+function updatePreviousCountersInfo(overrideDeviceId = null, excludeId = null) {
+    const infoBox = document.getElementById('previousCountersInfo');
+    const deviceId = overrideDeviceId || document.getElementById('inspectionDeviceSelect').value;
+    
+    if (!deviceId) {
         infoBox.style.display = 'none';
         return;
     }
@@ -1536,7 +1686,7 @@ function updatePreviousCountersInfo(customerId, excludeId = null) {
     const dateVal = document.getElementById('inspectionDate').value;
     
     // Find the closest previous inspection
-    const prev = getPreviousInspection(customerId, dateVal || new Date().toISOString().split('T')[0], excludeId);
+    const prev = getPreviousInspection(deviceId, dateVal || new Date().toISOString().split('T')[0], excludeId);
 
     if (prev) {
         infoBox.style.display = 'block';
@@ -1766,6 +1916,7 @@ function setupFirebaseListeners() {
             customersList.push(doc.data());
         });
         state.customers = customersList;
+        migrateState();
         saveToStorage();
         refreshAllViews();
     }, error => {
@@ -1779,6 +1930,7 @@ function setupFirebaseListeners() {
             inspectionsList.push(doc.data());
         });
         state.inspections = inspectionsList;
+        migrateState();
         saveToStorage();
         refreshAllViews();
     }, error => {
@@ -2229,6 +2381,15 @@ function generateMonthlyReport() {
         }
     });
 
+    // Group inspections by customer
+    const groupedInspections = {};
+    filteredInsps.forEach(insp => {
+        if (!groupedInspections[insp.customerId]) {
+            groupedInspections[insp.customerId] = [];
+        }
+        groupedInspections[insp.customerId].push(insp);
+    });
+
     // Formatting date strings
     const reportYear = selectedMonth.split('-')[0];
     const reportMonth = selectedMonth.split('-')[1];
@@ -2236,70 +2397,104 @@ function generateMonthlyReport() {
 
     // Build Report Content HTML
     let tableRowsHtml = '';
-    filteredInsps.forEach((insp, idx) => {
-        const cust = state.customers.find(c => c.id === insp.customerId);
+    
+    // Sort customer IDs by name
+    const customerIds = Object.keys(groupedInspections).sort((a, b) => {
+        const nameA = state.customers.find(c => c.id === a)?.name || '';
+        const nameB = state.customers.find(c => c.id === b)?.name || '';
+        return nameA.localeCompare(nameB);
+    });
+
+    customerIds.forEach((customerId, custIdx) => {
+        const cust = state.customers.find(c => c.id === customerId);
+        const custInsps = groupedInspections[customerId];
+        
         const customerName = cust ? cust.name : '알 수 없음';
-        const model = cust ? cust.copierModel : '-';
         const contractBwLimit = cust ? cust.contractBw : 0;
         const contractColorLimit = cust ? cust.contractColor : 0;
 
-        const bwOver = Math.max(0, insp.bwUsage - contractBwLimit);
-        const colorOver = Math.max(0, insp.colorUsage - contractColorLimit);
+        let custBwUsage = 0;
+        let custColorUsage = 0;
+        let partsTotal = 0;
 
-        const bwOverBadge = bwOver > 0 ? `<span class="paper-badge paper-badge-danger">+${bwOver.toLocaleString()}</span>` : '';
-        const colorOverBadge = colorOver > 0 ? `<span class="paper-badge paper-badge-danger">+${colorOver.toLocaleString()}</span>` : '';
+        custInsps.forEach(insp => {
+            custBwUsage += insp.bwUsage;
+            custColorUsage += insp.colorUsage;
+            if (insp.parts) {
+                partsTotal += insp.parts.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+            }
+        });
 
-        // Formatted parts column
-        let partsText = '-';
-        if (insp.parts && insp.parts.length > 0) {
-            partsText = insp.parts.map(p => `${p.name} x${p.quantity}<br>(₩${(p.price * p.quantity).toLocaleString()})`).join('<br>');
-        }
+        const bwOver = Math.max(0, custBwUsage - contractBwLimit);
+        const colorOver = Math.max(0, custColorUsage - contractColorLimit);
 
-        // Calculate billing amount
         const contractAmount = cust ? cust.contractAmount || 0 : 0;
         const overBwPrice = cust ? cust.overBwPrice || 0 : 0;
         const overColorPrice = cust ? cust.overColorPrice || 0 : 0;
         const vatEnabled = cust ? cust.vatEnabled !== false : true;
 
-        let partsTotal = 0;
-        if (insp.parts) {
-            partsTotal = insp.parts.reduce((sum, p) => sum + (p.price * p.quantity), 0);
-        }
-
         const billingSubtotal = contractAmount + (bwOver * overBwPrice) + (colorOver * overColorPrice) + partsTotal;
         const billingVat = vatEnabled ? Math.floor(billingSubtotal * 0.1) : 0;
         const billingTotal = billingSubtotal + billingVat;
 
-        tableRowsHtml += `
-            <tr>
-                <td class="center">${idx + 1}</td>
+        custInsps.forEach((insp, idx) => {
+            const dev = cust && cust.devices ? cust.devices.find(d => d.id === insp.deviceId) : null;
+            const model = dev ? `${dev.name} (${dev.model})` : '-';
+            
+            let partsText = '-';
+            if (insp.parts && insp.parts.length > 0) {
+                partsText = insp.parts.map(p => `${p.name} x${p.quantity}<br>(₩${(p.price * p.quantity).toLocaleString()})`).join('<br>');
+            }
+
+            tableRowsHtml += `<tr>`;
+            
+            // Render common columns only for the first row of this customer
+            if (idx === 0) {
+                tableRowsHtml += `
+                    <td class="center" rowspan="${custInsps.length}">${custIdx + 1}</td>
+                    <td style="font-weight:600; font-size:0.75rem; word-break:break-all;" rowspan="${custInsps.length}">${customerName}</td>
+                `;
+            }
+            
+            tableRowsHtml += `
                 <td class="center" style="font-size:0.68rem; letter-spacing:-0.5px;">${insp.date}</td>
-                <td style="font-weight:600; font-size:0.75rem; word-break:break-all;">${customerName}</td>
                 <td class="center" style="font-size:0.68rem; color:#475569;">${model}</td>
                 <td class="right" style="line-height:1.25;">
                     <div style="font-weight:600;">${insp.bwCounter.toLocaleString()}</div>
                     <div style="font-size:0.65rem; color:#22c55e; display:flex; align-items:center; justify-content:flex-end; gap:0.15rem; margin-top:0.1rem;">
-                        <span>+${insp.bwUsage.toLocaleString()}</span>${bwOverBadge}
+                        <span>+${insp.bwUsage.toLocaleString()}</span>
                     </div>
                 </td>
                 <td class="right" style="line-height:1.25;">
                     <div style="font-weight:600;">${insp.colorCounter.toLocaleString()}</div>
                     <div style="font-size:0.65rem; color:#a855f7; display:flex; align-items:center; justify-content:flex-end; gap:0.15rem; margin-top:0.1rem;">
-                        <span>+${insp.colorUsage.toLocaleString()}</span>${colorOverBadge}
+                        <span>+${insp.colorUsage.toLocaleString()}</span>
                     </div>
                 </td>
                 <td style="font-size:0.65rem; line-height:1.2; word-break:break-all;">${partsText}</td>
-                <td class="right">
-                    <div style="font-weight:600; color:#0f172a;">₩${billingTotal.toLocaleString()}</div>
-                    <div style="font-size:0.65rem; color:var(--text-secondary); margin-top:0.1rem;">${vatEnabled ? '(VAT포함)' : '(VAT면세)'}</div>
-                </td>
-                <td class="center">
-                    <button class="btn-icon btn-secondary" onclick="openInvoiceModal('${insp.id}')" title="거래명세서 발급" style="padding: 0.3rem 0.5rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-weight:600;">
-                        <i class="fa-solid fa-file-invoice-dollar" style="color:#10b981;"></i> 발급
-                    </button>
-                </td>
-            </tr>
-        `;
+            `;
+
+            if (idx === 0) {
+                const bwOverBadge = bwOver > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${bwOver.toLocaleString()}(흑백)</span></div>` : '';
+                const colorOverBadge = colorOver > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${colorOver.toLocaleString()}(컬러)</span></div>` : '';
+                
+                tableRowsHtml += `
+                    <td class="right" rowspan="${custInsps.length}">
+                        <div style="font-weight:600; color:#0f172a;">₩${billingTotal.toLocaleString()}</div>
+                        <div style="font-size:0.65rem; color:var(--text-secondary); margin-top:0.1rem;">${vatEnabled ? '(VAT포함)' : '(VAT면세)'}</div>
+                        ${bwOverBadge}
+                        ${colorOverBadge}
+                    </td>
+                    <td class="center" rowspan="${custInsps.length}">
+                        <button class="btn-icon btn-secondary" onclick="openInvoiceModal('${customerId}', '${selectedMonth}')" title="거래명세서 발급" style="padding: 0.3rem 0.5rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-weight:600;">
+                            <i class="fa-solid fa-file-invoice-dollar" style="color:#10b981;"></i> 발급
+                        </button>
+                    </td>
+                `;
+            }
+            
+            tableRowsHtml += `</tr>`;
+        });
     });
 
     const reportHtml = `
@@ -2494,58 +2689,115 @@ function downloadReportImage() {
 
 let currentInvoiceData = null;
 
-function openInvoiceModal(inspectionId) {
-    const insp = state.inspections.find(i => i.id === inspectionId);
-    if (!insp) return;
-    const cust = state.customers.find(c => c.id === insp.customerId);
+function numToKoreanStr(num) {
+    const hanA = ["", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"];
+    const danA = ["", "십", "백", "천"];
+    let result = "";
+    const str = String(Math.floor(num));
+    let groupStr = "";
+    
+    for (let i = 0; i < str.length; i++) {
+        const digit = parseInt(str[i], 10);
+        const dan = (str.length - 1 - i) % 4;
+        
+        if (digit !== 0) {
+            groupStr += hanA[digit] + danA[dan];
+        }
+        
+        if (dan === 0) {
+            if (groupStr !== "") {
+                const unit = ["", "만", "억", "조", "경"][Math.floor((str.length - 1 - i) / 4)];
+                result += groupStr + unit;
+            }
+            groupStr = "";
+        }
+    }
+    return result || "영";
+}
+
+function openInvoiceModal(customerId, month) {
+    const cust = state.customers.find(c => c.id === customerId);
     if (!cust) return;
 
-    currentInvoiceData = { insp, cust };
+    // Default to today if month isn't fully given or is just for current context
+    const insps = state.inspections.filter(i => i.customerId === customerId && i.date.startsWith(month));
+    if (insps.length === 0) return;
 
-    // Set Meta
+    currentInvoiceData = { insps, cust, month };
+
+    const issueDateStr = new Date().toISOString().split('T')[0];
+    const issueDateArr = issueDateStr.split('-');
+    document.getElementById('invIssueDate').textContent = `${issueDateArr[0]}년 ${issueDateArr[1]}월 ${issueDateArr[2]}일`;
     document.getElementById('invCustomerName').textContent = cust.name;
-    document.getElementById('invCustomerLocation').textContent = cust.location || '-';
-    document.getElementById('invCustomerContact').textContent = cust.contact || '-';
-    document.getElementById('invIssueDate').textContent = new Date().toISOString().split('T')[0];
 
-    // Calculate Items
-    const contractAmount = cust.contractAmount || 0;
+    const contractBwLimit = cust.contractBw || 0;
+    const contractColorLimit = cust.contractColor || 0;
     const overBwPrice = cust.overBwPrice || 0;
     const overColorPrice = cust.overColorPrice || 0;
     const vatEnabled = cust.vatEnabled !== false;
 
-    const contractBwLimit = cust.contractBw || 0;
-    const contractColorLimit = cust.contractColor || 0;
-    const bwOver = Math.max(0, insp.bwUsage - contractBwLimit);
-    const colorOver = Math.max(0, insp.colorUsage - contractColorLimit);
+    let custBwUsage = 0;
+    let custColorUsage = 0;
+    let partsTotal = 0;
+
+    insps.forEach(insp => {
+        custBwUsage += insp.bwUsage;
+        custColorUsage += insp.colorUsage;
+    });
+
+    const bwOver = Math.max(0, custBwUsage - contractBwLimit);
+    const colorOver = Math.max(0, custColorUsage - contractColorLimit);
 
     let html = '';
     let subTotal = 0;
-    let itemIndex = 1;
+    let itemDate = month.split('-')[1] + '/-';
 
-    // 1. Base Contract
-    if (contractAmount > 0) {
-        html += `
-            <tr>
-                <td>${itemIndex++}</td>
-                <td class="text-left">기본 임대료 (${insp.date.split('-')[1]}월분)</td>
-                <td>1 식</td>
-                <td class="text-right">${contractAmount.toLocaleString()}</td>
-                <td class="text-right">${contractAmount.toLocaleString()}</td>
-                <td></td>
-            </tr>
-        `;
-        subTotal += contractAmount;
+    // 1. Devices (Base amounts)
+    if (cust.devices && cust.devices.length > 0) {
+        cust.devices.forEach(dev => {
+            const price = dev.price || 0;
+            if (price > 0) {
+                html += `
+                    <tr>
+                        <td>${itemDate}</td>
+                        <td class="text-left">${dev.name} 임대료</td>
+                        <td>식</td>
+                        <td>1</td>
+                        <td class="text-right">${price.toLocaleString()}</td>
+                        <td class="text-right">${price.toLocaleString()}</td>
+                        <td></td>
+                    </tr>
+                `;
+                subTotal += price;
+            }
+        });
+    } else {
+        const contractAmount = cust.contractAmount || 0;
+        if (contractAmount > 0) {
+            html += `
+                <tr>
+                    <td>${itemDate}</td>
+                    <td class="text-left">기본 임대료</td>
+                    <td>식</td>
+                    <td>1</td>
+                    <td class="text-right">${contractAmount.toLocaleString()}</td>
+                    <td class="text-right">${contractAmount.toLocaleString()}</td>
+                    <td></td>
+                </tr>
+            `;
+            subTotal += contractAmount;
+        }
     }
 
-    // 2. BW Overage
+    // 2. Overage
     if (bwOver > 0 && overBwPrice > 0) {
         const amt = bwOver * overBwPrice;
         html += `
             <tr>
-                <td>${itemIndex++}</td>
-                <td class="text-left">흑백 초과 사용료</td>
-                <td>${bwOver.toLocaleString()} 매</td>
+                <td>${itemDate}</td>
+                <td class="text-left">추가요금 (흑백)</td>
+                <td>매</td>
+                <td>${bwOver.toLocaleString()}</td>
                 <td class="text-right">${overBwPrice.toLocaleString()}</td>
                 <td class="text-right">${amt.toLocaleString()}</td>
                 <td></td>
@@ -2554,14 +2806,14 @@ function openInvoiceModal(inspectionId) {
         subTotal += amt;
     }
 
-    // 3. Color Overage
     if (colorOver > 0 && overColorPrice > 0) {
         const amt = colorOver * overColorPrice;
         html += `
             <tr>
-                <td>${itemIndex++}</td>
-                <td class="text-left">컬러 초과 사용료</td>
-                <td>${colorOver.toLocaleString()} 매</td>
+                <td>${itemDate}</td>
+                <td class="text-left">추가요금 (컬러)</td>
+                <td>매</td>
+                <td>${colorOver.toLocaleString()}</td>
                 <td class="text-right">${overColorPrice.toLocaleString()}</td>
                 <td class="text-right">${amt.toLocaleString()}</td>
                 <td></td>
@@ -2570,55 +2822,84 @@ function openInvoiceModal(inspectionId) {
         subTotal += amt;
     }
 
-    // 4. Parts
-    if (insp.parts && insp.parts.length > 0) {
-        insp.parts.forEach(p => {
-            const amt = p.price * p.quantity;
-            html += `
-                <tr>
-                    <td>${itemIndex++}</td>
-                    <td class="text-left">${p.name} (소모품/부품)</td>
-                    <td>${p.quantity.toLocaleString()} 개</td>
-                    <td class="text-right">${p.price.toLocaleString()}</td>
-                    <td class="text-right">${amt.toLocaleString()}</td>
-                    <td></td>
-                </tr>
-            `;
-            subTotal += amt;
-        });
-    }
+    // 3. Parts
+    insps.forEach(insp => {
+        if (insp.parts && insp.parts.length > 0) {
+            insp.parts.forEach(p => {
+                const amt = p.price * p.quantity;
+                html += `
+                    <tr>
+                        <td>${insp.date.split('-')[1]}/${insp.date.split('-')[2]}</td>
+                        <td class="text-left">${p.name}</td>
+                        <td>개</td>
+                        <td>${p.quantity.toLocaleString()}</td>
+                        <td class="text-right">${p.price.toLocaleString()}</td>
+                        <td class="text-right">${amt.toLocaleString()}</td>
+                        <td></td>
+                    </tr>
+                `;
+                subTotal += amt;
+            });
+        }
+    });
 
-    // Fill Empty Rows
-    while (itemIndex <= 8) {
-        html += `<tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
-        itemIndex++;
+    // Fill empty rows to make it look like a standard receipt
+    const rowCount = (html.match(/<tr/g) || []).length;
+    for (let i = rowCount; i < 7; i++) {
+        html += `<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
     }
 
     document.getElementById('invItemBody').innerHTML = html;
 
-    // Calculations
     const vat = vatEnabled ? Math.floor(subTotal * 0.1) : 0;
     const total = subTotal + vat;
 
+    document.getElementById('invTotalAmountNum').textContent = `₩${total.toLocaleString()}`;
+    document.getElementById('invTotalAmountText').textContent = `일금 ${numToKoreanStr(total)} 원정`;
+
     document.getElementById('invItemFoot').innerHTML = `
         <tr>
-            <th colspan="4" class="text-right">소계</th>
+            <th colspan="5">소계</th>
             <td class="text-right">${subTotal.toLocaleString()}</td>
             <td></td>
         </tr>
         <tr>
-            <th colspan="4" class="text-right">부가가치세 (VAT)</th>
+            <th colspan="5">부가가치세 (VAT)</th>
             <td class="text-right">${vat.toLocaleString()}</td>
             <td>${vatEnabled ? '' : '면세'}</td>
         </tr>
-        <tr>
-            <th colspan="4" class="text-right" style="font-size: 1.1rem; color: #ef4444;">총 합계금액</th>
-            <td class="text-right" style="font-size: 1.1rem; color: #ef4444;">${total.toLocaleString()}</td>
-            <td></td>
-        </tr>
     `;
 
-    document.getElementById('invTotalAmountTop').textContent = `₩ ${total.toLocaleString()}`;
+    // Counter table at the bottom
+    let counterHtml = `
+        <div class="ti-counter-title"><i class="fa-solid fa-list-ol"></i> 당월 기기 카운터 내역</div>
+        <table class="ti-counter-table">
+            <tr>
+                <th>기기명</th>
+                <th>점검일</th>
+                <th>흑백 카운터</th>
+                <th>흑백 사용량</th>
+                <th>컬러 카운터</th>
+                <th>컬러 사용량</th>
+            </tr>
+    `;
+    insps.forEach(insp => {
+        const dev = cust.devices ? cust.devices.find(d => d.id === insp.deviceId) : null;
+        const devName = dev ? dev.name : '-';
+        counterHtml += `
+            <tr>
+                <td>${devName}</td>
+                <td>${insp.date}</td>
+                <td>${insp.bwCounter.toLocaleString()}</td>
+                <td>+${insp.bwUsage.toLocaleString()}</td>
+                <td>${insp.colorCounter.toLocaleString()}</td>
+                <td>+${insp.colorUsage.toLocaleString()}</td>
+            </tr>
+        `;
+    });
+    counterHtml += `</table>`;
+    
+    document.getElementById('invCounterArea').innerHTML = counterHtml;
 
     // Setup events
     document.getElementById('invPrintBtn').onclick = () => {
@@ -2630,7 +2911,7 @@ function openInvoiceModal(inspectionId) {
     };
 
     document.getElementById('invEmailBtn').onclick = () => {
-        sendInvoiceEmail(cust.name, insp.date.split('-')[1], total);
+        sendInvoiceEmail(cust.name, month.split('-')[1], total);
     };
 
     document.getElementById('invoiceModalBackdrop').classList.add('active');
