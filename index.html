@@ -358,6 +358,31 @@
                             <input type="number" id="contractColor" class="form-control" min="0" placeholder="예: 200">
                         </div>
                     </div>
+                    
+                    <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 1.5rem 0;">
+                    <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem; color: var(--text-primary);"><i class="fa-solid fa-won-sign" style="color: #10b981; margin-right: 0.5rem;"></i>계약 및 청구 설정</h3>
+                    
+                    <div class="form-group">
+                        <label for="contractAmount">월 기본 임대료 (원)</label>
+                        <input type="number" id="contractAmount" class="form-control" min="0" placeholder="예: 50000">
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="overBwPrice">흑백 초과 단가 (원)</label>
+                            <input type="number" id="overBwPrice" class="form-control" min="0" placeholder="예: 10">
+                        </div>
+                        <div class="form-group">
+                            <label for="overColorPrice">컬러 초과 단가 (원)</label>
+                            <input type="number" id="overColorPrice" class="form-control" min="0" placeholder="예: 100">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" style="display:flex; align-items:center; gap:0.5rem; margin-top:0.5rem; margin-bottom:1.5rem;">
+                        <input type="checkbox" id="vatEnabled" style="width:18px; height:18px; cursor:pointer;" checked>
+                        <label for="vatEnabled" style="margin-bottom:0; cursor:pointer; font-weight:500; font-size:0.95rem; color:var(--text-primary);">부가세(VAT) 10% 별도 적용</label>
+                    </div>
+                    <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 0 0 1.5rem 0;">
                     <div class="form-group" style="display:flex; align-items:center; gap:0.5rem; margin-top:0.5rem; margin-bottom:1.25rem;">
                         <input type="checkbox" id="isMonthlyInspection" style="width:18px; height:18px; cursor:pointer;" checked>
                         <label for="isMonthlyInspection" style="margin-bottom:0; cursor:pointer; font-weight:500; font-size:0.95rem; color:var(--text-primary);">매월 정기점검 대상 업체</label>
@@ -472,6 +497,10 @@
                                 <span class="value" id="detailContract">-</span>
                             </li>
                             <li>
+                                <span class="label">청구 / 단가 설정</span>
+                                <span class="value" id="detailBilling">-</span>
+                            </li>
+                            <li>
                                 <span class="label">설치 위치 및 메모</span>
                                 <span class="value" id="detailLocation">-</span>
                             </li>
@@ -575,6 +604,99 @@
                         </button>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: INVOICE VIEWER -->
+    <div class="modal-backdrop" id="invoiceModalBackdrop">
+        <div class="modal" style="max-width: 850px; background: transparent; box-shadow: none;">
+            <div class="modal-header" style="background: var(--bg-card); border-radius: var(--radius-md) var(--radius-md) 0 0; padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color);">
+                <h2 id="invoiceModalTitle">거래명세서 발급</h2>
+                <button class="close-btn" onclick="closeInvoiceModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div style="background: var(--bg-body); padding: 1rem; overflow-y: auto; max-height: 70vh;">
+                <!-- A4 Paper Container -->
+                <div class="invoice-paper-container">
+                    <div id="invoicePrintArea" class="invoice-paper">
+                        <div class="invoice-header">
+                            <h1 style="text-align: center; font-size: 2rem; letter-spacing: 5px; margin-bottom: 1.5rem; border-bottom: 2px solid #333; padding-bottom: 0.5rem;">거 래 명 세 서</h1>
+                            
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                                <div style="flex: 1; margin-right: 1rem;">
+                                    <table class="invoice-meta-table">
+                                        <tr>
+                                            <th style="width: 80px;">공급받는자</th>
+                                            <td id="invCustomerName" style="font-weight: bold; font-size: 1.1rem;">-</td>
+                                        </tr>
+                                        <tr>
+                                            <th>현장(위치)</th>
+                                            <td id="invCustomerLocation">-</td>
+                                        </tr>
+                                        <tr>
+                                            <th>담당(연락)</th>
+                                            <td id="invCustomerContact">-</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                                <div style="flex: 1;">
+                                    <table class="invoice-meta-table">
+                                        <tr>
+                                            <th style="width: 80px;">공급자</th>
+                                            <td style="font-weight: bold; font-size: 1.1rem;">SmartCounter 관리부</td>
+                                        </tr>
+                                        <tr>
+                                            <th>발급일자</th>
+                                            <td id="invIssueDate">-</td>
+                                        </tr>
+                                        <tr>
+                                            <th>합계금액</th>
+                                            <td id="invTotalAmountTop" style="font-weight: bold; color: #ef4444;">-</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <table class="invoice-item-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 5%;">No</th>
+                                    <th style="width: 35%;">품목 (기기 및 점검 월)</th>
+                                    <th style="width: 15%;">수량/매수</th>
+                                    <th style="width: 15%;">단가</th>
+                                    <th style="width: 20%;">공급가액</th>
+                                    <th style="width: 10%;">비고</th>
+                                </tr>
+                            </thead>
+                            <tbody id="invItemBody">
+                                <!-- Items injected here -->
+                            </tbody>
+                            <tfoot id="invItemFoot">
+                                <!-- Totals injected here -->
+                            </tfoot>
+                        </table>
+                        
+                        <div style="margin-top: 2rem; text-align: center; color: #555; font-size: 0.9rem;">
+                            <p>위와 같이 청구하오니 기일 내 입금 부탁드립니다.</p>
+                            <p style="margin-top: 0.5rem; font-weight: bold;">[계좌번호] 국민은행 123456-01-789012 (예금주: SmartCounter)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="background: var(--bg-card); border-radius: 0 0 var(--radius-md) var(--radius-md); padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; gap: 0.5rem; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeInvoiceModal()">닫기</button>
+                <button type="button" class="btn btn-secondary" id="invPrintBtn" style="background: #34d399; color: #0f172a; border-color: #34d399; font-weight: 600;">
+                    <i class="fa-solid fa-print"></i> PDF 인쇄
+                </button>
+                <button type="button" class="btn btn-primary" id="invImageBtn" style="background: #60a5fa; color: #0f172a; border-color: #60a5fa; font-weight: 600;">
+                    <i class="fa-solid fa-image"></i> 이미지 다운로드
+                </button>
+                <button type="button" class="btn btn-primary" id="invEmailBtn" style="background: #f59e0b; color: #0f172a; border-color: #f59e0b; font-weight: 600;">
+                    <i class="fa-solid fa-envelope"></i> 이메일 보내기
+                </button>
             </div>
         </div>
     </div>

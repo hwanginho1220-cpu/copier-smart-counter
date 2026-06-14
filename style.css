@@ -1529,3 +1529,95 @@ select.form-control option {
     to { transform: scale(1); opacity: 1; }
 }
 
+/* Invoice Styles */
+.invoice-paper-container {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    background: #f1f5f9;
+    padding: 1rem;
+    border-radius: var(--radius-sm);
+}
+
+.invoice-paper {
+    background: #fff;
+    width: 794px; /* A4 width */
+    min-height: 1123px; /* A4 height */
+    padding: 40px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    color: #333;
+    font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+    position: relative;
+    box-sizing: border-box;
+}
+
+.invoice-header {
+    margin-bottom: 2rem;
+}
+
+.invoice-meta-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+}
+
+.invoice-meta-table th, .invoice-meta-table td {
+    border: 1px solid #ccc;
+    padding: 0.5rem;
+    text-align: left;
+}
+
+.invoice-meta-table th {
+    background: #f8fafc;
+    font-weight: 600;
+    text-align: center;
+}
+
+.invoice-item-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+}
+
+.invoice-item-table th, .invoice-item-table td {
+    border: 1px solid #333;
+    padding: 0.6rem;
+    text-align: center;
+}
+
+.invoice-item-table th {
+    background: #e2e8f0;
+    font-weight: 600;
+}
+
+.invoice-item-table .text-left {
+    text-align: left;
+}
+
+.invoice-item-table .text-right {
+    text-align: right;
+}
+
+.invoice-item-table tfoot th, .invoice-item-table tfoot td {
+    background: #f8fafc;
+    font-weight: bold;
+}
+
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    #invoicePrintArea, #invoicePrintArea * {
+        visibility: visible;
+    }
+    #invoicePrintArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
+    }
+}

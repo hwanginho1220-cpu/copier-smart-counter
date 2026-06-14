@@ -814,6 +814,10 @@ async function handleCustomerFormSubmit(e) {
     const contact = document.getElementById('customerContact').value.trim();
     const contractBw = parseInt(document.getElementById('contractBw').value, 10) || 0;
     const contractColor = parseInt(document.getElementById('contractColor').value, 10) || 0;
+    const contractAmount = parseInt(document.getElementById('contractAmount').value, 10) || 0;
+    const overBwPrice = parseInt(document.getElementById('overBwPrice').value, 10) || 0;
+    const overColorPrice = parseInt(document.getElementById('overColorPrice').value, 10) || 0;
+    const vatEnabled = document.getElementById('vatEnabled').checked;
     const location = document.getElementById('customerLocation').value.trim();
     const isMonthly = document.getElementById('isMonthlyInspection').checked;
 
@@ -830,6 +834,10 @@ async function handleCustomerFormSubmit(e) {
         contact: contact,
         contractBw: contractBw,
         contractColor: contractColor,
+        contractAmount: contractAmount,
+        overBwPrice: overBwPrice,
+        overColorPrice: overColorPrice,
+        vatEnabled: vatEnabled,
         location: location,
         serialImage: currentSerialImageBase64,
         isMonthlyInspection: isMonthly
@@ -1195,6 +1203,10 @@ function openCustomerModal(id = null) {
             document.getElementById('customerContact').value = customer.contact || '';
             document.getElementById('contractBw').value = customer.contractBw || '';
             document.getElementById('contractColor').value = customer.contractColor || '';
+            document.getElementById('contractAmount').value = customer.contractAmount || '';
+            document.getElementById('overBwPrice').value = customer.overBwPrice || '';
+            document.getElementById('overColorPrice').value = customer.overColorPrice || '';
+            document.getElementById('vatEnabled').checked = customer.vatEnabled !== false;
             document.getElementById('customerLocation').value = customer.location || '';
             document.getElementById('isMonthlyInspection').checked = customer.isMonthlyInspection !== false;
             
@@ -1210,6 +1222,10 @@ function openCustomerModal(id = null) {
         saveBtn.textContent = '등록';
         document.getElementById('contractBw').value = '';
         document.getElementById('contractColor').value = '';
+        document.getElementById('contractAmount').value = '';
+        document.getElementById('overBwPrice').value = '';
+        document.getElementById('overColorPrice').value = '';
+        document.getElementById('vatEnabled').checked = true;
         document.getElementById('isMonthlyInspection').checked = true;
     }
 
@@ -1575,6 +1591,12 @@ function openDetailModal(customerId) {
     const bwContractText = customer.contractBw ? `${customer.contractBw.toLocaleString()}매` : '0매';
     const colorContractText = customer.contractColor ? `${customer.contractColor.toLocaleString()}매` : '0매';
     document.getElementById('detailContract').innerHTML = `흑백: <span style="font-weight:600; color:var(--text-primary);">${bwContractText}</span> / 컬러: <span style="font-weight:600; color:#c084fc;">${colorContractText}</span>`;
+    
+    const amtText = customer.contractAmount ? `${customer.contractAmount.toLocaleString()}원` : '0원';
+    const overBwText = customer.overBwPrice ? `${customer.overBwPrice.toLocaleString()}원` : '0원';
+    const overColorText = customer.overColorPrice ? `${customer.overColorPrice.toLocaleString()}원` : '0원';
+    const vatText = customer.vatEnabled !== false ? '(VAT 별도)' : '(VAT 포함/없음)';
+    document.getElementById('detailBilling').innerHTML = `기본료: <span style="font-weight:600;">${amtText}</span> ${vatText}<br><span style="font-size:0.85em; color:var(--text-secondary);">초과단가 - 흑백: ${overBwText} / 컬러: ${overColorText}</span>`;
     
     document.getElementById('detailLocation').textContent = customer.location || '-';
 
@@ -2233,6 +2255,21 @@ function generateMonthlyReport() {
             partsText = insp.parts.map(p => `${p.name} x${p.quantity}<br>(₩${(p.price * p.quantity).toLocaleString()})`).join('<br>');
         }
 
+        // Calculate billing amount
+        const contractAmount = cust ? cust.contractAmount || 0 : 0;
+        const overBwPrice = cust ? cust.overBwPrice || 0 : 0;
+        const overColorPrice = cust ? cust.overColorPrice || 0 : 0;
+        const vatEnabled = cust ? cust.vatEnabled !== false : true;
+
+        let partsTotal = 0;
+        if (insp.parts) {
+            partsTotal = insp.parts.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+        }
+
+        const billingSubtotal = contractAmount + (bwOver * overBwPrice) + (colorOver * overColorPrice) + partsTotal;
+        const billingVat = vatEnabled ? Math.floor(billingSubtotal * 0.1) : 0;
+        const billingTotal = billingSubtotal + billingVat;
+
         tableRowsHtml += `
             <tr>
                 <td class="center">${idx + 1}</td>
@@ -2252,7 +2289,15 @@ function generateMonthlyReport() {
                     </div>
                 </td>
                 <td style="font-size:0.65rem; line-height:1.2; word-break:break-all;">${partsText}</td>
-                <td style="font-size:0.65rem; color:#475569; word-break:break-all; line-height:1.2;">${insp.notes || '-'}</td>
+                <td class="right">
+                    <div style="font-weight:600; color:#0f172a;">₩${billingTotal.toLocaleString()}</div>
+                    <div style="font-size:0.65rem; color:var(--text-secondary); margin-top:0.1rem;">${vatEnabled ? '(VAT포함)' : '(VAT면세)'}</div>
+                </td>
+                <td class="center">
+                    <button class="btn-icon btn-secondary" onclick="openInvoiceModal('${insp.id}')" title="거래명세서 발급" style="padding: 0.3rem 0.5rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-weight:600;">
+                        <i class="fa-solid fa-file-invoice-dollar" style="color:#10b981;"></i> 발급
+                    </button>
+                </td>
             </tr>
         `;
     });
@@ -2311,10 +2356,11 @@ function generateMonthlyReport() {
                         <th style="width: 75px;">점검일</th>
                         <th style="width: 125px;">고객사명</th>
                         <th style="width: 70px;">기기 모델</th>
-                        <th style="width: 130px;">흑백 카운터 / 사용량</th>
-                        <th style="width: 130px;">컬러 카운터 / 사용량</th>
-                        <th style="width: 160px;">교체 부품 (비용)</th>
-                        <th>특이사항 / 메모</th>
+                        <th style="width: 120px;">흑백 카운터 / 사용량</th>
+                        <th style="width: 120px;">컬러 카운터 / 사용량</th>
+                        <th style="width: 130px;">교체 부품</th>
+                        <th style="width: 90px;">청구 금액</th>
+                        <th style="width: 80px;">명세서</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -2440,4 +2486,206 @@ function downloadReportImage() {
             runExport();
         }
     }, 400);
+}
+
+// ==========================================
+// INVOICE LOGIC
+// ==========================================
+
+let currentInvoiceData = null;
+
+function openInvoiceModal(inspectionId) {
+    const insp = state.inspections.find(i => i.id === inspectionId);
+    if (!insp) return;
+    const cust = state.customers.find(c => c.id === insp.customerId);
+    if (!cust) return;
+
+    currentInvoiceData = { insp, cust };
+
+    // Set Meta
+    document.getElementById('invCustomerName').textContent = cust.name;
+    document.getElementById('invCustomerLocation').textContent = cust.location || '-';
+    document.getElementById('invCustomerContact').textContent = cust.contact || '-';
+    document.getElementById('invIssueDate').textContent = new Date().toISOString().split('T')[0];
+
+    // Calculate Items
+    const contractAmount = cust.contractAmount || 0;
+    const overBwPrice = cust.overBwPrice || 0;
+    const overColorPrice = cust.overColorPrice || 0;
+    const vatEnabled = cust.vatEnabled !== false;
+
+    const contractBwLimit = cust.contractBw || 0;
+    const contractColorLimit = cust.contractColor || 0;
+    const bwOver = Math.max(0, insp.bwUsage - contractBwLimit);
+    const colorOver = Math.max(0, insp.colorUsage - contractColorLimit);
+
+    let html = '';
+    let subTotal = 0;
+    let itemIndex = 1;
+
+    // 1. Base Contract
+    if (contractAmount > 0) {
+        html += `
+            <tr>
+                <td>${itemIndex++}</td>
+                <td class="text-left">기본 임대료 (${insp.date.split('-')[1]}월분)</td>
+                <td>1 식</td>
+                <td class="text-right">${contractAmount.toLocaleString()}</td>
+                <td class="text-right">${contractAmount.toLocaleString()}</td>
+                <td></td>
+            </tr>
+        `;
+        subTotal += contractAmount;
+    }
+
+    // 2. BW Overage
+    if (bwOver > 0 && overBwPrice > 0) {
+        const amt = bwOver * overBwPrice;
+        html += `
+            <tr>
+                <td>${itemIndex++}</td>
+                <td class="text-left">흑백 초과 사용료</td>
+                <td>${bwOver.toLocaleString()} 매</td>
+                <td class="text-right">${overBwPrice.toLocaleString()}</td>
+                <td class="text-right">${amt.toLocaleString()}</td>
+                <td></td>
+            </tr>
+        `;
+        subTotal += amt;
+    }
+
+    // 3. Color Overage
+    if (colorOver > 0 && overColorPrice > 0) {
+        const amt = colorOver * overColorPrice;
+        html += `
+            <tr>
+                <td>${itemIndex++}</td>
+                <td class="text-left">컬러 초과 사용료</td>
+                <td>${colorOver.toLocaleString()} 매</td>
+                <td class="text-right">${overColorPrice.toLocaleString()}</td>
+                <td class="text-right">${amt.toLocaleString()}</td>
+                <td></td>
+            </tr>
+        `;
+        subTotal += amt;
+    }
+
+    // 4. Parts
+    if (insp.parts && insp.parts.length > 0) {
+        insp.parts.forEach(p => {
+            const amt = p.price * p.quantity;
+            html += `
+                <tr>
+                    <td>${itemIndex++}</td>
+                    <td class="text-left">${p.name} (소모품/부품)</td>
+                    <td>${p.quantity.toLocaleString()} 개</td>
+                    <td class="text-right">${p.price.toLocaleString()}</td>
+                    <td class="text-right">${amt.toLocaleString()}</td>
+                    <td></td>
+                </tr>
+            `;
+            subTotal += amt;
+        });
+    }
+
+    // Fill Empty Rows
+    while (itemIndex <= 8) {
+        html += `<tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
+        itemIndex++;
+    }
+
+    document.getElementById('invItemBody').innerHTML = html;
+
+    // Calculations
+    const vat = vatEnabled ? Math.floor(subTotal * 0.1) : 0;
+    const total = subTotal + vat;
+
+    document.getElementById('invItemFoot').innerHTML = `
+        <tr>
+            <th colspan="4" class="text-right">소계</th>
+            <td class="text-right">${subTotal.toLocaleString()}</td>
+            <td></td>
+        </tr>
+        <tr>
+            <th colspan="4" class="text-right">부가가치세 (VAT)</th>
+            <td class="text-right">${vat.toLocaleString()}</td>
+            <td>${vatEnabled ? '' : '면세'}</td>
+        </tr>
+        <tr>
+            <th colspan="4" class="text-right" style="font-size: 1.1rem; color: #ef4444;">총 합계금액</th>
+            <td class="text-right" style="font-size: 1.1rem; color: #ef4444;">${total.toLocaleString()}</td>
+            <td></td>
+        </tr>
+    `;
+
+    document.getElementById('invTotalAmountTop').textContent = `₩ ${total.toLocaleString()}`;
+
+    // Setup events
+    document.getElementById('invPrintBtn').onclick = () => {
+        window.print();
+    };
+
+    document.getElementById('invImageBtn').onclick = () => {
+        downloadInvoiceImage();
+    };
+
+    document.getElementById('invEmailBtn').onclick = () => {
+        sendInvoiceEmail(cust.name, insp.date.split('-')[1], total);
+    };
+
+    document.getElementById('invoiceModalBackdrop').classList.add('active');
+}
+
+function closeInvoiceModal() {
+    document.getElementById('invoiceModalBackdrop').classList.remove('active');
+}
+
+function downloadInvoiceImage() {
+    const element = document.getElementById('invoicePrintArea');
+    if (!element) return;
+
+    const opt = {
+        scale: 2,
+        useCORS: true,
+        letterRendering: true,
+        backgroundColor: '#ffffff'
+    };
+
+    // Show loading overlay
+    const overlay = document.getElementById('imageLoadingOverlay');
+    if (overlay) overlay.style.display = 'flex';
+
+    if (typeof html2canvas === 'undefined') {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+        script.onload = () => execDownloadInvoice(element, opt, overlay);
+        document.head.appendChild(script);
+    } else {
+        execDownloadInvoice(element, opt, overlay);
+    }
+}
+
+function execDownloadInvoice(element, opt, overlay) {
+    html2canvas(element, opt).then(canvas => {
+        const link = document.createElement('a');
+        const custName = currentInvoiceData ? currentInvoiceData.cust.name : '고객사';
+        const month = currentInvoiceData ? currentInvoiceData.insp.date.split('-')[1] : '00';
+        link.download = `거래명세서_${custName}_${month}월.jpg`;
+        link.href = canvas.toDataURL('image/jpeg', 0.98);
+        link.click();
+        if (overlay) overlay.style.display = 'none';
+    }).catch(err => {
+        console.error("명세서 이미지 다운로드 에러:", err);
+        alert("이미지 생성을 실패했습니다. 인쇄 기능을 사용해주세요.");
+        if (overlay) overlay.style.display = 'none';
+    });
+}
+
+function sendInvoiceEmail(customerName, month, totalAmt) {
+    const subject = encodeURIComponent(`[SmartCounter] ${customerName} ${month}월분 복사기 유지보수 및 청구 내역`);
+    const body = encodeURIComponent(`안녕하세요, ${customerName} 담당자님.\n\n${month}월분 복사기 정기점검 및 유지보수 청구 내역(거래명세서)을 안내해 드립니다.\n청구 금액: ${totalAmt.toLocaleString()}원\n\n상세 내역은 첨부해 드린 거래명세서 파일을 참고해 주시기 바랍니다.\n\n감사합니다.\nSmartCounter 관리부 드림.`);
+    
+    // 이메일 클라이언트 열기
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    alert('기본 이메일 앱이 열립니다. 방금 다운로드 받으신 [거래명세서 이미지]를 첨부하여 발송해주세요!');
 }
