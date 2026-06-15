@@ -206,6 +206,10 @@ function setupEventListeners() {
     document.getElementById('customerSearchInput').addEventListener('input', renderCustomersTable);
     document.getElementById('inspectionSearchInput').addEventListener('input', renderInspectionsTable);
     document.getElementById('inspectionMonthFilter').addEventListener('change', renderInspectionsTable);
+    document.getElementById('clearInspectionMonthBtn').addEventListener('click', () => {
+        document.getElementById('inspectionMonthFilter').value = '';
+        renderInspectionsTable();
+    });
 
     // Backup & Restore
     document.getElementById('exportDataBtn').addEventListener('click', exportData);
@@ -255,6 +259,11 @@ function setupEventListeners() {
     const partForm = document.getElementById('partForm');
     if (partForm) {
         partForm.addEventListener('submit', handlePartFormSubmit);
+    }
+    
+    const manualInvoiceForm = document.getElementById('manualInvoiceForm');
+    if (manualInvoiceForm) {
+        manualInvoiceForm.addEventListener('submit', handleManualInvoiceFormSubmit);
     }
     
     // Replaced parts in inspection modal
@@ -331,7 +340,7 @@ function initDateInputs() {
     
     // Set default month filter to current year/month
     const currentYearMonth = today.substring(0, 7); // "YYYY-MM"
-    document.getElementById('inspectionMonthFilter').value = currentYearMonth;
+    // document.getElementById('inspectionMonthFilter').value = currentYearMonth; // Default to empty (all views)
     
     const reportMonthFilter = document.getElementById('reportMonthFilter');
     if (reportMonthFilter) {
@@ -393,6 +402,15 @@ function switchView(viewName) {
         viewTitle.textContent = '월간 리포트';
         viewSubtitle.textContent = '월별 전체 점검 및 정산 보고서 인쇄 및 PDF 내보내기';
         headerActionBtn.style.display = 'none';
+        
+        const reportMonthFilter = document.getElementById('reportMonthFilter');
+        if (reportMonthFilter) {
+            const today = new Date().toISOString().split('T')[0];
+            const currentYearMonth = today.substring(0, 7); // "YYYY-MM"
+            reportMonthFilter.value = currentYearMonth;
+        }
+        
+        generateMonthlyReport();
         setTimeout(adjustReportScale, 50);
     }
 }
@@ -642,7 +660,7 @@ function renderRecentInspections() {
             </td>
             <td data-label="특이사항">
                 <span style="font-size:0.85rem; color:var(--text-secondary);">${insp.notes || '-'}</span>
-                ${insp.parts && insp.parts.length > 0 ? `
+                ${insp.parts && Array.isArray(insp.parts) && insp.parts.length > 0 ? `
                     <div style="margin-top: 0.35rem; display: flex; flex-wrap: wrap; gap: 0.25rem;">
                         ${insp.parts.map(p => `
                             <span class="badge badge-info" style="font-size: 0.75rem; background-color: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); padding: 0.15rem 0.35rem; display: inline-flex; align-items: center; gap: 0.15rem;">
@@ -1267,10 +1285,11 @@ async function deleteCustomer(id) {
 // --- UI Rendering: Inspection Table & Management ---
 
 function renderInspectionsTable() {
-    const tbody = document.getElementById('inspectionsTbody');
-    tbody.innerHTML = '';
+    try {
+        const tbody = document.getElementById('inspectionsTbody');
+        tbody.innerHTML = '';
 
-    const query = document.getElementById('inspectionSearchInput').value.toLowerCase().trim();
+        const query = document.getElementById('inspectionSearchInput').value.toLowerCase().trim();
     const monthFilter = document.getElementById('inspectionMonthFilter').value; // "YYYY-MM"
 
     // Filter inspections
@@ -1350,7 +1369,7 @@ function renderInspectionsTable() {
             </td>
             <td data-label="특이사항 / 메모">
                 <span style="font-size: 0.85rem; color: var(--text-secondary);">${insp.notes || '-'}</span>
-                ${insp.parts && insp.parts.length > 0 ? `
+                ${insp.parts && Array.isArray(insp.parts) && insp.parts.length > 0 ? `
                     <div style="margin-top: 0.35rem; display: flex; flex-wrap: wrap; gap: 0.25rem;">
                         ${insp.parts.map(p => `
                             <span class="badge badge-info" style="font-size: 0.75rem; background-color: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); padding: 0.15rem 0.35rem; display: inline-flex; align-items: center; gap: 0.15rem;">
@@ -1374,6 +1393,10 @@ function renderInspectionsTable() {
         `;
         tbody.appendChild(tr);
     });
+    } catch (error) {
+        console.error("점검 대장 렌더링 중 오류 발생:", error);
+        alert("점검 대장 렌더링 중 오류가 발생했습니다: " + error.message);
+    }
 }
 
 async function handleInspectionFormSubmit(e) {
@@ -2081,7 +2104,7 @@ function openDetailModal(customerId) {
                         컬러 <strong style="color:#d8b4fe;">+${insp.colorUsage.toLocaleString()}</strong>
                     </span>
                     ${insp.notes ? `<span style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">메모: ${insp.notes}</span>` : ''}
-                    ${insp.parts && insp.parts.length > 0 ? `
+                    ${insp.parts && Array.isArray(insp.parts) && insp.parts.length > 0 ? `
                         <div style="margin-top: 0.35rem; display: flex; flex-wrap: wrap; gap: 0.25rem;">
                             ${insp.parts.map(p => `
                                 <span class="badge badge-info" style="font-size: 0.75rem; background-color: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); padding: 0.15rem 0.35rem; display: inline-flex; align-items: center; gap: 0.15rem;">
@@ -2649,11 +2672,12 @@ function adjustReportScale() {
 }
 
 function generateMonthlyReport() {
-    const selectedMonth = document.getElementById('reportMonthFilter').value;
-    const printArea = document.getElementById('reportPrintArea');
-    const downloadBtn = document.getElementById('downloadImageBtn');
-    const printBtn = document.getElementById('printReportBtn');
-    const guideBanner = document.getElementById('reportGuideBanner');
+    try {
+        const selectedMonth = document.getElementById('reportMonthFilter').value;
+        const printArea = document.getElementById('reportPrintArea');
+        const downloadBtn = document.getElementById('downloadImageBtn');
+        const printBtn = document.getElementById('printReportBtn');
+        const guideBanner = document.getElementById('reportGuideBanner');
     
     if (!selectedMonth) {
         alert('대상 월을 선택해 주세요.');
@@ -2704,16 +2728,16 @@ function generateMonthlyReport() {
         if (cust && cust.devices) {
             const dev = cust.devices.find(d => d.id === insp.deviceId) || cust.devices[0];
             if (dev) {
-                const bwOver = Math.max(0, insp.bwUsage - (dev.contractBw || 0));
-                const colorOver = Math.max(0, insp.colorUsage - (dev.contractColor || 0));
+                const bwOver = Math.max(0, Number(insp.bwUsage || 0) - Number(dev.contractBw || 0));
+                const colorOver = Math.max(0, Number(insp.colorUsage || 0) - Number(dev.contractColor || 0));
                 totalBwOver += bwOver;
                 totalColorOver += colorOver;
             }
         }
         
-        if (insp.parts) {
+        if (insp.parts && Array.isArray(insp.parts)) {
             insp.parts.forEach(p => {
-                totalPartCost += (p.price * p.quantity);
+                totalPartCost += (Number(p.price || 0) * Number(p.quantity || 0));
             });
         }
     });
@@ -2756,24 +2780,24 @@ function generateMonthlyReport() {
 
         // Base rents
         if (cust && cust.devices) {
-            cust.devices.forEach(d => billingSubtotal += (d.price || 0));
+            cust.devices.forEach(d => billingSubtotal += Number(d.price || 0));
         }
 
         custInsps.forEach(insp => {
             const dev = cust && cust.devices ? cust.devices.find(d => d.id === insp.deviceId) : null;
             if (dev) {
-                const bwOver = Math.max(0, insp.bwUsage - (dev.contractBw || 0));
-                const colorOver = Math.max(0, insp.colorUsage - (dev.contractColor || 0));
+                const bwOver = Math.max(0, Number(insp.bwUsage || 0) - Number(dev.contractBw || 0));
+                const colorOver = Math.max(0, Number(insp.colorUsage || 0) - Number(dev.contractColor || 0));
                 
                 totalBwOverForCust += bwOver;
                 totalColorOverForCust += colorOver;
 
-                billingSubtotal += (bwOver * (dev.overBwPrice || 0));
-                billingSubtotal += (colorOver * (dev.overColorPrice || 0));
+                billingSubtotal += (bwOver * Number(dev.overBwPrice || 0));
+                billingSubtotal += (colorOver * Number(dev.overColorPrice || 0));
             }
 
-            if (insp.parts) {
-                const pTotal = insp.parts.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+            if (insp.parts && Array.isArray(insp.parts)) {
+                const pTotal = insp.parts.reduce((sum, p) => sum + (Number(p.price || 0) * Number(p.quantity || 0)), 0);
                 partsTotal += pTotal;
                 billingSubtotal += pTotal;
             }
@@ -2787,8 +2811,8 @@ function generateMonthlyReport() {
             const model = dev ? `${dev.name} (${dev.model})` : '-';
             
             let partsText = '-';
-            if (insp.parts && insp.parts.length > 0) {
-                partsText = insp.parts.map(p => `${p.name} x${p.quantity}<br>(₩${(p.price * p.quantity).toLocaleString()})`).join('<br>');
+            if (insp.parts && Array.isArray(insp.parts) && insp.parts.length > 0) {
+                partsText = insp.parts.map(p => `${p.name} x${p.quantity}<br>(₩${(Number(p.price || 0) * Number(p.quantity || 0)).toLocaleString()})`).join('<br>');
             }
 
             tableRowsHtml += `<tr>`;
@@ -2935,6 +2959,10 @@ function generateMonthlyReport() {
     
     // Recalculate scaling for current screen width
     setTimeout(adjustReportScale, 20);
+    } catch (error) {
+        console.error("월간 리포트 생성 중 오류 발생:", error);
+        alert("월간 리포트 생성 중 오류가 발생했습니다: " + error.message);
+    }
 }
 
 function downloadReportImage() {
@@ -3064,6 +3092,9 @@ function openInvoiceModal(customerId, month) {
     const cust = state.customers.find(c => c.id === customerId);
     if (!cust) return;
 
+    const counterArea = document.getElementById('invCounterArea');
+    if (counterArea) counterArea.style.display = 'block';
+
     // Default to today if month isn't fully given or is just for current context
     const insps = state.inspections.filter(i => i.customerId === customerId && i.date.startsWith(month));
     if (insps.length === 0) return;
@@ -3089,7 +3120,7 @@ function openInvoiceModal(customerId, month) {
         }
         deviceUsages[insp.deviceId].bw += insp.bwUsage;
         deviceUsages[insp.deviceId].color += insp.colorUsage;
-        if (insp.parts) {
+        if (insp.parts && Array.isArray(insp.parts)) {
             deviceUsages[insp.deviceId].parts.push(...insp.parts);
         }
     });
@@ -3156,7 +3187,7 @@ function openInvoiceModal(customerId, month) {
 
     // 3. Parts
     insps.forEach(insp => {
-        if (insp.parts && insp.parts.length > 0) {
+        if (insp.parts && Array.isArray(insp.parts) && insp.parts.length > 0) {
             insp.parts.forEach(p => {
                 const amt = p.price * p.quantity;
                 html += `
@@ -3301,4 +3332,194 @@ function sendInvoiceEmail(customerName, month, totalAmt) {
     // 이메일 클라이언트 열기
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
     alert('기본 이메일 앱이 열립니다. 방금 다운로드 받으신 [거래명세서 이미지]를 첨부하여 발송해주세요!');
+}
+
+// --- Manual Invoice Logic ---
+
+window.addManualInvoiceItemRow = function(date = '', name = '', unit = '개', qty = 1, price = 0, note = '') {
+    const tbody = document.getElementById('manualInvoiceItemsTbody');
+    if (!tbody) return;
+
+    const rowId = 'manual-row-' + Date.now() + Math.random().toString(36).substring(2, 7);
+    const tr = document.createElement('tr');
+    tr.id = rowId;
+    tr.innerHTML = `
+        <td style="padding: 0.4rem 0.2rem;"><input type="number" class="form-control item-date" min="1" max="31" value="${date}" placeholder="일" required style="padding: 0.35rem 0.5rem; text-align:center;"></td>
+        <td style="padding: 0.4rem 0.2rem;"><input type="text" class="form-control item-name" value="${name}" placeholder="예: 잉크 납품, A4 용지 등" required style="padding: 0.35rem 0.5rem;"></td>
+        <td style="padding: 0.4rem 0.2rem;"><input type="text" class="form-control item-unit" value="${unit}" placeholder="개" style="padding: 0.35rem 0.5rem; text-align:center;"></td>
+        <td style="padding: 0.4rem 0.2rem;"><input type="number" class="form-control item-qty" min="1" value="${qty}" required style="padding: 0.35rem 0.5rem; text-align:right;"></td>
+        <td style="padding: 0.4rem 0.2rem;"><input type="number" class="form-control item-price" min="0" value="${price}" required style="padding: 0.35rem 0.5rem; text-align:right;"></td>
+        <td style="padding: 0.4rem 0.2rem;"><input type="text" class="form-control item-note" value="${note}" placeholder="비고" style="padding: 0.35rem 0.5rem;"></td>
+        <td style="padding: 0.4rem 0.2rem; text-align:center;">
+            <button type="button" class="btn-icon btn-danger" onclick="removeManualInvoiceItemRow('${rowId}')" style="width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center;">
+                <i class="fa-solid fa-trash-can" style="font-size:0.75rem;"></i>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+};
+
+window.removeManualInvoiceItemRow = function(rowId) {
+    const row = document.getElementById(rowId);
+    if (row) row.remove();
+};
+
+window.openManualInvoiceModal = function() {
+    const modal = document.getElementById('manualInvoiceModalBackdrop');
+    if (!modal) return;
+    
+    // Reset form
+    document.getElementById('manualInvoiceForm').reset();
+    
+    // Fill customer select
+    const select = document.getElementById('manualInvoiceCustomerSelect');
+    select.innerHTML = '<option value="">-- 고객사를 선택하세요 --</option>';
+    const sorted = [...state.customers].sort((a,b) => a.name.localeCompare(b.name));
+    sorted.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        select.appendChild(opt);
+    });
+    
+    // Default month to current month
+    const todayStr = new Date().toISOString().split('T')[0];
+    document.getElementById('manualInvoiceDate').value = todayStr.substring(0, 7);
+    
+    // Clear item table body & add one empty row
+    const tbody = document.getElementById('manualInvoiceItemsTbody');
+    tbody.innerHTML = '';
+    addManualInvoiceItemRow('', '', '개', 1, 0, '');
+    
+    modal.classList.add('active');
+};
+
+window.closeManualInvoiceModal = function() {
+    const modal = document.getElementById('manualInvoiceModalBackdrop');
+    if (modal) modal.classList.remove('active');
+};
+
+window.handleManualInvoiceCustomerChange = function() {
+    const custId = document.getElementById('manualInvoiceCustomerSelect').value;
+    const cust = state.customers.find(c => c.id === custId);
+    const vatCheckbox = document.getElementById('manualInvoiceVatEnabled');
+    if (cust && vatCheckbox) {
+        vatCheckbox.checked = cust.vatEnabled !== false;
+    }
+};
+
+async function handleManualInvoiceFormSubmit(e) {
+    e.preventDefault();
+    
+    const custId = document.getElementById('manualInvoiceCustomerSelect').value;
+    const month = document.getElementById('manualInvoiceDate').value; // YYYY-MM
+    const vatEnabled = document.getElementById('manualInvoiceVatEnabled').checked;
+    
+    const cust = state.customers.find(c => c.id === custId);
+    if (!cust) return;
+    
+    const tbody = document.getElementById('manualInvoiceItemsTbody');
+    const rows = tbody.querySelectorAll('tr');
+    
+    const items = [];
+    rows.forEach(row => {
+        const dateDay = parseInt(row.querySelector('.item-date').value, 10) || 1;
+        const name = row.querySelector('.item-name').value.trim();
+        const unit = row.querySelector('.item-unit').value.trim() || '개';
+        const qty = parseInt(row.querySelector('.item-qty').value, 10) || 1;
+        const price = parseInt(row.querySelector('.item-price').value, 10) || 0;
+        const note = row.querySelector('.item-note').value.trim();
+        
+        // Format date as month split + day (e.g. "06/15")
+        const formattedDate = `${month.split('-')[1]}/${String(dateDay).padStart(2, '0')}`;
+        
+        items.push({
+            date: formattedDate,
+            name,
+            unit,
+            quantity: qty,
+            price,
+            note
+        });
+    });
+    
+    if (items.length === 0) {
+        alert('최소 1개 이상의 품목을 작성해 주세요.');
+        return;
+    }
+    
+    closeManualInvoiceModal();
+    openManualInvoice(custId, month, vatEnabled, items);
+}
+
+function openManualInvoice(customerId, month, vatEnabled, items) {
+    const cust = state.customers.find(c => c.id === customerId);
+    if (!cust) return;
+
+    const issueDateStr = new Date().toISOString().split('T')[0];
+    const issueDateArr = issueDateStr.split('-');
+    document.getElementById('invIssueDate').textContent = `${issueDateArr[0]}년 ${issueDateArr[1]}월 ${issueDateArr[2]}일`;
+    document.getElementById('invCustomerName').textContent = cust.name;
+
+    let html = '';
+    let subTotal = 0;
+
+    items.forEach(item => {
+        const amt = item.price * item.quantity;
+        html += `
+            <tr>
+                <td>${item.date}</td>
+                <td class="text-left">${item.name}</td>
+                <td>${item.unit}</td>
+                <td>${item.quantity.toLocaleString()}</td>
+                <td class="text-right">${item.price.toLocaleString()}</td>
+                <td class="text-right">${amt.toLocaleString()}</td>
+                <td>${item.note || ''}</td>
+            </tr>
+        `;
+        subTotal += amt;
+    });
+
+    // Fill empty rows to make it look like a standard receipt (7 rows)
+    const rowCount = items.length;
+    for (let i = rowCount; i < 7; i++) {
+        html += `<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
+    }
+
+    document.getElementById('invItemBody').innerHTML = html;
+
+    const vat = vatEnabled ? Math.floor(subTotal * 0.1) : 0;
+    const total = subTotal + vat;
+
+    document.getElementById('invTotalAmountNum').textContent = `₩${total.toLocaleString()}`;
+    document.getElementById('invTotalAmountText').textContent = `일금 ${numToKoreanStr(total)} 원정`;
+
+    document.getElementById('invItemFoot').innerHTML = `
+        <tr>
+            <th colspan="5">소계</th>
+            <td class="text-right">${subTotal.toLocaleString()}</td>
+            <td></td>
+        </tr>
+        <tr>
+            <th colspan="5">부가가치세 (VAT)</th>
+            <td class="text-right">${vat.toLocaleString()}</td>
+            <td>${vatEnabled ? '' : '면세'}</td>
+        </tr>
+    `;
+
+    // Hide counter table as it is a manual invoice
+    const counterArea = document.getElementById('invCounterArea');
+    if (counterArea) counterArea.style.display = 'none';
+
+    // Set currentInvoiceData mock so that download / email sends can read name and month
+    currentInvoiceData = {
+        isManual: true,
+        cust: cust,
+        month: month,
+        total: total,
+        date: issueDateStr,
+        insp: { date: month + '-01' } // fallback for download filename
+    };
+
+    document.getElementById('invoiceModalBackdrop').classList.add('active');
 }
