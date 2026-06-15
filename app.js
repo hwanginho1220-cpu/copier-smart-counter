@@ -202,12 +202,6 @@ function setupEventListeners() {
     // Inspection Form Submit
     document.getElementById('inspectionForm').addEventListener('submit', handleInspectionFormSubmit);
 
-    // Dynamic select field details in inspection form
-    document.getElementById('inspectionCustomerSelect').addEventListener('change', (e) => {
-        const id = document.getElementById('inspectionId').value || null;
-        updatePreviousCountersInfo(e.target.value, id);
-    });
-
     // Search & Filters
     document.getElementById('customerSearchInput').addEventListener('input', renderCustomersTable);
     document.getElementById('inspectionSearchInput').addEventListener('input', renderInspectionsTable);
@@ -1481,6 +1475,14 @@ async function handleInspectionFormSubmit(e) {
             state.inspections.push(inspectionData);
             saveToStorage();
             recalculateUsageForCustomer(customerId);
+        }
+    }
+
+    if (date) {
+        const targetMonth = date.substring(0, 7); // "YYYY-MM"
+        const monthFilter = document.getElementById('inspectionMonthFilter');
+        if (monthFilter) {
+            monthFilter.value = targetMonth;
         }
     }
 
