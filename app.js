@@ -24,6 +24,9 @@ let customersUnsubscribe = null;
 let inspectionsUnsubscribe = null;
 let partsUnsubscribe = null;
 
+// Local cache to prevent remote snapshots from dropping newly saved inspections during race condition sync
+let lastSavedInspections = {};
+
 // Global state for uploaded serial photo Base64
 let currentSerialImageBase64 = null;
 let currentInspectionParts = [];
@@ -1468,6 +1471,10 @@ async function handleInspectionFormSubmit(e) {
             // Sync the recalculated result back to Firestore
             const calculatedInsp = state.inspections.find(i => i.id === targetId);
             if (calculatedInsp) {
+                lastSavedInspections[targetId] = {
+                    data: JSON.parse(JSON.stringify(calculatedInsp)),
+                    timestamp: Date.now()
+                };
                 await db.collection('inspections').doc(targetId).set(calculatedInsp);
             }
         } catch (err) {
@@ -2204,6 +2211,69 @@ function importData(e) {
 
 // --- Firebase sync and configuration management ---
 
+window.handleSyncBadgeClick = async function() {
+    const configStr = localStorage.getItem(FIREBASE_CONFIG_KEY);
+    if (!configStr) {
+        openFirebaseModal();
+        return;
+    }
+
+    if (isCloudMode && db) {
+        openFirebaseModal();
+        return;
+    }
+
+    // Attempt background reconnect with saved config
+    const badge = document.getElementById('syncStatusBadge');
+    if (badge) {
+        badge.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> 연결 중...`;
+    }
+
+    try {
+        const config = JSON.parse(configStr);
+        // Test connectivity
+        const testAppName = 'badgeTestApp-' + Date.now();
+        const testApp = firebase.initializeApp(config, testAppName);
+        const testDb = testApp.firestore();
+        await testDb.collection('_connection_test_').limit(1).get();
+        await testApp.delete();
+
+        // Successful!
+        initFirebase();
+        alert('클라우드 동기화가 성공적으로 재연결되었습니다!');
+    } catch (err) {
+        console.error('원클릭 재연결 실패:', err);
+        alert('저장된 설정으로 연결할 수 없습니다. 설정 창에서 세부 정보를 확인해 주세요.');
+        openFirebaseModal();
+    }
+};
+
+window.addEventListener('online', initFirebase);
+
+window.addEventListener('beforeprint', () => {
+    const invoiceModal = document.getElementById('invoiceModalBackdrop');
+    const bulkArea = document.getElementById('bulkInvoicePrintArea');
+    
+    if (bulkArea && bulkArea.style.display !== 'none') {
+        document.body.classList.add('print-bulk-invoice');
+    } else if (invoiceModal && invoiceModal.classList.contains('active')) {
+        document.body.classList.add('print-invoice');
+    } else {
+        const reportView = document.getElementById('reportView');
+        if (reportView && reportView.classList.contains('active')) {
+            document.body.classList.add('print-report');
+        }
+    }
+});
+
+window.addEventListener('afterprint', () => {
+    document.body.classList.remove('print-report', 'print-invoice', 'print-bulk-invoice');
+    const bulkArea = document.getElementById('bulkInvoicePrintArea');
+    if (bulkArea) {
+        bulkArea.style.display = 'none';
+    }
+});
+
 function initFirebase() {
     const configStr = localStorage.getItem(FIREBASE_CONFIG_KEY);
     if (!configStr) {
@@ -2258,6 +2328,24 @@ function setupFirebaseListeners() {
         snapshot.forEach(doc => {
             inspectionsList.push(doc.data());
         });
+
+        // Merge recently saved inspections that haven't synced to server yet to prevent race condition rollbacks
+        const now = Date.now();
+        const incomingIds = new Set(inspectionsList.map(i => i.id));
+        
+        Object.keys(lastSavedInspections).forEach(id => {
+            const entry = lastSavedInspections[id];
+            if (now - entry.timestamp < 5000) {
+                if (!incomingIds.has(id)) {
+                    inspectionsList.push(entry.data);
+                } else {
+                    delete lastSavedInspections[id];
+                }
+            } else {
+                delete lastSavedInspections[id];
+            }
+        });
+
         state.inspections = inspectionsList;
         migrateState();
         saveToStorage();
@@ -3336,6 +3424,19 @@ function sendInvoiceEmail(customerName, month, totalAmt) {
 
 // --- Manual Invoice Logic ---
 
+window.calculateManualRowAmount = function(rowId) {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    const qtyInput = row.querySelector('.item-qty');
+    const priceInput = row.querySelector('.item-price');
+    const amountInput = row.querySelector('.item-amount');
+    if (qtyInput && priceInput && amountInput) {
+        const qty = parseInt(qtyInput.value, 10) || 0;
+        const price = parseInt(priceInput.value, 10) || 0;
+        amountInput.value = (qty * price).toLocaleString();
+    }
+};
+
 window.addManualInvoiceItemRow = function(date = '', name = '', unit = '개', qty = 1, price = 0, note = '') {
     const tbody = document.getElementById('manualInvoiceItemsTbody');
     if (!tbody) return;
@@ -3346,9 +3447,10 @@ window.addManualInvoiceItemRow = function(date = '', name = '', unit = '개', qt
     tr.innerHTML = `
         <td style="padding: 0.4rem 0.2rem;"><input type="number" class="form-control item-date" min="1" max="31" value="${date}" placeholder="일" required style="padding: 0.35rem 0.5rem; text-align:center;"></td>
         <td style="padding: 0.4rem 0.2rem;"><input type="text" class="form-control item-name" value="${name}" placeholder="예: 잉크 납품, A4 용지 등" required style="padding: 0.35rem 0.5rem;"></td>
-        <td style="padding: 0.4rem 0.2rem;"><input type="text" class="form-control item-unit" value="${unit}" placeholder="개" style="padding: 0.35rem 0.5rem; text-align:center;"></td>
-        <td style="padding: 0.4rem 0.2rem;"><input type="number" class="form-control item-qty" min="1" value="${qty}" required style="padding: 0.35rem 0.5rem; text-align:right;"></td>
-        <td style="padding: 0.4rem 0.2rem;"><input type="number" class="form-control item-price" min="0" value="${price}" required style="padding: 0.35rem 0.5rem; text-align:right;"></td>
+        <td style="padding: 0.4rem 0.2rem;"><input type="text" class="form-control item-unit" value="${unit}" placeholder="규격" style="padding: 0.35rem 0.5rem; text-align:center;"></td>
+        <td style="padding: 0.4rem 0.2rem;"><input type="number" class="form-control item-qty" min="1" value="${qty}" required oninput="calculateManualRowAmount('${rowId}')" style="padding: 0.35rem 0.5rem; text-align:right;"></td>
+        <td style="padding: 0.4rem 0.2rem;"><input type="number" class="form-control item-price" min="0" value="${price}" required oninput="calculateManualRowAmount('${rowId}')" style="padding: 0.35rem 0.5rem; text-align:right;"></td>
+        <td style="padding: 0.4rem 0.2rem;"><input type="text" class="form-control item-amount" readonly style="padding: 0.35rem 0.5rem; text-align:right; background: rgba(255,255,255,0.05); border:none;" value="${(qty * price).toLocaleString()}"></td>
         <td style="padding: 0.4rem 0.2rem;"><input type="text" class="form-control item-note" value="${note}" placeholder="비고" style="padding: 0.35rem 0.5rem;"></td>
         <td style="padding: 0.4rem 0.2rem; text-align:center;">
             <button type="button" class="btn-icon btn-danger" onclick="removeManualInvoiceItemRow('${rowId}')" style="width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center;">
@@ -3521,5 +3623,293 @@ function openManualInvoice(customerId, month, vatEnabled, items) {
         insp: { date: month + '-01' } // fallback for download filename
     };
 
+    // Bind event handlers for manual invoice print/download/email buttons
+    document.getElementById('invPrintBtn').onclick = () => {
+        window.print();
+    };
+
+    document.getElementById('invImageBtn').onclick = () => {
+        downloadInvoiceImage();
+    };
+
+    document.getElementById('invEmailBtn').onclick = () => {
+        sendInvoiceEmail(cust.name, month.split('-')[1], total);
+    };
+
     document.getElementById('invoiceModalBackdrop').classList.add('active');
 }
+
+// Helper to generate Invoice HTML for Bulk Print
+function generateInvoiceHtmlForCustomer(cust, month) {
+    const insps = state.inspections.filter(i => i.customerId === cust.id && i.date.startsWith(month));
+    if (insps.length === 0) return '';
+
+    const issueDateStr = new Date().toISOString().split('T')[0];
+    const issueDateArr = issueDateStr.split('-');
+    const issueDateFormatted = `${issueDateArr[0]}년 ${issueDateArr[1]}월 ${issueDateArr[2]}일`;
+
+    const vatEnabled = cust.vatEnabled !== false;
+    let htmlItems = '';
+    let subTotal = 0;
+    let itemDate = month.split('-')[1] + '/-';
+
+    // Group inspections by device
+    const deviceUsages = {};
+    insps.forEach(insp => {
+        if (!deviceUsages[insp.deviceId]) {
+            deviceUsages[insp.deviceId] = { bw: 0, color: 0, parts: [] };
+        }
+        deviceUsages[insp.deviceId].bw += insp.bwUsage;
+        deviceUsages[insp.deviceId].color += insp.colorUsage;
+        if (insp.parts && Array.isArray(insp.parts)) {
+            deviceUsages[insp.deviceId].parts.push(...insp.parts);
+        }
+    });
+
+    if (cust.devices && cust.devices.length > 0) {
+        cust.devices.forEach(dev => {
+            // 1. Base rent
+            const price = dev.price || 0;
+            if (price > 0) {
+                htmlItems += `
+                    <tr>
+                        <td>${itemDate}</td>
+                        <td class="text-left">${dev.name} 임대료</td>
+                        <td>식</td>
+                        <td>1</td>
+                        <td class="text-right">${price.toLocaleString()}</td>
+                        <td class="text-right">${price.toLocaleString()}</td>
+                        <td></td>
+                    </tr>
+                `;
+                subTotal += price;
+            }
+
+            // 2. Overages
+            const usage = deviceUsages[dev.id] || { bw: 0, color: 0 };
+            const bwOver = Math.max(0, usage.bw - (dev.contractBw || 0));
+            const colorOver = Math.max(0, usage.color - (dev.contractColor || 0));
+            const overBwPrice = dev.overBwPrice || 0;
+            const overColorPrice = dev.overColorPrice || 0;
+
+            if (bwOver > 0 && overBwPrice > 0) {
+                const amt = bwOver * overBwPrice;
+                htmlItems += `
+                    <tr>
+                        <td>${itemDate}</td>
+                        <td class="text-left">${dev.name} 흑백 초과</td>
+                        <td>매</td>
+                        <td>${bwOver.toLocaleString()}</td>
+                        <td class="text-right">${overBwPrice.toLocaleString()}</td>
+                        <td class="text-right">${amt.toLocaleString()}</td>
+                        <td></td>
+                    </tr>
+                `;
+                subTotal += amt;
+            }
+
+            if (colorOver > 0 && overColorPrice > 0) {
+                const amt = colorOver * overColorPrice;
+                htmlItems += `
+                    <tr>
+                        <td>${itemDate}</td>
+                        <td class="text-left">${dev.name} 컬러 초과</td>
+                        <td>매</td>
+                        <td>${colorOver.toLocaleString()}</td>
+                        <td class="text-right">${overColorPrice.toLocaleString()}</td>
+                        <td class="text-right">${amt.toLocaleString()}</td>
+                        <td></td>
+                    </tr>
+                `;
+                subTotal += amt;
+            }
+        });
+    }
+
+    // 3. Parts
+    insps.forEach(insp => {
+        if (insp.parts && Array.isArray(insp.parts) && insp.parts.length > 0) {
+            insp.parts.forEach(p => {
+                const amt = p.price * p.quantity;
+                htmlItems += `
+                    <tr>
+                        <td>${insp.date.split('-')[1]}/${insp.date.split('-')[2]}</td>
+                        <td class="text-left">${p.name}</td>
+                        <td>개</td>
+                        <td>${p.quantity.toLocaleString()}</td>
+                        <td class="text-right">${p.price.toLocaleString()}</td>
+                        <td class="text-right">${amt.toLocaleString()}</td>
+                        <td></td>
+                    </tr>
+                `;
+                subTotal += amt;
+            });
+        }
+    });
+
+    // Fill empty rows to make it look like a standard receipt (7 rows)
+    const rowCount = (htmlItems.match(/<tr/g) || []).length;
+    for (let i = rowCount; i < 7; i++) {
+        htmlItems += `<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
+    }
+
+    const vat = vatEnabled ? Math.floor(subTotal * 0.1) : 0;
+    const total = subTotal + vat;
+
+    const totalAmountNum = `₩${total.toLocaleString()}`;
+    const totalAmountText = `일금 ${numToKoreanStr(total)} 원정`;
+
+    const htmlFoot = `
+        <tr>
+            <th colspan="5">소계</th>
+            <td class="text-right">${subTotal.toLocaleString()}</td>
+            <td></td>
+        </tr>
+        <tr>
+            <th colspan="5">부가가치세 (VAT)</th>
+            <td class="text-right">${vat.toLocaleString()}</td>
+            <td>${vatEnabled ? '' : '면세'}</td>
+        </tr>
+    `;
+
+    // Counter table
+    let counterHtml = `
+        <div class="ti-counter-title"><i class="fa-solid fa-list-ol"></i> 당월 기기 카운터 내역</div>
+        <table class="ti-counter-table">
+            <tr>
+                <th>기기명</th>
+                <th>점검일</th>
+                <th>흑백 카운터</th>
+                <th>흑백 사용량</th>
+                <th>컬러 카운터</th>
+                <th>컬러 사용량</th>
+            </tr>
+    `;
+    insps.forEach(insp => {
+        const dev = cust.devices ? cust.devices.find(d => d.id === insp.deviceId) : null;
+        const devName = dev ? dev.name : '-';
+        counterHtml += `
+            <tr>
+                <td>${devName}</td>
+                <td>${insp.date}</td>
+                <td>${insp.bwCounter.toLocaleString()}</td>
+                <td>+${insp.bwUsage.toLocaleString()}</td>
+                <td>${insp.colorCounter.toLocaleString()}</td>
+                <td>+${insp.colorUsage.toLocaleString()}</td>
+            </tr>
+        `;
+    });
+    counterHtml += `</table>`;
+
+    return `
+        <div class="bulk-invoice-page traditional-invoice">
+            <div class="ti-header">
+                <h1 class="ti-title">거 래 명 세 표</h1>
+                <div class="ti-supplier-area">
+                    <div class="ti-vertical-label">공급자</div>
+                    <table class="ti-supplier-table">
+                        <tr>
+                            <th>등록번호</th>
+                            <td colspan="3" style="font-weight: bold; font-size: 1.1em; letter-spacing: 2px;">119-20-43750</td>
+                        </tr>
+                        <tr>
+                            <th>상호<br>(법인명)</th>
+                            <td style="font-weight: bold;">하영통신</td>
+                            <th>성명<br>(대표자)</th>
+                            <td style="position: relative; padding-right: 40px;">
+                                <span style="font-weight: bold;">황인호</span>
+                                <div class="ti-stamp">
+                                    <div class="ti-stamp-inner">
+                                        하영<br>통신<br>인
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>사업장<br>소재지</th>
+                            <td colspan="3">서울 금천구 독산동 146-24 (2층)</td>
+                        </tr>
+                        <tr>
+                            <th>업태</th>
+                            <td>도소매</td>
+                            <th>종목</th>
+                            <td>사무기기</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="ti-customer-area">
+                <div class="ti-date">${issueDateFormatted}</div>
+                <div class="ti-customer">
+                    <span class="ti-customer-name">${cust.name}</span> <span class="ti-customer-suffix">귀하</span>
+                </div>
+                <div class="ti-total-amount">
+                    <span class="ti-amount-label">합계금액(공급가액+세액)</span>
+                    <span class="ti-amount-text">${totalAmountText}</span>
+                    <span class="ti-amount-num">${totalAmountNum}</span>
+                </div>
+            </div>
+
+            <table class="ti-item-table">
+                <thead>
+                    <tr>
+                        <th style="width: 5%;">월/일</th>
+                        <th style="width: 35%;">품목</th>
+                        <th style="width: 10%;">규격</th>
+                        <th style="width: 8%;">수량</th>
+                        <th style="width: 12%;">단가</th>
+                        <th style="width: 15%;">공급가액</th>
+                        <th style="width: 15%;">비고</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${htmlItems}
+                </tbody>
+                <tfoot>
+                    ${htmlFoot}
+                </tfoot>
+            </table>
+            
+            <div class="ti-counter-area">
+                ${counterHtml}
+            </div>
+
+            <div class="ti-footer">
+                <p>위와 같이 계산하오니 청구하여 주시기 바랍니다.</p>
+                <p class="ti-account"><strong>국민은행 012345-01-678901 (예금주: 하영통신)</strong></p>
+            </div>
+        </div>
+    `;
+}
+
+// Print All Invoices
+window.printAllInvoices = function() {
+    const selectedMonth = document.getElementById('reportMonthFilter').value;
+    if (!selectedMonth) {
+        alert("리포트 조회 월이 지정되지 않았습니다.");
+        return;
+    }
+
+    const filteredInsps = state.inspections.filter(i => i.date.startsWith(selectedMonth));
+    if (filteredInsps.length === 0) {
+        alert("선택하신 월에 등록된 점검 기록이 없어 일괄 명세서를 발행할 수 없습니다.");
+        return;
+    }
+
+    const customerIds = [...new Set(filteredInsps.map(i => i.customerId))];
+    const activeCustomers = state.customers.filter(c => customerIds.includes(c.id));
+    activeCustomers.sort((a, b) => a.name.localeCompare(b.name));
+
+    let bulkHtml = '';
+    activeCustomers.forEach(cust => {
+        bulkHtml += generateInvoiceHtmlForCustomer(cust, selectedMonth);
+    });
+
+    const bulkPrintArea = document.getElementById('bulkInvoicePrintArea');
+    if (bulkPrintArea) {
+        bulkPrintArea.innerHTML = bulkHtml;
+        bulkPrintArea.style.display = 'block';
+        window.print();
+    }
+};

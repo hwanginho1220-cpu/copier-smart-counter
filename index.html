@@ -62,7 +62,7 @@
                     </button>
                 </div>
                 <div class="header-actions" style="display: flex; align-items: center; gap: 1rem;">
-                    <span class="badge badge-info" id="syncStatusBadge" style="cursor: pointer; padding: 0.5rem 0.75rem; font-size: 0.85rem;" onclick="openFirebaseModal()">
+                    <span class="badge badge-info" id="syncStatusBadge" style="cursor: pointer; padding: 0.5rem 0.75rem; font-size: 0.85rem;" onclick="handleSyncBadgeClick()">
                         <i class="fa-solid fa-circle-dot"></i> 로컬 모드
                     </span>
                     <button class="btn btn-primary" id="headerActionBtn">
@@ -287,6 +287,9 @@
                         <div style="display:flex; gap:0.5rem; flex-wrap: wrap;">
                             <button class="btn btn-secondary" onclick="openManualInvoiceModal()" style="background: var(--card-bg-light); color: var(--primary); border-color: var(--primary); font-weight: 600;">
                                 <i class="fa-solid fa-file-signature"></i> 수기 명세서 작성
+                            </button>
+                            <button class="btn btn-secondary" onclick="printAllInvoices()" style="background: #10b981; color: #fff; border-color: #10b981; font-weight: 600;">
+                                <i class="fa-solid fa-print"></i> 전체 명세서 인쇄
                             </button>
                             <button class="btn btn-secondary" id="downloadImageBtn" style="display: none; background: #60a5fa; color: #0f172a; border-color: #60a5fa; font-weight: 600;">
                                 <i class="fa-solid fa-image"></i>이미지 다운로드
@@ -720,12 +723,13 @@
                         <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;" id="manualInvoiceItemsTable">
                             <thead style="background: rgba(30,41,59,0.3); border-bottom: 1px solid var(--border-color);">
                                 <tr>
-                                    <th style="padding: 0.6rem 0.4rem; width: 12%; text-align:center;">날짜(일)</th>
-                                    <th style="padding: 0.6rem 0.4rem; width: 35%;">품목명</th>
-                                    <th style="padding: 0.6rem 0.4rem; width: 10%; text-align:center;">단위</th>
-                                    <th style="padding: 0.6rem 0.4rem; width: 12%; text-align:right;">수량</th>
-                                    <th style="padding: 0.6rem 0.4rem; width: 15%; text-align:right;">단가(₩)</th>
-                                    <th style="padding: 0.6rem 0.4rem; width: 10%;">비고</th>
+                                    <th style="padding: 0.6rem 0.4rem; width: 12%; text-align:center;">월/일</th>
+                                    <th style="padding: 0.6rem 0.4rem; width: 30%;">품목</th>
+                                    <th style="padding: 0.6rem 0.4rem; width: 10%; text-align:center;">규격</th>
+                                    <th style="padding: 0.6rem 0.4rem; width: 10%; text-align:right;">수량</th>
+                                    <th style="padding: 0.6rem 0.4rem; width: 12%; text-align:right;">단가</th>
+                                    <th style="padding: 0.6rem 0.4rem; width: 15%; text-align:right;">공급가액</th>
+                                    <th style="padding: 0.6rem 0.4rem; width: 15%;">비고</th>
                                     <th style="padding: 0.6rem 0.4rem; width: 6%; text-align:center;"></th>
                                 </tr>
                             </thead>
@@ -749,6 +753,9 @@
             </form>
         </div>
     </div>
+
+    <!-- BULK INVOICE PRINT CONTAINER -->
+    <div id="bulkInvoicePrintArea" style="display: none;"></div>
 
     <!-- MODAL 5: IMAGE VIEWER OVERLAY -->
     <div class="modal-backdrop" id="imageViewerBackdrop" style="z-index: 2000;" onclick="closeImageViewer()">

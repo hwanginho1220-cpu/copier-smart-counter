@@ -1442,12 +1442,13 @@ select.form-control option {
         visibility: hidden;
     }
     
-    #reportPrintArea,
-    #reportPrintArea * {
+    /* 월간 리포트 1개 인쇄 */
+    body.print-report #reportPrintArea,
+    body.print-report #reportPrintArea * {
         visibility: visible;
     }
     
-    #reportPrintArea {
+    body.print-report #reportPrintArea {
         position: absolute !important;
         left: 0 !important;
         top: 0 !important;
@@ -1459,6 +1460,48 @@ select.form-control option {
         margin: 0 !important;
         background: #ffffff !important;
         color: #000000 !important;
+    }
+    
+    /* 거래명세서 1개 인쇄 */
+    body.print-invoice #invoicePrintArea,
+    body.print-invoice #invoicePrintArea * {
+        visibility: visible;
+    }
+    
+    body.print-invoice #invoicePrintArea {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        background: #ffffff !important;
+    }
+
+    /* 거래명세서 전체 일괄 인쇄 */
+    body.print-bulk-invoice #bulkInvoicePrintArea,
+    body.print-bulk-invoice #bulkInvoicePrintArea * {
+        visibility: visible;
+    }
+    
+    body.print-bulk-invoice #bulkInvoicePrintArea {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+    }
+    
+    .bulk-invoice-page {
+        page-break-after: always !important;
+        break-after: page !important;
+        margin: 0 !important;
+        padding: 20px !important;
+        background: #ffffff !important;
+        box-shadow: none !important;
     }
     
     .report-paper-container {
@@ -1604,24 +1647,6 @@ select.form-control option {
 .invoice-item-table tfoot th, .invoice-item-table tfoot td {
     background: #f8fafc;
     font-weight: bold;
-}
-
-@media print {
-    body * {
-        visibility: hidden;
-    }
-    #invoicePrintArea, #invoicePrintArea * {
-        visibility: visible;
-    }
-    #invoicePrintArea {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        margin: 0;
-        padding: 0;
-        box-shadow: none;
-    }
 }
 
  / *   - - -   T r a d i t i o n a l   I n v o i c e   ( K o r e a n )   S t y l e s   - - -   * / 
