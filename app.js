@@ -1028,12 +1028,13 @@ function handleDeviceImageAdd(input) {
 
     const deviceEntry = input.closest('.device-entry');
     const grid = deviceEntry.querySelector('.dev-images-grid');
+    const serialInput = deviceEntry.querySelector('.dev-serial');
 
     files.forEach(file => {
         const reader = new FileReader();
         reader.onload = function(e) {
-            // Compress image before storing to stay within Firestore 1MB limit
             compressImage(e.target.result, 600, 0.65).then(compressed => {
+                // Build thumbnail
                 const thumb = document.createElement('div');
                 thumb.className = 'dev-image-thumb';
                 thumb.style.cssText = 'position:relative; width:70px; height:70px; border-radius:6px; border:1px solid var(--border-color); overflow:hidden; flex-shrink:0;';
@@ -1043,65 +1044,41 @@ function handleDeviceImageAdd(input) {
                     <button type="button" onclick="removeDeviceImageThumb(this)" style="position:absolute;top:1px;right:1px;background:rgba(239,68,68,0.85);border:none;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;">
                         <i class="fa-solid fa-xmark" style="color:#fff;font-size:9px;"></i>
                     </button>
-                    <button type="button" onclick="extractSerialFromThumb(this)" style="position:absolute;bottom:1px;left:1px;background:rgba(16,185,129,0.88);border:none;border-radius:3px;font-size:8px;color:#fff;cursor:pointer;padding:1px 3px;font-weight:600;" title="이 사진에서 S/N 추출">
+                    <div class="ocr-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.55);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">
+                        <i class="fa-solid fa-spinner fa-spin" style="color:#fff;font-size:14px;"></i>
+                        <span style="color:#fff;font-size:7px;font-weight:600;">S/N 추출 중</span>
+                    </div>
+                    <button type="button" onclick="extractSerialFromThumb(this)" class="ocr-retry-btn" style="display:none;position:absolute;bottom:1px;left:1px;background:rgba(16,185,129,0.88);border:none;border-radius:3px;font-size:8px;color:#fff;cursor:pointer;padding:1px 3px;font-weight:600;" title="S/N 다시 추출">
                         OCR
                     </button>
                 `;
                 grid.appendChild(thumb);
+
+                // Auto-run OCR immediately after thumbnail is appended
+                runOCR(compressed, serialInput, thumb);
             });
         };
         reader.readAsDataURL(file);
     });
-    // Reset so same file can be selected again
     input.value = '';
 }
 
 /**
- * Compresses a base64 image to max maxSize px on longest side, JPEG quality 0~1.
- * Returns a Promise<string> with the compressed base64 data URL.
+ * Shared OCR runner — used by auto-trigger and manual retry button.
  */
-function compressImage(base64, maxSize = 600, quality = 0.65) {
-    return new Promise(resolve => {
-        const img = new Image();
-        img.onload = () => {
-            let w = img.width, h = img.height;
-            if (w > maxSize || h > maxSize) {
-                if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
-                else       { w = Math.round(w * maxSize / h); h = maxSize; }
-            }
-            const canvas = document.createElement('canvas');
-            canvas.width = w; canvas.height = h;
-            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-            resolve(canvas.toDataURL('image/jpeg', quality));
-        };
-        img.onerror = () => resolve(base64); // fallback
-        img.src = base64;
-    });
-}
+async function runOCR(imgSrc, serialInput, thumb) {
+    const overlay = thumb.querySelector('.ocr-overlay');
+    const retryBtn = thumb.querySelector('.ocr-retry-btn');
 
-function removeDeviceImageThumb(btn) {
-    btn.closest('.dev-image-thumb').remove();
-}
-
-async function extractSerialFromThumb(ocrBtn) {
-    const thumb = ocrBtn.closest('.dev-image-thumb');
-    const imgSrc = thumb.querySelector('img').src;
-    const deviceEntry = thumb.closest('.device-entry');
-    const serialInput = deviceEntry.querySelector('.dev-serial');
-
-    // Show loading state
-    const originalText = ocrBtn.textContent;
-    ocrBtn.disabled = true;
-    ocrBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size:8px;"></i>';
+    if (overlay) overlay.style.display = 'flex';
+    if (retryBtn) retryBtn.style.display = 'none';
 
     try {
         const result = await Tesseract.recognize(imgSrc, 'eng', {
-            logger: () => {} // Suppress verbose logs
+            logger: () => {}
         });
         const rawText = result.data.text;
 
-        // Try to find S/N patterns: alphanumeric strings 4~20 chars,
-        // commonly preceded by S/N, SN, Serial, No. etc.
         const snPatterns = [
             /(?:S\/N|SN|Serial(?:\s*No\.?)?|번호)\s*[:\-]?\s*([A-Za-z0-9\-]{4,20})/i,
             /([A-Z]{1,3}[0-9]{6,15})/,
@@ -1111,30 +1088,69 @@ async function extractSerialFromThumb(ocrBtn) {
         let extracted = '';
         for (const pattern of snPatterns) {
             const match = rawText.match(pattern);
-            if (match) {
-                extracted = match[1].trim();
-                break;
-            }
+            if (match) { extracted = match[1].trim(); break; }
         }
 
         if (extracted) {
-            serialInput.value = extracted;
-            serialInput.style.boxShadow = '0 0 0 2px rgba(16,185,129,0.5)';
-            setTimeout(() => { serialInput.style.boxShadow = ''; }, 2500);
+            // Only fill if empty (don't overwrite user's manual input)
+            if (!serialInput.value.trim()) {
+                serialInput.value = extracted;
+                serialInput.style.boxShadow = '0 0 0 2px rgba(16,185,129,0.5)';
+                setTimeout(() => { serialInput.style.boxShadow = ''; }, 2500);
+            }
             showToast(`S/N 추출 완료: ${extracted}`, 'success');
+            // Show a small green checkmark badge on the thumbnail
+            if (overlay) {
+                overlay.innerHTML = '<i class="fa-solid fa-circle-check" style="color:#10b981;font-size:18px;"></i>';
+                overlay.style.background = 'rgba(0,0,0,0.2)';
+                setTimeout(() => { if (overlay) overlay.style.display = 'none'; }, 1800);
+            }
         } else {
-            // Fallback: show cleaned raw text in a confirm dialog
-            const cleaned = rawText.replace(/\s+/g, ' ').trim().substring(0, 200);
-            const manual = prompt(`자동 추출에 실패했습니다.\n인식된 텍스트에서 직접 복사해 주세요:\n\n${cleaned}`, '');
-            if (manual) serialInput.value = manual.trim();
+            if (overlay) overlay.style.display = 'none';
+            showToast('S/N 자동 추출 실패 — OCR 버튼으로 재시도하세요.', 'warning');
         }
     } catch (err) {
         console.error('OCR error:', err);
+        if (overlay) overlay.style.display = 'none';
         showToast('OCR 처리 중 오류가 발생했습니다.', 'error');
     } finally {
-        ocrBtn.disabled = false;
-        ocrBtn.innerHTML = 'OCR';
+        if (retryBtn) retryBtn.style.display = 'block';
     }
+}
+
+/**
+ * Manual retry — called when user clicks the OCR button on a thumbnail.
+ */
+async function extractSerialFromThumb(ocrBtn) {
+    const thumb = ocrBtn.closest('.dev-image-thumb');
+    const imgSrc = thumb.querySelector('img').src;
+    const deviceEntry = thumb.closest('.device-entry');
+    const serialInput = deviceEntry.querySelector('.dev-serial');
+
+    ocrBtn.disabled = true;
+    ocrBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size:8px;"></i>';
+
+    // Temporarily clear serial so runOCR always fills it on retry
+    const prev = serialInput.value;
+    serialInput.value = '';
+
+    await runOCR(imgSrc, serialInput, thumb);
+
+    // If runOCR still couldn't extract, restore previous value and prompt
+    if (!serialInput.value.trim()) {
+        serialInput.value = prev;
+        try {
+            const result = await Tesseract.recognize(imgSrc, 'eng', { logger: () => {} });
+            const cleaned = result.data.text.replace(/\s+/g, ' ').trim().substring(0, 300);
+            if (cleaned) {
+                const manual = prompt(`자동 추출 실패.\n인식된 텍스트:\n\n${cleaned}\n\n일련번호를 직접 입력하세요:`, prev);
+                if (manual !== null) serialInput.value = manual.trim();
+            }
+        } catch (_) {}
+    }
+
+    ocrBtn.disabled = false;
+    ocrBtn.innerHTML = 'OCR';
 }
 
 async function handleCustomerFormSubmit(e) {
