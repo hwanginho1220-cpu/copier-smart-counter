@@ -611,6 +611,8 @@ select.form-control option {
 
 .modal-body {
     padding: 1.5rem;
+    max-height: calc(100vh - 180px);
+    overflow-y: auto;
 }
 
 .modal-footer {
