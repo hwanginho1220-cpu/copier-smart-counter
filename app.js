@@ -35,6 +35,40 @@ const demoData = {
     parts: []
 };
 
+// --- Toast Notification ---
+function showToast(message, type = 'info') {
+    const existing = document.getElementById('appToast');
+    if (existing) existing.remove();
+
+    const colors = { success: '#10b981', error: '#ef4444', info: '#6366f1', warning: '#f59e0b' };
+    const icons  = { success: 'fa-circle-check', error: 'fa-circle-xmark', info: 'fa-circle-info', warning: 'fa-triangle-exclamation' };
+
+    const toast = document.createElement('div');
+    toast.id = 'appToast';
+    toast.style.cssText = `
+        position:fixed; bottom:1.5rem; right:1.5rem; z-index:99999;
+        background:#1e293b; border:1px solid ${colors[type]};
+        color:#f1f5f9; padding:0.75rem 1.1rem; border-radius:10px;
+        display:flex; align-items:center; gap:0.6rem;
+        box-shadow:0 4px 24px rgba(0,0,0,0.35);
+        font-size:0.875rem; font-weight:500;
+        animation: toastIn 0.3s ease;
+        max-width: 360px;
+    `;
+    toast.innerHTML = `<i class="fa-solid ${icons[type]}" style="color:${colors[type]};"></i> ${message}`;
+    document.body.appendChild(toast);
+
+    // Add keyframe if not already added
+    if (!document.getElementById('toastKeyframe')) {
+        const style = document.createElement('style');
+        style.id = 'toastKeyframe';
+        style.textContent = '@keyframes toastIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }';
+        document.head.appendChild(style);
+    }
+
+    setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = '0.3s'; setTimeout(() => toast.remove(), 300); }, 3000);
+}
+
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
     initFirebase();
@@ -957,23 +991,125 @@ function addCustomerDeviceForm(device = null) {
             </div>
         </div>
         <div class="form-group" style="margin-top:0.5rem;">
-            <label>기기 / 일련번호 사진 첨부</label>
-            <input type="file" class="form-control" accept="image/*" onchange="handleDeviceImageChange(this)">
-            <input type="hidden" class="dev-image-data" value="${device && device.image ? device.image : ''}">
-            ${device && device.image ? `<div style="margin-top:0.5rem;"><img src="${device.image}" style="height:50px; border-radius:4px; border:1px solid #ccc;"></div>` : ''}
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.4rem;">
+                <label style="margin-bottom:0;">기기 / 일련번호 사진 첨부</label>
+                <button type="button" class="btn btn-secondary" style="font-size:0.72rem; padding:0.25rem 0.6rem;" onclick="triggerDeviceImageUpload(this)">
+                    <i class="fa-solid fa-plus"></i> 사진 추가
+                </button>
+            </div>
+            <input type="file" accept="image/*" style="display:none;" onchange="handleDeviceImageAdd(this)" multiple>
+            <div class="dev-images-grid" style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.4rem;">
+                ${(device && (device.images || device.image) ? (device.images || [device.image]) : []).map((img, imgIdx) => `
+                    <div class="dev-image-thumb" style="position:relative; width:70px; height:70px; border-radius:6px; border:1px solid var(--border-color); overflow:hidden; flex-shrink:0;" data-img="${encodeURIComponent(img)}">
+                        <img src="${img}" style="width:100%;height:100%;object-fit:cover;">
+                        <button type="button" onclick="removeDeviceImageThumb(this)" style="position:absolute;top:1px;right:1px;background:rgba(239,68,68,0.85);border:none;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;">
+                            <i class="fa-solid fa-xmark" style="color:#fff;font-size:9px;"></i>
+                        </button>
+                        <button type="button" onclick="extractSerialFromThumb(this)" style="position:absolute;bottom:1px;left:1px;background:rgba(16,185,129,0.88);border:none;border-radius:3px;font-size:8px;color:#fff;cursor:pointer;padding:1px 3px;font-weight:600;" title="이 사진에서 S/N 추출">
+                            OCR
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
         </div>
     `;
     container.appendChild(div);
 }
 
-function handleDeviceImageChange(input) {
-    const file = input.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        input.parentElement.querySelector('.dev-image-data').value = e.target.result;
-    };
-    reader.readAsDataURL(file);
+function triggerDeviceImageUpload(btn) {
+    // Find the hidden file input inside this device-entry
+    const deviceEntry = btn.closest('.device-entry');
+    deviceEntry.querySelector('input[type="file"]').click();
+}
+
+function handleDeviceImageAdd(input) {
+    const files = Array.from(input.files);
+    if (!files.length) return;
+
+    const deviceEntry = input.closest('.device-entry');
+    const grid = deviceEntry.querySelector('.dev-images-grid');
+
+    files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const imgData = e.target.result;
+            const thumb = document.createElement('div');
+            thumb.className = 'dev-image-thumb';
+            thumb.style.cssText = 'position:relative; width:70px; height:70px; border-radius:6px; border:1px solid var(--border-color); overflow:hidden; flex-shrink:0;';
+            thumb.dataset.img = encodeURIComponent(imgData);
+            thumb.innerHTML = `
+                <img src="${imgData}" style="width:100%;height:100%;object-fit:cover;">
+                <button type="button" onclick="removeDeviceImageThumb(this)" style="position:absolute;top:1px;right:1px;background:rgba(239,68,68,0.85);border:none;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;">
+                    <i class="fa-solid fa-xmark" style="color:#fff;font-size:9px;"></i>
+                </button>
+                <button type="button" onclick="extractSerialFromThumb(this)" style="position:absolute;bottom:1px;left:1px;background:rgba(16,185,129,0.88);border:none;border-radius:3px;font-size:8px;color:#fff;cursor:pointer;padding:1px 3px;font-weight:600;" title="이 사진에서 S/N 추출">
+                    OCR
+                </button>
+            `;
+            grid.appendChild(thumb);
+        };
+        reader.readAsDataURL(file);
+    });
+    // Reset so same file can be selected again
+    input.value = '';
+}
+
+function removeDeviceImageThumb(btn) {
+    btn.closest('.dev-image-thumb').remove();
+}
+
+async function extractSerialFromThumb(ocrBtn) {
+    const thumb = ocrBtn.closest('.dev-image-thumb');
+    const imgSrc = thumb.querySelector('img').src;
+    const deviceEntry = thumb.closest('.device-entry');
+    const serialInput = deviceEntry.querySelector('.dev-serial');
+
+    // Show loading state
+    const originalText = ocrBtn.textContent;
+    ocrBtn.disabled = true;
+    ocrBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size:8px;"></i>';
+
+    try {
+        const result = await Tesseract.recognize(imgSrc, 'eng', {
+            logger: () => {} // Suppress verbose logs
+        });
+        const rawText = result.data.text;
+
+        // Try to find S/N patterns: alphanumeric strings 4~20 chars,
+        // commonly preceded by S/N, SN, Serial, No. etc.
+        const snPatterns = [
+            /(?:S\/N|SN|Serial(?:\s*No\.?)?|번호)\s*[:\-]?\s*([A-Za-z0-9\-]{4,20})/i,
+            /([A-Z]{1,3}[0-9]{6,15})/,
+            /([A-Z0-9]{8,20})/
+        ];
+
+        let extracted = '';
+        for (const pattern of snPatterns) {
+            const match = rawText.match(pattern);
+            if (match) {
+                extracted = match[1].trim();
+                break;
+            }
+        }
+
+        if (extracted) {
+            serialInput.value = extracted;
+            serialInput.style.boxShadow = '0 0 0 2px rgba(16,185,129,0.5)';
+            setTimeout(() => { serialInput.style.boxShadow = ''; }, 2500);
+            showToast(`S/N 추출 완료: ${extracted}`, 'success');
+        } else {
+            // Fallback: show cleaned raw text in a confirm dialog
+            const cleaned = rawText.replace(/\s+/g, ' ').trim().substring(0, 200);
+            const manual = prompt(`자동 추출에 실패했습니다.\n인식된 텍스트에서 직접 복사해 주세요:\n\n${cleaned}`, '');
+            if (manual) serialInput.value = manual.trim();
+        }
+    } catch (err) {
+        console.error('OCR error:', err);
+        showToast('OCR 처리 중 오류가 발생했습니다.', 'error');
+    } finally {
+        ocrBtn.disabled = false;
+        ocrBtn.innerHTML = 'OCR';
+    }
 }
 
 async function handleCustomerFormSubmit(e) {
@@ -1000,7 +1136,7 @@ async function handleCustomerFormSubmit(e) {
             contractColor: parseInt(entry.querySelector('.dev-contract-color').value, 10) || 0,
             overBwPrice: parseInt(entry.querySelector('.dev-over-bw').value, 10) || 0,
             overColorPrice: parseInt(entry.querySelector('.dev-over-color').value, 10) || 0,
-            image: entry.querySelector('.dev-image-data').value
+            images: Array.from(entry.querySelectorAll('.dev-image-thumb')).map(t => decodeURIComponent(t.dataset.img)).filter(Boolean)
         });
     });
 
@@ -1792,27 +1928,61 @@ function openDetailModal(customerId) {
 
     // Fill customer info
     document.getElementById('detailCustomerName').textContent = customer.name;
-    
-    const primaryDevice = customer.devices && customer.devices.length > 0 ? customer.devices[0] : customer;
-    
-    document.getElementById('detailCopierModel').textContent = primaryDevice.model || customer.copierModel || '-';
-    document.getElementById('detailSerial').textContent = primaryDevice.serial || customer.serialNumber || '-';
     document.getElementById('detailContact').textContent = customer.contact || '-';
-    
-    // Fill serial image thumbnail if exists
-    const detailImgContainer = document.getElementById('detailSerialImageContainer');
-    const detailImgEl = document.getElementById('detailSerialImage');
-    const imgData = primaryDevice.image || customer.serialImage;
-    
-    if (imgData) {
-        detailImgEl.src = imgData;
-        detailImgContainer.style.display = 'block';
-        detailImgContainer.onclick = () => openImageViewer(imgData);
+
+    // Fill device list
+    const deviceListEl = document.getElementById('detailDeviceList');
+    deviceListEl.innerHTML = '';
+    if (customer.devices && customer.devices.length > 0) {
+        customer.devices.forEach(d => {
+            const row = document.createElement('div');
+            row.style.cssText = 'background:rgba(255,255,255,0.04); border:1px solid var(--border-color); border-radius:6px; padding:0.45rem 0.65rem; font-size:0.85rem;';
+            row.innerHTML = `
+                <div style="font-weight:600; color:var(--primary); margin-bottom:0.2rem;"><i class="fa-solid fa-print" style="font-size:0.75rem;"></i> ${d.name || d.model || '-'}</div>
+                <div style="color:var(--text-secondary); font-size:0.78rem;">
+                    ${d.model ? `모델: <strong>${d.model}</strong> &nbsp;` : ''}
+                    ${d.serial ? `S/N: <code style="font-family:monospace; font-size:0.8rem; color:var(--text-primary);">${d.serial}</code>` : ''}
+                </div>
+                ${(d.contractBw || d.contractColor) ? `<div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.15rem;">계약: 흑백 ${(d.contractBw||0).toLocaleString()}매 / 컬러 ${(d.contractColor||0).toLocaleString()}매</div>` : ''}
+            `;
+            deviceListEl.appendChild(row);
+        });
     } else {
-        detailImgContainer.style.display = 'none';
-        detailImgContainer.onclick = null;
+        deviceListEl.innerHTML = '<span style="color:var(--text-muted); font-size:0.85rem;">등록된 기기가 없습니다.</span>';
     }
-    
+
+    // Collect all images from all devices (support legacy single-image format)
+    const gallery = document.getElementById('detailImageGallery');
+    gallery.innerHTML = '';
+    const allImages = [];
+    if (customer.devices) {
+        customer.devices.forEach(d => {
+            const imgs = d.images && d.images.length > 0 ? d.images : (d.image ? [d.image] : []);
+            imgs.forEach(img => allImages.push({ src: img, devName: d.name || d.model || '' }));
+        });
+    }
+    // Legacy: top-level serialImage
+    if (allImages.length === 0 && customer.serialImage) {
+        allImages.push({ src: customer.serialImage, devName: '' });
+    }
+
+    if (allImages.length > 0) {
+        allImages.forEach(({ src, devName }) => {
+            const thumb = document.createElement('div');
+            thumb.style.cssText = 'position:relative; width:70px; height:70px; border-radius:6px; border:1px solid var(--border-color); overflow:hidden; cursor:pointer; flex-shrink:0;';
+            thumb.title = devName ? `${devName} 사진` : '기기 사진';
+            thumb.innerHTML = `<img src="${src}" style="width:100%;height:100%;object-fit:cover;">
+                <div style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:0.75rem;opacity:0;transition:0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+                    <i class="fa-solid fa-magnifying-glass-plus"></i>
+                </div>`;
+            thumb.addEventListener('click', () => openImageViewer(src));
+            gallery.appendChild(thumb);
+        });
+    } else {
+        gallery.innerHTML = '<span style="color:var(--text-muted); font-size:0.85rem;">첨부된 사진이 없습니다.</span>';
+    }
+
+    // Billing summary
     let totalBwContract = 0;
     let totalColorContract = 0;
     let totalBaseRent = 0;
