@@ -76,13 +76,36 @@ function migrateState() {
                 model: c.copierModel || '미지정',
                 serial: c.serialNumber || '',
                 image: c.serialImage || '',
-                price: 0
+                price: c.contractAmount || 0,
+                contractBw: c.contractBw || 0,
+                contractColor: c.contractColor || 0,
+                overBwPrice: c.overBwPrice || 0,
+                overColorPrice: c.overColorPrice || 0
             }];
             // Cleanup old properties
             delete c.copierModel;
             delete c.serialNumber;
             delete c.serialImage;
             
+            migrated = true;
+        }
+
+        // Migrate global billing to first device if exists
+        if (c.contractAmount !== undefined || c.contractBw !== undefined || c.overBwPrice !== undefined) {
+            if (c.devices && c.devices.length > 0) {
+                if (c.devices[0].price === undefined || c.devices[0].price === 0) c.devices[0].price = c.contractAmount || 0;
+                if (c.devices[0].contractBw === undefined) c.devices[0].contractBw = c.contractBw || 0;
+                if (c.devices[0].contractColor === undefined) c.devices[0].contractColor = c.contractColor || 0;
+                if (c.devices[0].overBwPrice === undefined) c.devices[0].overBwPrice = c.overBwPrice || 0;
+                if (c.devices[0].overColorPrice === undefined) c.devices[0].overColorPrice = c.overColorPrice || 0;
+            }
+            
+            delete c.contractAmount;
+            delete c.contractBw;
+            delete c.contractColor;
+            delete c.overBwPrice;
+            delete c.overColorPrice;
+
             migrated = true;
             if (isCloudMode && db) {
                 db.collection('customers').doc(c.id).set(c, {merge: true});
@@ -886,8 +909,28 @@ function addCustomerDeviceForm(device = null) {
                 <input type="text" class="form-control dev-serial" placeholder="예: SN12345678" value="${device ? device.serial : ''}">
             </div>
             <div class="form-group">
-                <label>기기 임대료 (원)</label>
+                <label>기본 임대료 (원)</label>
                 <input type="number" class="form-control dev-price" min="0" placeholder="예: 210000" value="${device ? device.price || 0 : 0}">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>흑백 기본 계약 (매)</label>
+                <input type="number" class="form-control dev-contract-bw" min="0" placeholder="예: 2000" value="${device ? device.contractBw || 0 : 0}">
+            </div>
+            <div class="form-group">
+                <label>컬러 기본 계약 (매)</label>
+                <input type="number" class="form-control dev-contract-color" min="0" placeholder="예: 200" value="${device ? device.contractColor || 0 : 0}">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>흑백 초과 단가 (원)</label>
+                <input type="number" class="form-control dev-over-bw" min="0" placeholder="예: 15" value="${device ? device.overBwPrice || 0 : 0}">
+            </div>
+            <div class="form-group">
+                <label>컬러 초과 단가 (원)</label>
+                <input type="number" class="form-control dev-over-color" min="0" placeholder="예: 100" value="${device ? device.overColorPrice || 0 : 0}">
             </div>
         </div>
         <div class="form-group" style="margin-top:0.5rem;">
@@ -916,11 +959,6 @@ async function handleCustomerFormSubmit(e) {
     const id = document.getElementById('customerId').value;
     const name = document.getElementById('customerName').value.trim();
     const contact = document.getElementById('customerContact').value.trim();
-    const contractBw = parseInt(document.getElementById('contractBw').value, 10) || 0;
-    const contractColor = parseInt(document.getElementById('contractColor').value, 10) || 0;
-    const contractAmount = parseInt(document.getElementById('contractAmount').value, 10) || 0;
-    const overBwPrice = parseInt(document.getElementById('overBwPrice').value, 10) || 0;
-    const overColorPrice = parseInt(document.getElementById('overColorPrice').value, 10) || 0;
     const vatEnabled = document.getElementById('vatEnabled').checked;
     const location = document.getElementById('customerLocation').value.trim();
     const isMonthly = document.getElementById('isMonthlyInspection').checked;
@@ -935,6 +973,10 @@ async function handleCustomerFormSubmit(e) {
             model: entry.querySelector('.dev-model').value.trim(),
             serial: entry.querySelector('.dev-serial').value.trim(),
             price: parseInt(entry.querySelector('.dev-price').value, 10) || 0,
+            contractBw: parseInt(entry.querySelector('.dev-contract-bw').value, 10) || 0,
+            contractColor: parseInt(entry.querySelector('.dev-contract-color').value, 10) || 0,
+            overBwPrice: parseInt(entry.querySelector('.dev-over-bw').value, 10) || 0,
+            overColorPrice: parseInt(entry.querySelector('.dev-over-color').value, 10) || 0,
             image: entry.querySelector('.dev-image-data').value
         });
     });
@@ -952,11 +994,6 @@ async function handleCustomerFormSubmit(e) {
         name: name,
         devices: devices,
         contact: contact,
-        contractBw: contractBw,
-        contractColor: contractColor,
-        contractAmount: contractAmount,
-        overBwPrice: overBwPrice,
-        overColorPrice: overColorPrice,
         vatEnabled: vatEnabled,
         location: location,
         isMonthlyInspection: isMonthly
@@ -1320,11 +1357,6 @@ function openCustomerModal(id = null) {
             document.getElementById('customerId').value = customer.id;
             document.getElementById('customerName').value = customer.name;
             document.getElementById('customerContact').value = customer.contact || '';
-            document.getElementById('contractBw').value = customer.contractBw || '';
-            document.getElementById('contractColor').value = customer.contractColor || '';
-            document.getElementById('contractAmount').value = customer.contractAmount || '';
-            document.getElementById('overBwPrice').value = customer.overBwPrice || '';
-            document.getElementById('overColorPrice').value = customer.overColorPrice || '';
             document.getElementById('vatEnabled').checked = customer.vatEnabled !== false;
             document.getElementById('customerLocation').value = customer.location || '';
             document.getElementById('isMonthlyInspection').checked = customer.isMonthlyInspection !== false;
@@ -1340,11 +1372,6 @@ function openCustomerModal(id = null) {
     } else {
         title.textContent = '고객사 신규 등록';
         saveBtn.textContent = '등록';
-        document.getElementById('contractBw').value = '';
-        document.getElementById('contractColor').value = '';
-        document.getElementById('contractAmount').value = '';
-        document.getElementById('overBwPrice').value = '';
-        document.getElementById('overColorPrice').value = '';
         document.getElementById('vatEnabled').checked = true;
         document.getElementById('isMonthlyInspection').checked = true;
         
@@ -1759,15 +1786,24 @@ function openDetailModal(customerId) {
         detailImgContainer.onclick = null;
     }
     
-    const bwContractText = customer.contractBw ? `${customer.contractBw.toLocaleString()}매` : '0매';
-    const colorContractText = customer.contractColor ? `${customer.contractColor.toLocaleString()}매` : '0매';
-    document.getElementById('detailContract').innerHTML = `흑백: <span style="font-weight:600; color:var(--text-primary);">${bwContractText}</span> / 컬러: <span style="font-weight:600; color:#c084fc;">${colorContractText}</span>`;
+    let totalBwContract = 0;
+    let totalColorContract = 0;
+    let totalBaseRent = 0;
+    if (customer.devices && customer.devices.length > 0) {
+        customer.devices.forEach(d => {
+            totalBwContract += (d.contractBw || 0);
+            totalColorContract += (d.contractColor || 0);
+            totalBaseRent += (d.price || 0);
+        });
+    }
+
+    const bwContractText = `${totalBwContract.toLocaleString()}매`;
+    const colorContractText = `${totalColorContract.toLocaleString()}매`;
+    document.getElementById('detailContract').innerHTML = `총 흑백: <span style="font-weight:600; color:var(--text-primary);">${bwContractText}</span> / 총 컬러: <span style="font-weight:600; color:#c084fc;">${colorContractText}</span>`;
     
-    const amtText = customer.contractAmount ? `${customer.contractAmount.toLocaleString()}원` : '0원';
-    const overBwText = customer.overBwPrice ? `${customer.overBwPrice.toLocaleString()}원` : '0원';
-    const overColorText = customer.overColorPrice ? `${customer.overColorPrice.toLocaleString()}원` : '0원';
+    const amtText = `${totalBaseRent.toLocaleString()}원`;
     const vatText = customer.vatEnabled !== false ? '(VAT 별도)' : '(VAT 포함/없음)';
-    document.getElementById('detailBilling').innerHTML = `기본료: <span style="font-weight:600;">${amtText}</span> ${vatText}<br><span style="font-size:0.85em; color:var(--text-secondary);">초과단가 - 흑백: ${overBwText} / 컬러: ${overColorText}</span>`;
+    document.getElementById('detailBilling').innerHTML = `총 기본료: <span style="font-weight:600;">${amtText}</span> ${vatText}<br><span style="font-size:0.85em; color:var(--text-secondary);">기기별 계약 매수 및 초과 단가는 수정 화면에서 확인하세요.</span>`;
     
     document.getElementById('detailLocation').textContent = customer.location || '-';
 
@@ -2388,11 +2424,14 @@ function generateMonthlyReport() {
 
     filteredInsps.forEach(insp => {
         const cust = state.customers.find(c => c.id === insp.customerId);
-        if (cust) {
-            const bwOver = Math.max(0, insp.bwUsage - cust.contractBw);
-            const colorOver = Math.max(0, insp.colorUsage - cust.contractColor);
-            totalBwOver += bwOver;
-            totalColorOver += colorOver;
+        if (cust && cust.devices) {
+            const dev = cust.devices.find(d => d.id === insp.deviceId) || cust.devices[0];
+            if (dev) {
+                const bwOver = Math.max(0, insp.bwUsage - (dev.contractBw || 0));
+                const colorOver = Math.max(0, insp.colorUsage - (dev.contractColor || 0));
+                totalBwOver += bwOver;
+                totalColorOver += colorOver;
+            }
         }
         
         if (insp.parts) {
@@ -2431,30 +2470,38 @@ function generateMonthlyReport() {
         const custInsps = groupedInspections[customerId];
         
         const customerName = cust ? cust.name : '알 수 없음';
-        const contractBwLimit = cust ? cust.contractBw : 0;
-        const contractColorLimit = cust ? cust.contractColor : 0;
+        const vatEnabled = cust ? cust.vatEnabled !== false : true;
 
-        let custBwUsage = 0;
-        let custColorUsage = 0;
+        let totalBwOverForCust = 0;
+        let totalColorOverForCust = 0;
         let partsTotal = 0;
+        let billingSubtotal = 0;
+
+        // Base rents
+        if (cust && cust.devices) {
+            cust.devices.forEach(d => billingSubtotal += (d.price || 0));
+        }
 
         custInsps.forEach(insp => {
-            custBwUsage += insp.bwUsage;
-            custColorUsage += insp.colorUsage;
+            const dev = cust && cust.devices ? cust.devices.find(d => d.id === insp.deviceId) : null;
+            if (dev) {
+                const bwOver = Math.max(0, insp.bwUsage - (dev.contractBw || 0));
+                const colorOver = Math.max(0, insp.colorUsage - (dev.contractColor || 0));
+                
+                totalBwOverForCust += bwOver;
+                totalColorOverForCust += colorOver;
+
+                billingSubtotal += (bwOver * (dev.overBwPrice || 0));
+                billingSubtotal += (colorOver * (dev.overColorPrice || 0));
+            }
+
             if (insp.parts) {
-                partsTotal += insp.parts.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+                const pTotal = insp.parts.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+                partsTotal += pTotal;
+                billingSubtotal += pTotal;
             }
         });
 
-        const bwOver = Math.max(0, custBwUsage - contractBwLimit);
-        const colorOver = Math.max(0, custColorUsage - contractColorLimit);
-
-        const contractAmount = cust ? cust.contractAmount || 0 : 0;
-        const overBwPrice = cust ? cust.overBwPrice || 0 : 0;
-        const overColorPrice = cust ? cust.overColorPrice || 0 : 0;
-        const vatEnabled = cust ? cust.vatEnabled !== false : true;
-
-        const billingSubtotal = contractAmount + (bwOver * overBwPrice) + (colorOver * overColorPrice) + partsTotal;
         const billingVat = vatEnabled ? Math.floor(billingSubtotal * 0.1) : 0;
         const billingTotal = billingSubtotal + billingVat;
 
@@ -2496,8 +2543,8 @@ function generateMonthlyReport() {
             `;
 
             if (idx === 0) {
-                const bwOverBadge = bwOver > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${bwOver.toLocaleString()}(흑백)</span></div>` : '';
-                const colorOverBadge = colorOver > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${colorOver.toLocaleString()}(컬러)</span></div>` : '';
+                const bwOverBadge = totalBwOverForCust > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${totalBwOverForCust.toLocaleString()}(흑백)</span></div>` : '';
+                const colorOverBadge = totalColorOverForCust > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${totalColorOverForCust.toLocaleString()}(컬러)</span></div>` : '';
                 
                 tableRowsHtml += `
                     <td class="right" rowspan="${custInsps.length}">
@@ -2751,31 +2798,28 @@ function openInvoiceModal(customerId, month) {
     document.getElementById('invIssueDate').textContent = `${issueDateArr[0]}년 ${issueDateArr[1]}월 ${issueDateArr[2]}일`;
     document.getElementById('invCustomerName').textContent = cust.name;
 
-    const contractBwLimit = cust.contractBw || 0;
-    const contractColorLimit = cust.contractColor || 0;
-    const overBwPrice = cust.overBwPrice || 0;
-    const overColorPrice = cust.overColorPrice || 0;
     const vatEnabled = cust.vatEnabled !== false;
-
-    let custBwUsage = 0;
-    let custColorUsage = 0;
-    let partsTotal = 0;
-
-    insps.forEach(insp => {
-        custBwUsage += insp.bwUsage;
-        custColorUsage += insp.colorUsage;
-    });
-
-    const bwOver = Math.max(0, custBwUsage - contractBwLimit);
-    const colorOver = Math.max(0, custColorUsage - contractColorLimit);
 
     let html = '';
     let subTotal = 0;
     let itemDate = month.split('-')[1] + '/-';
 
-    // 1. Devices (Base amounts)
+    // Group inspections by device
+    const deviceUsages = {};
+    insps.forEach(insp => {
+        if (!deviceUsages[insp.deviceId]) {
+            deviceUsages[insp.deviceId] = { bw: 0, color: 0, parts: [] };
+        }
+        deviceUsages[insp.deviceId].bw += insp.bwUsage;
+        deviceUsages[insp.deviceId].color += insp.colorUsage;
+        if (insp.parts) {
+            deviceUsages[insp.deviceId].parts.push(...insp.parts);
+        }
+    });
+
     if (cust.devices && cust.devices.length > 0) {
         cust.devices.forEach(dev => {
+            // 1. Base rent
             const price = dev.price || 0;
             if (price > 0) {
                 html += `
@@ -2791,56 +2835,46 @@ function openInvoiceModal(customerId, month) {
                 `;
                 subTotal += price;
             }
+
+            // 2. Overages
+            const usage = deviceUsages[dev.id] || { bw: 0, color: 0 };
+            const bwOver = Math.max(0, usage.bw - (dev.contractBw || 0));
+            const colorOver = Math.max(0, usage.color - (dev.contractColor || 0));
+            const overBwPrice = dev.overBwPrice || 0;
+            const overColorPrice = dev.overColorPrice || 0;
+
+            if (bwOver > 0 && overBwPrice > 0) {
+                const amt = bwOver * overBwPrice;
+                html += `
+                    <tr>
+                        <td>${itemDate}</td>
+                        <td class="text-left">${dev.name} 흑백 초과</td>
+                        <td>매</td>
+                        <td>${bwOver.toLocaleString()}</td>
+                        <td class="text-right">${overBwPrice.toLocaleString()}</td>
+                        <td class="text-right">${amt.toLocaleString()}</td>
+                        <td></td>
+                    </tr>
+                `;
+                subTotal += amt;
+            }
+
+            if (colorOver > 0 && overColorPrice > 0) {
+                const amt = colorOver * overColorPrice;
+                html += `
+                    <tr>
+                        <td>${itemDate}</td>
+                        <td class="text-left">${dev.name} 컬러 초과</td>
+                        <td>매</td>
+                        <td>${colorOver.toLocaleString()}</td>
+                        <td class="text-right">${overColorPrice.toLocaleString()}</td>
+                        <td class="text-right">${amt.toLocaleString()}</td>
+                        <td></td>
+                    </tr>
+                `;
+                subTotal += amt;
+            }
         });
-    } else {
-        const contractAmount = cust.contractAmount || 0;
-        if (contractAmount > 0) {
-            html += `
-                <tr>
-                    <td>${itemDate}</td>
-                    <td class="text-left">기본 임대료</td>
-                    <td>식</td>
-                    <td>1</td>
-                    <td class="text-right">${contractAmount.toLocaleString()}</td>
-                    <td class="text-right">${contractAmount.toLocaleString()}</td>
-                    <td></td>
-                </tr>
-            `;
-            subTotal += contractAmount;
-        }
-    }
-
-    // 2. Overage
-    if (bwOver > 0 && overBwPrice > 0) {
-        const amt = bwOver * overBwPrice;
-        html += `
-            <tr>
-                <td>${itemDate}</td>
-                <td class="text-left">추가요금 (흑백)</td>
-                <td>매</td>
-                <td>${bwOver.toLocaleString()}</td>
-                <td class="text-right">${overBwPrice.toLocaleString()}</td>
-                <td class="text-right">${amt.toLocaleString()}</td>
-                <td></td>
-            </tr>
-        `;
-        subTotal += amt;
-    }
-
-    if (colorOver > 0 && overColorPrice > 0) {
-        const amt = colorOver * overColorPrice;
-        html += `
-            <tr>
-                <td>${itemDate}</td>
-                <td class="text-left">추가요금 (컬러)</td>
-                <td>매</td>
-                <td>${colorOver.toLocaleString()}</td>
-                <td class="text-right">${overColorPrice.toLocaleString()}</td>
-                <td class="text-right">${amt.toLocaleString()}</td>
-                <td></td>
-            </tr>
-        `;
-        subTotal += amt;
     }
 
     // 3. Parts
