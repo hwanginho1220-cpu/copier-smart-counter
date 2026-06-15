@@ -1032,26 +1032,51 @@ function handleDeviceImageAdd(input) {
     files.forEach(file => {
         const reader = new FileReader();
         reader.onload = function(e) {
-            const imgData = e.target.result;
-            const thumb = document.createElement('div');
-            thumb.className = 'dev-image-thumb';
-            thumb.style.cssText = 'position:relative; width:70px; height:70px; border-radius:6px; border:1px solid var(--border-color); overflow:hidden; flex-shrink:0;';
-            thumb.dataset.img = encodeURIComponent(imgData);
-            thumb.innerHTML = `
-                <img src="${imgData}" style="width:100%;height:100%;object-fit:cover;">
-                <button type="button" onclick="removeDeviceImageThumb(this)" style="position:absolute;top:1px;right:1px;background:rgba(239,68,68,0.85);border:none;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;">
-                    <i class="fa-solid fa-xmark" style="color:#fff;font-size:9px;"></i>
-                </button>
-                <button type="button" onclick="extractSerialFromThumb(this)" style="position:absolute;bottom:1px;left:1px;background:rgba(16,185,129,0.88);border:none;border-radius:3px;font-size:8px;color:#fff;cursor:pointer;padding:1px 3px;font-weight:600;" title="이 사진에서 S/N 추출">
-                    OCR
-                </button>
-            `;
-            grid.appendChild(thumb);
+            // Compress image before storing to stay within Firestore 1MB limit
+            compressImage(e.target.result, 600, 0.65).then(compressed => {
+                const thumb = document.createElement('div');
+                thumb.className = 'dev-image-thumb';
+                thumb.style.cssText = 'position:relative; width:70px; height:70px; border-radius:6px; border:1px solid var(--border-color); overflow:hidden; flex-shrink:0;';
+                thumb.dataset.img = encodeURIComponent(compressed);
+                thumb.innerHTML = `
+                    <img src="${compressed}" style="width:100%;height:100%;object-fit:cover;">
+                    <button type="button" onclick="removeDeviceImageThumb(this)" style="position:absolute;top:1px;right:1px;background:rgba(239,68,68,0.85);border:none;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;">
+                        <i class="fa-solid fa-xmark" style="color:#fff;font-size:9px;"></i>
+                    </button>
+                    <button type="button" onclick="extractSerialFromThumb(this)" style="position:absolute;bottom:1px;left:1px;background:rgba(16,185,129,0.88);border:none;border-radius:3px;font-size:8px;color:#fff;cursor:pointer;padding:1px 3px;font-weight:600;" title="이 사진에서 S/N 추출">
+                        OCR
+                    </button>
+                `;
+                grid.appendChild(thumb);
+            });
         };
         reader.readAsDataURL(file);
     });
     // Reset so same file can be selected again
     input.value = '';
+}
+
+/**
+ * Compresses a base64 image to max maxSize px on longest side, JPEG quality 0~1.
+ * Returns a Promise<string> with the compressed base64 data URL.
+ */
+function compressImage(base64, maxSize = 600, quality = 0.65) {
+    return new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => {
+            let w = img.width, h = img.height;
+            if (w > maxSize || h > maxSize) {
+                if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+                else       { w = Math.round(w * maxSize / h); h = maxSize; }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => resolve(base64); // fallback
+        img.src = base64;
+    });
 }
 
 function removeDeviceImageThumb(btn) {
@@ -1171,7 +1196,16 @@ async function handleCustomerFormSubmit(e) {
 
     if (isCloudMode && db) {
         try {
-            await db.collection('customers').doc(targetId).set(customerData);
+            // Pre-compress any images that might exceed Firestore limits
+            const safeDevices = await Promise.all(devices.map(async dev => {
+                if (dev.images && dev.images.length > 0) {
+                    const compressed = await Promise.all(dev.images.map(img => compressImage(img, 500, 0.55)));
+                    return { ...dev, images: compressed };
+                }
+                return dev;
+            }));
+            const safeData = { ...customerData, devices: safeDevices };
+            await db.collection('customers').doc(targetId).set(safeData);
         } catch (err) {
             console.error("고객사 저장 중 오류:", err);
             alert("클라우드 저장에 실패했습니다: " + err.message);
