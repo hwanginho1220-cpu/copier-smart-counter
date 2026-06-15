@@ -2507,6 +2507,34 @@ function compressSerialImage(file) {
     });
 }
 
+function compressImage(base64Str, maxWidth = 600, quality = 0.6) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.src = base64Str;
+        img.onload = function() {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            
+            if (width > maxWidth) {
+                height *= maxWidth / width;
+                width = maxWidth;
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            const dataUrl = canvas.toDataURL('image/jpeg', quality);
+            resolve(dataUrl);
+        };
+        img.onerror = function(err) {
+            reject(err);
+        };
+    });
+}
+
 function openImageViewer(base64) {
     const backdrop = document.getElementById('imageViewerBackdrop');
     const img = document.getElementById('viewerImage');
