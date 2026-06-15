@@ -886,12 +886,28 @@ function addCustomerDeviceForm(device = null) {
                 <input type="text" class="form-control dev-serial" placeholder="예: SN12345678" value="${device ? device.serial : ''}">
             </div>
             <div class="form-group">
-                <label>기기별 단가 (기본료 외 추가시)</label>
+                <label>기기 임대료 (원)</label>
                 <input type="number" class="form-control dev-price" min="0" placeholder="예: 210000" value="${device ? device.price || 0 : 0}">
             </div>
         </div>
+        <div class="form-group" style="margin-top:0.5rem;">
+            <label>기기 / 일련번호 사진 첨부</label>
+            <input type="file" class="form-control" accept="image/*" onchange="handleDeviceImageChange(this)">
+            <input type="hidden" class="dev-image-data" value="${device && device.image ? device.image : ''}">
+            ${device && device.image ? `<div style="margin-top:0.5rem;"><img src="${device.image}" style="height:50px; border-radius:4px; border:1px solid #ccc;"></div>` : ''}
+        </div>
     `;
     container.appendChild(div);
+}
+
+function handleDeviceImageChange(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        input.parentElement.querySelector('.dev-image-data').value = e.target.result;
+    };
+    reader.readAsDataURL(file);
 }
 
 async function handleCustomerFormSubmit(e) {
@@ -919,7 +935,7 @@ async function handleCustomerFormSubmit(e) {
             model: entry.querySelector('.dev-model').value.trim(),
             serial: entry.querySelector('.dev-serial').value.trim(),
             price: parseInt(entry.querySelector('.dev-price').value, 10) || 0,
-            image: '' // image logic simplified or removed per device for now to focus on the form
+            image: entry.querySelector('.dev-image-data').value
         });
     });
 
@@ -1722,17 +1738,22 @@ function openDetailModal(customerId) {
 
     // Fill customer info
     document.getElementById('detailCustomerName').textContent = customer.name;
-    document.getElementById('detailCopierModel').textContent = customer.copierModel;
-    document.getElementById('detailSerial').textContent = customer.serialNumber || '-';
+    
+    const primaryDevice = customer.devices && customer.devices.length > 0 ? customer.devices[0] : customer;
+    
+    document.getElementById('detailCopierModel').textContent = primaryDevice.model || customer.copierModel || '-';
+    document.getElementById('detailSerial').textContent = primaryDevice.serial || customer.serialNumber || '-';
     document.getElementById('detailContact').textContent = customer.contact || '-';
     
     // Fill serial image thumbnail if exists
     const detailImgContainer = document.getElementById('detailSerialImageContainer');
     const detailImgEl = document.getElementById('detailSerialImage');
-    if (customer.serialImage) {
-        detailImgEl.src = customer.serialImage;
+    const imgData = primaryDevice.image || customer.serialImage;
+    
+    if (imgData) {
+        detailImgEl.src = imgData;
         detailImgContainer.style.display = 'block';
-        detailImgContainer.onclick = () => openImageViewer(customer.serialImage);
+        detailImgContainer.onclick = () => openImageViewer(imgData);
     } else {
         detailImgContainer.style.display = 'none';
         detailImgContainer.onclick = null;
