@@ -821,9 +821,13 @@ function renderCustomersTable() {
     
     // Filter customers
     const filtered = state.customers.filter(c => {
-        return c.name.toLowerCase().includes(query) || 
-               c.copierModel.toLowerCase().includes(query) ||
-               (c.serialNumber && c.serialNumber.toLowerCase().includes(query));
+        const queryMatchName = c.name.toLowerCase().includes(query);
+        const queryMatchDevice = c.devices && c.devices.some(d => 
+            (d.model && d.model.toLowerCase().includes(query)) || 
+            (d.serial && d.serial.toLowerCase().includes(query)) ||
+            (d.name && d.name.toLowerCase().includes(query))
+        );
+        return queryMatchName || queryMatchDevice;
     });
 
     if (filtered.length === 0) {
@@ -849,13 +853,32 @@ function renderCustomersTable() {
             isInspectedThisMonth = custInsps.some(i => i.date.startsWith(todayStr));
         }
 
+        let totalBw = 0;
+        let totalColor = 0;
+        let mainModel = '-';
+        let mainSerial = '-';
+
+        if (cust.devices && cust.devices.length > 0) {
+            const firstDev = cust.devices[0];
+            mainModel = firstDev.model || '-';
+            mainSerial = firstDev.serial || '-';
+            if (cust.devices.length > 1) {
+                mainModel += ` 외 ${cust.devices.length - 1}대`;
+            }
+            
+            cust.devices.forEach(d => {
+                totalBw += (d.contractBw || 0);
+                totalColor += (d.contractColor || 0);
+            });
+        }
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td data-label="고객사명"><span style="font-weight: 600; font-size:1rem; cursor:pointer; color:var(--primary);" onclick="openDetailModal('${cust.id}')">${cust.name}</span></td>
-            <td data-label="복사기 모델"><span style="font-weight:500;">${cust.copierModel}</span></td>
-            <td data-label="계약 흑백"><span style="font-weight: 500;">${(cust.contractBw || 0).toLocaleString()} 매</span></td>
-            <td data-label="계약 컬러"><span style="font-weight: 500; color: #c084fc;">${(cust.contractColor || 0).toLocaleString()} 매</span></td>
-            <td data-label="일련번호(S/N)"><code style="color:var(--text-secondary); font-family: monospace;">${cust.serialNumber || '-'}</code></td>
+            <td data-label="보유 기기"><span style="font-weight:500;">${mainModel}</span></td>
+            <td data-label="계약 흑백"><span style="font-weight: 500;">${totalBw.toLocaleString()} 매</span></td>
+            <td data-label="계약 컬러"><span style="font-weight: 500; color: #c084fc;">${totalColor.toLocaleString()} 매</span></td>
+            <td data-label="일련번호(S/N)"><code style="color:var(--text-secondary); font-family: monospace;">${mainSerial}</code></td>
             <td data-label="연락처">${cust.contact || '-'}</td>
             <td data-label="최근 점검일">${lastInspectionDate}</td>
             <td data-label="점검 여부">
@@ -1074,9 +1097,12 @@ function renderInspectionsTable() {
     const filtered = state.inspections.filter(insp => {
         const customer = state.customers.find(c => c.id === insp.customerId);
         const customerName = customer ? customer.name.toLowerCase() : '';
-        const modelName = customer ? customer.copierModel.toLowerCase() : '';
+        const dev = customer && customer.devices ? customer.devices.find(d => d.id === insp.deviceId) || customer.devices[0] : null;
         
-        const matchesQuery = customerName.includes(query) || modelName.includes(query);
+        const modelName = dev && dev.model ? dev.model.toLowerCase() : '';
+        const devName = dev && dev.name ? dev.name.toLowerCase() : '';
+        
+        const matchesQuery = customerName.includes(query) || modelName.includes(query) || devName.includes(query);
         const matchesMonth = monthFilter ? insp.date.startsWith(monthFilter) : true;
 
         return matchesQuery && matchesMonth;
@@ -1095,14 +1121,15 @@ function renderInspectionsTable() {
 
     filtered.forEach(insp => {
         const customer = state.customers.find(c => c.id === insp.customerId);
+        const dev = customer && customer.devices ? customer.devices.find(d => d.id === insp.deviceId) || customer.devices[0] : null;
         const customerName = customer ? customer.name : '알 수 없음';
-        const model = customer ? customer.copierModel : '-';
+        const model = dev ? (dev.model || dev.name) : '-';
 
         let bwBadge = '';
         if (insp.bwUsage > 0) {
             bwBadge = `<span class="badge badge-success">+${insp.bwUsage.toLocaleString()}</span>`;
-            if (customer && customer.contractBw > 0 && insp.bwUsage > customer.contractBw) {
-                const over = insp.bwUsage - customer.contractBw;
+            if (dev && dev.contractBw > 0 && insp.bwUsage > dev.contractBw) {
+                const over = insp.bwUsage - dev.contractBw;
                 bwBadge += `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
             }
         } else if (insp.bwUsage < 0) {
@@ -1114,8 +1141,8 @@ function renderInspectionsTable() {
         let colorBadge = '';
         if (insp.colorUsage > 0) {
             colorBadge = `<span class="badge badge-success" style="background:rgba(217,70,239,0.15); color:#f472b6;">+${insp.colorUsage.toLocaleString()}</span>`;
-            if (customer && customer.contractColor > 0 && insp.colorUsage > customer.contractColor) {
-                const over = insp.colorUsage - customer.contractColor;
+            if (dev && dev.contractColor > 0 && insp.colorUsage > dev.contractColor) {
+                const over = insp.colorUsage - dev.contractColor;
                 colorBadge += `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
             }
         } else if (insp.colorUsage < 0) {
