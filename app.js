@@ -3324,25 +3324,19 @@ function downloadReportImage() {
         adjustReportScale();
     }
 
-    // Give browser 400ms to repaint the report element to 820px scale before capturing
+    // Give browser 100ms to repaint the report element to 820px scale before capturing
     setTimeout(() => {
-        if (typeof html2canvas === 'undefined') {
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-            script.onload = runExport;
-            script.onerror = () => {
-                finalizeExport();
-                alert('이미지 생성 라이브러리를 로드할 수 없습니다. 대신 네이티브 인쇄 창을 띄웁니다.');
-                document.body.classList.add('print-report');
-                setTimeout(() => {
-                    window.print();
-                }, 50);
-            };
-            document.head.appendChild(script);
-        } else {
+        if (typeof html2canvas !== 'undefined') {
             runExport();
+        } else {
+            finalizeExport();
+            alert('이미지 생성 라이브러리를 로드할 수 없습니다. 대신 네이티브 인쇄 창을 띄웁니다.');
+            document.body.classList.add('print-report');
+            setTimeout(() => {
+                window.print();
+            }, 50);
         }
-    }, 400);
+    }, 100);
 }
 
 // ==========================================
