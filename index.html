@@ -529,6 +529,12 @@
                             구글 Firebase Firestore 연동을 설정하면 PC와 스마트폰 간에 실시간으로 데이터가 동기화됩니다.<br>
                             설정이 완료되면 기존 로컬 데이터가 자동으로 클라우드에 복사되어 연동됩니다.
                         </p>
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label for="fbConfigFileInput" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem;">
+                                <i class="fa-solid fa-file-arrow-up" style="color: var(--primary);"></i> 설정 파일 가져오기 (.js / .json / .txt)
+                            </label>
+                            <input type="file" id="fbConfigFileInput" class="form-control" accept=".js,.json,.txt" style="padding: 0.4rem 0.5rem; font-size: 0.85rem; height: auto;">
+                        </div>
                         <div class="form-group">
                             <label for="fbConfigJson">Firebase 웹 앱 설정 객체 (JSON) <span style="color:var(--danger)">*</span></label>
                             <textarea id="fbConfigJson" class="form-control" rows="7" required placeholder='{
@@ -631,9 +637,17 @@
                                 <input type="text" id="invConfAccHolder" class="form-control" placeholder="예: 하영통신" required>
                             </div>
                         </div>
-                        <div class="form-group" style="margin-bottom: 1.25rem;">
+                        <div class="form-group" style="margin-bottom: 1rem;">
                             <label for="invConfGreeting">하단 문구</label>
                             <input type="text" id="invConfGreeting" class="form-control" placeholder="예: 위와 같이 계산하오니 청구하여 주시기 바랍니다." required>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1.25rem;">
+                            <label for="invConfTheme">명세서 색상 테마</label>
+                            <select id="invConfTheme" class="form-control" style="background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color);">
+                                <option value="blue">Blue (기본 파란색)</option>
+                                <option value="slate">Slate (심플한 회색)</option>
+                                <option value="green">Green (차분한 초록색)</option>
+                            </select>
                         </div>
                         
                         <div class="modal-footer" style="padding: 1.25rem 0 0 0; border-top: none; justify-content: flex-end;">

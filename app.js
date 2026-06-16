@@ -22,7 +22,8 @@ const defaultInvoiceConfig = {
     bizItem: '사무기기',
     account: '국민은행 012345-01-678901',
     accHolder: '하영통신',
-    greeting: '위와 같이 계산하오니 청구하여 주시기 바랍니다.'
+    greeting: '위와 같이 계산하오니 청구하여 주시기 바랍니다.',
+    theme: 'blue'
 };
 
 let invoiceConfig = {...defaultInvoiceConfig};
@@ -316,6 +317,30 @@ function setupEventListeners() {
     }
     document.getElementById('firebaseConfigForm').addEventListener('submit', handleFirebaseConfigSubmit);
     document.getElementById('clearFirebaseConfigBtn').addEventListener('click', clearFirebaseConfig);
+
+    const fbConfigFileInput = document.getElementById('fbConfigFileInput');
+    if (fbConfigFileInput) {
+        fbConfigFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const text = evt.target.result;
+                try {
+                    const parsed = parseFirebaseConfig(text);
+                    document.getElementById('fbConfigJson').value = JSON.stringify(parsed, null, 2);
+                    
+                    const testResult = document.getElementById('firebaseConnectionTestResult');
+                    testResult.style.display = 'block';
+                    testResult.className = 'success';
+                    testResult.innerHTML = '<i class="fa-solid fa-circle-check"></i> 파일에서 설정을 성공적으로 읽어왔습니다. [연동 및 저장]을 클릭하여 완료해주세요.';
+                } catch (err) {
+                    alert('설정 파일을 분석하지 못했습니다. 형식을 확인해주세요.\n(' + err.message + ')');
+                }
+            };
+            reader.readAsText(file);
+        });
+    }
 
     // Serial Image Upload Trigger
     document.getElementById('serialImageInput').addEventListener('change', async (e) => {
@@ -2483,6 +2508,9 @@ function fillInvoiceConfigInputs() {
     
     const greeting = document.getElementById('invConfGreeting');
     if (greeting) greeting.value = invoiceConfig.greeting || '';
+
+    const theme = document.getElementById('invConfTheme');
+    if (theme) theme.value = invoiceConfig.theme || 'blue';
 }
 
 window.handleInvoiceConfigSubmit = async function(e) {
@@ -2497,7 +2525,8 @@ window.handleInvoiceConfigSubmit = async function(e) {
         bizItem: document.getElementById('invConfBizItem').value.trim(),
         account: document.getElementById('invConfAccount').value.trim(),
         accHolder: document.getElementById('invConfAccHolder').value.trim(),
-        greeting: document.getElementById('invConfGreeting').value.trim()
+        greeting: document.getElementById('invConfGreeting').value.trim(),
+        theme: document.getElementById('invConfTheme') ? document.getElementById('invConfTheme').value : 'blue'
     };
 
     invoiceConfig = config;
@@ -2572,6 +2601,40 @@ window.switchSettingsTab = function(tabName) {
     if (invoiceTab) invoiceTab.style.display = tabName === 'invoice' ? 'block' : 'none';
 };
 
+function parseFirebaseConfig(text) {
+    text = text.trim();
+    
+    // 1. If it's already a valid JSON, parse it
+    try {
+        const obj = JSON.parse(text);
+        if (obj && typeof obj === 'object' && obj.apiKey) {
+            return obj;
+        }
+    } catch (e) {
+        // Fallback to regex parser
+    }
+
+    // 2. Parse via Regex to support arbitrary JS object copied directly from Firebase console
+    const keys = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId', 'measurementId'];
+    const config = {};
+    let found = false;
+
+    keys.forEach(key => {
+        const regex = new RegExp(`['"]?${key}['"]?\\s*:\\s*['"]([^'"]+)['"]`, 'i');
+        const match = text.match(regex);
+        if (match && match[1]) {
+            config[key] = match[1].trim();
+            found = true;
+        }
+    });
+
+    if (found && config.apiKey && config.projectId) {
+        return config;
+    }
+
+    throw new Error("올바른 Firebase 설정 형식이 아닙니다. apiKey 및 projectId 등을 포함해야 합니다.");
+}
+
 async function handleFirebaseConfigSubmit(e) {
     e.preventDefault();
     const configInput = document.getElementById('fbConfigJson').value.trim();
@@ -2585,10 +2648,11 @@ async function handleFirebaseConfigSubmit(e) {
 
     let config;
     try {
-        config = JSON.parse(configInput);
+        config = parseFirebaseConfig(configInput);
+        document.getElementById('fbConfigJson').value = JSON.stringify(config, null, 2);
     } catch (err) {
         testResult.className = 'error';
-        testResult.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 올바른 JSON 형식이 아닙니다. 괄호와 쉼표를 확인해 주세요.';
+        testResult.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 올바른 Firebase 설정 형식이 아닙니다. 자바스크립트 객체 또는 JSON을 복사했는지 확인해주세요.';
         saveBtn.disabled = false;
         return;
     }
@@ -3211,11 +3275,14 @@ function downloadReportImage() {
         const opt = {
             scale: 2, 
             useCORS: true, 
+            allowTaint: true,
             letterRendering: true,
             scrollX: 0,
             scrollY: 0,
             width: 820,
-            windowWidth: 820
+            height: element.scrollHeight,
+            windowWidth: 820,
+            windowHeight: element.scrollHeight
         };
 
         // 3. Export Image using html2canvas directly
@@ -3685,6 +3752,17 @@ async function handleManualInvoiceFormSubmit(e) {
 function applyInvoiceConfigToElement(container) {
     if (!container) return;
     
+    // Apply color theme class
+    const invoiceEl = container.classList.contains('traditional-invoice') 
+        ? container 
+        : container.querySelector('.traditional-invoice');
+    
+    if (invoiceEl) {
+        invoiceEl.classList.remove('theme-blue', 'theme-slate', 'theme-green');
+        const theme = invoiceConfig.theme || 'blue';
+        invoiceEl.classList.add('theme-' + theme);
+    }
+    
     const regNo = container.querySelector('#invSupplierRegNo');
     if (regNo) regNo.textContent = invoiceConfig.regNo || '';
     
@@ -3978,7 +4056,7 @@ function generateInvoiceHtmlForCustomer(cust, month) {
     }
 
     return `
-        <div class="bulk-invoice-page traditional-invoice">
+        <div class="bulk-invoice-page traditional-invoice theme-${invoiceConfig.theme || 'blue'}">
             <div class="ti-header">
                 <h1 class="ti-title">거 래 명 세 표</h1>
                 <div class="ti-supplier-area">
