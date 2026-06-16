@@ -10,6 +10,22 @@ let state = {
 // Storage keys
 const STORAGE_KEY = 'smartcounter_data';
 const FIREBASE_CONFIG_KEY = 'smartcounter_firebase_config';
+const INVOICE_CONFIG_KEY = 'smartcounter_invoice_config';
+
+const defaultInvoiceConfig = {
+    regNo: '119-20-43750',
+    name: '하영통신',
+    ceo: '황인호',
+    stampText: '하영통신',
+    address: '서울 금천구 독산동 146-24 (2층)',
+    bizType: '도소매',
+    bizItem: '사무기기',
+    account: '국민은행 012345-01-678901',
+    accHolder: '하영통신',
+    greeting: '위와 같이 계산하오니 청구하여 주시기 바랍니다.'
+};
+
+let invoiceConfig = {...defaultInvoiceConfig};
 
 // Navigation & Active View
 let currentView = 'dashboard';
@@ -23,6 +39,7 @@ let isCloudMode = false;
 let customersUnsubscribe = null;
 let inspectionsUnsubscribe = null;
 let partsUnsubscribe = null;
+let settingsUnsubscribe = null;
 
 // Local cache to prevent remote snapshots from dropping newly saved inspections during race condition sync
 let lastSavedInspections = {};
@@ -72,8 +89,24 @@ function showToast(message, type = 'info') {
     setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = '0.3s'; setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
+// Load Invoice Configuration from localStorage
+function loadInvoiceConfig() {
+    const saved = localStorage.getItem(INVOICE_CONFIG_KEY);
+    if (saved) {
+        try {
+            invoiceConfig = JSON.parse(saved);
+        } catch (e) {
+            console.error('명세서 설정 파싱 실패:', e);
+            invoiceConfig = {...defaultInvoiceConfig};
+        }
+    } else {
+        invoiceConfig = {...defaultInvoiceConfig};
+    }
+}
+
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
+    loadInvoiceConfig();
     initFirebase();
     setupEventListeners();
     initDateInputs();
@@ -343,7 +376,10 @@ function initDateInputs() {
     
     // Set default month filter to current year/month
     const currentYearMonth = today.substring(0, 7); // "YYYY-MM"
-    // document.getElementById('inspectionMonthFilter').value = currentYearMonth; // Default to empty (all views)
+    const inspectionMonthFilter = document.getElementById('inspectionMonthFilter');
+    if (inspectionMonthFilter) {
+        inspectionMonthFilter.value = currentYearMonth;
+    }
     
     const reportMonthFilter = document.getElementById('reportMonthFilter');
     if (reportMonthFilter) {
@@ -395,6 +431,12 @@ function switchView(viewName) {
         viewTitle.textContent = '점검 대장';
         viewSubtitle.textContent = '월별 전체 복사기 점검 내역 및 사용량 증감';
         headerActionBtn.innerHTML = '<i class="fa-solid fa-file-signature"></i><span>점검 기록 등록</span>';
+        const inspectionMonthFilter = document.getElementById('inspectionMonthFilter');
+        if (inspectionMonthFilter) {
+            const today = new Date().toISOString().split('T')[0];
+            const currentYearMonth = today.substring(0, 7);
+            inspectionMonthFilter.value = currentYearMonth;
+        }
         renderInspectionsTable();
     } else if (viewName === 'parts') {
         viewTitle.textContent = '부품 관리';
@@ -2308,6 +2350,7 @@ function setupFirebaseListeners() {
     if (customersUnsubscribe) customersUnsubscribe();
     if (inspectionsUnsubscribe) inspectionsUnsubscribe();
     if (partsUnsubscribe) partsUnsubscribe();
+    if (settingsUnsubscribe) settingsUnsubscribe();
 
     customersUnsubscribe = db.collection('customers').onSnapshot(snapshot => {
         const customersList = [];
@@ -2367,6 +2410,20 @@ function setupFirebaseListeners() {
         console.error("부품 동기화 실패:", error);
         updateSyncStatusUI(error);
     });
+
+    settingsUnsubscribe = db.collection('settings').doc('invoiceConfig').onSnapshot(doc => {
+        if (doc.exists) {
+            invoiceConfig = doc.data();
+            localStorage.setItem(INVOICE_CONFIG_KEY, JSON.stringify(invoiceConfig));
+            fillInvoiceConfigInputs();
+            const invoiceModal = document.getElementById('invoiceModalBackdrop');
+            if (invoiceModal && invoiceModal.classList.contains('active')) {
+                applyInvoiceConfigToElement(document.getElementById('invoicePrintArea'));
+            }
+        }
+    }, error => {
+        console.error("명세서 설정 동기화 실패:", error);
+    });
 }
 
 function updateSyncStatusUI(error = null) {
@@ -2396,6 +2453,74 @@ function updateSyncStatusUI(error = null) {
     }
 }
 
+function fillInvoiceConfigInputs() {
+    const regNo = document.getElementById('invConfRegNo');
+    if (regNo) regNo.value = invoiceConfig.regNo || '';
+    
+    const name = document.getElementById('invConfName');
+    if (name) name.value = invoiceConfig.name || '';
+    
+    const ceo = document.getElementById('invConfCeo');
+    if (ceo) ceo.value = invoiceConfig.ceo || '';
+    
+    const stampText = document.getElementById('invConfStampText');
+    if (stampText) stampText.value = invoiceConfig.stampText || '';
+    
+    const address = document.getElementById('invConfAddress');
+    if (address) address.value = invoiceConfig.address || '';
+    
+    const bizType = document.getElementById('invConfBizType');
+    if (bizType) bizType.value = invoiceConfig.bizType || '';
+    
+    const bizItem = document.getElementById('invConfBizItem');
+    if (bizItem) bizItem.value = invoiceConfig.bizItem || '';
+    
+    const account = document.getElementById('invConfAccount');
+    if (account) account.value = invoiceConfig.account || '';
+    
+    const accHolder = document.getElementById('invConfAccHolder');
+    if (accHolder) accHolder.value = invoiceConfig.accHolder || '';
+    
+    const greeting = document.getElementById('invConfGreeting');
+    if (greeting) greeting.value = invoiceConfig.greeting || '';
+}
+
+window.handleInvoiceConfigSubmit = async function(e) {
+    e.preventDefault();
+    const config = {
+        regNo: document.getElementById('invConfRegNo').value.trim(),
+        name: document.getElementById('invConfName').value.trim(),
+        ceo: document.getElementById('invConfCeo').value.trim(),
+        stampText: document.getElementById('invConfStampText').value.trim(),
+        address: document.getElementById('invConfAddress').value.trim(),
+        bizType: document.getElementById('invConfBizType').value.trim(),
+        bizItem: document.getElementById('invConfBizItem').value.trim(),
+        account: document.getElementById('invConfAccount').value.trim(),
+        accHolder: document.getElementById('invConfAccHolder').value.trim(),
+        greeting: document.getElementById('invConfGreeting').value.trim()
+    };
+
+    invoiceConfig = config;
+    localStorage.setItem(INVOICE_CONFIG_KEY, JSON.stringify(config));
+
+    if (isCloudMode && db) {
+        try {
+            await db.collection('settings').doc('invoiceConfig').set(config);
+        } catch (err) {
+            console.error("명세서 설정 클라우드 저장 실패:", err);
+            alert("클라우드 저장에 실패했습니다. 로컬 브라우저에는 저장되었습니다.");
+        }
+    }
+
+    alert('명세서 설정이 성공적으로 저장되었습니다!');
+    closeFirebaseModal();
+    
+    const invoiceModal = document.getElementById('invoiceModalBackdrop');
+    if (invoiceModal && invoiceModal.classList.contains('active')) {
+        applyInvoiceConfigToElement(document.getElementById('invoicePrintArea'));
+    }
+};
+
 function openFirebaseModal() {
     const modal = document.getElementById('firebaseModalBackdrop');
     const configInput = document.getElementById('fbConfigJson');
@@ -2415,6 +2540,7 @@ function openFirebaseModal() {
     }
     
     updateSyncStatusUI();
+    fillInvoiceConfigInputs();
     
     // Always default to the cloud tab when opening settings modal
     if (window.switchSettingsTab) {
@@ -2432,22 +2558,18 @@ function closeFirebaseModal() {
 window.switchSettingsTab = function(tabName) {
     const cloudBtn = document.getElementById('settingsTabCloudBtn');
     const backupBtn = document.getElementById('settingsTabBackupBtn');
+    const invoiceBtn = document.getElementById('settingsTabInvoiceBtn');
     const cloudTab = document.getElementById('settingsTabCloud');
     const backupTab = document.getElementById('settingsTabBackup');
+    const invoiceTab = document.getElementById('settingsTabInvoice');
 
-    if (!cloudBtn || !backupBtn || !cloudTab || !backupTab) return;
+    if (cloudBtn) cloudBtn.classList.toggle('active', tabName === 'cloud');
+    if (backupBtn) backupBtn.classList.toggle('active', tabName === 'backup');
+    if (invoiceBtn) invoiceBtn.classList.toggle('active', tabName === 'invoice');
 
-    if (tabName === 'cloud') {
-        cloudBtn.classList.add('active');
-        backupBtn.classList.remove('active');
-        cloudTab.style.display = 'block';
-        backupTab.style.display = 'none';
-    } else if (tabName === 'backup') {
-        cloudBtn.classList.remove('active');
-        backupBtn.classList.add('active');
-        cloudTab.style.display = 'none';
-        backupTab.style.display = 'block';
-    }
+    if (cloudTab) cloudTab.style.display = tabName === 'cloud' ? 'block' : 'none';
+    if (backupTab) backupTab.style.display = tabName === 'backup' ? 'block' : 'none';
+    if (invoiceTab) invoiceTab.style.display = tabName === 'invoice' ? 'block' : 'none';
 };
 
 async function handleFirebaseConfigSubmit(e) {
@@ -2566,6 +2688,10 @@ function clearFirebaseConfig() {
     if (partsUnsubscribe) {
         partsUnsubscribe();
         partsUnsubscribe = null;
+    }
+    if (settingsUnsubscribe) {
+        settingsUnsubscribe();
+        settingsUnsubscribe = null;
     }
 
     if (firebase.apps.length > 0) {
@@ -3180,6 +3306,8 @@ function openInvoiceModal(customerId, month) {
     const cust = state.customers.find(c => c.id === customerId);
     if (!cust) return;
 
+    applyInvoiceConfigToElement(document.getElementById('invoicePrintArea'));
+
     const counterArea = document.getElementById('invCounterArea');
     if (counterArea) counterArea.style.display = 'block';
 
@@ -3554,9 +3682,49 @@ async function handleManualInvoiceFormSubmit(e) {
     openManualInvoice(custId, month, vatEnabled, items);
 }
 
+function applyInvoiceConfigToElement(container) {
+    if (!container) return;
+    
+    const regNo = container.querySelector('#invSupplierRegNo');
+    if (regNo) regNo.textContent = invoiceConfig.regNo || '';
+    
+    const name = container.querySelector('#invSupplierName');
+    if (name) name.textContent = invoiceConfig.name || '';
+    
+    const ceo = container.querySelector('#invSupplierCeo');
+    if (ceo) ceo.textContent = invoiceConfig.ceo || '';
+    
+    const stamp = container.querySelector('#invSupplierStamp');
+    if (stamp) {
+        const text = invoiceConfig.stampText || '하영통신';
+        if (text.length === 4) {
+            stamp.innerHTML = `${text.substring(0, 2)}<br>${text.substring(2, 4)}<br>인`;
+        } else {
+            stamp.innerHTML = text.split('').join('<br>');
+        }
+    }
+    
+    const address = container.querySelector('#invSupplierAddress');
+    if (address) address.textContent = invoiceConfig.address || '';
+    
+    const bizType = container.querySelector('#invSupplierBizType');
+    if (bizType) bizType.textContent = invoiceConfig.bizType || '';
+    
+    const bizItem = container.querySelector('#invSupplierBizItem');
+    if (bizItem) bizItem.textContent = invoiceConfig.bizItem || '';
+    
+    const greeting = container.querySelector('#invFooterGreeting');
+    if (greeting) greeting.textContent = invoiceConfig.greeting || '';
+    
+    const account = container.querySelector('#invFooterAccount');
+    if (account) account.textContent = `${invoiceConfig.account || ''} (예금주: ${invoiceConfig.accHolder || ''})`;
+}
+
 function openManualInvoice(customerId, month, vatEnabled, items) {
     const cust = state.customers.find(c => c.id === customerId);
     if (!cust) return;
+
+    applyInvoiceConfigToElement(document.getElementById('invoicePrintArea'));
 
     const issueDateStr = new Date().toISOString().split('T')[0];
     const issueDateArr = issueDateStr.split('-');
@@ -3801,6 +3969,14 @@ function generateInvoiceHtmlForCustomer(cust, month) {
     });
     counterHtml += `</table>`;
 
+    const stampText = invoiceConfig.stampText || '하영통신';
+    let stampHtml = '';
+    if (stampText.length === 4) {
+        stampHtml = `${stampText.substring(0, 2)}<br>${stampText.substring(2, 4)}<br>인`;
+    } else {
+        stampHtml = stampText.split('').join('<br>');
+    }
+
     return `
         <div class="bulk-invoice-page traditional-invoice">
             <div class="ti-header">
@@ -3810,30 +3986,30 @@ function generateInvoiceHtmlForCustomer(cust, month) {
                     <table class="ti-supplier-table">
                         <tr>
                             <th>등록번호</th>
-                            <td colspan="3" style="font-weight: bold; font-size: 1.1em; letter-spacing: 2px;">119-20-43750</td>
+                            <td colspan="3" style="font-weight: bold; font-size: 1.1em; letter-spacing: 2px;">${invoiceConfig.regNo || ''}</td>
                         </tr>
                         <tr>
                             <th>상호<br>(법인명)</th>
-                            <td style="font-weight: bold;">하영통신</td>
+                            <td style="font-weight: bold;">${invoiceConfig.name || ''}</td>
                             <th>성명<br>(대표자)</th>
                             <td style="position: relative; padding-right: 40px;">
-                                <span style="font-weight: bold;">황인호</span>
+                                <span style="font-weight: bold;">${invoiceConfig.ceo || ''}</span>
                                 <div class="ti-stamp">
                                     <div class="ti-stamp-inner">
-                                        하영<br>통신<br>인
+                                        ${stampHtml}
                                     </div>
                                 </div>
                             </td>
                         </tr>
                         <tr>
                             <th>사업장<br>소재지</th>
-                            <td colspan="3">서울 금천구 독산동 146-24 (2층)</td>
+                            <td colspan="3">${invoiceConfig.address || ''}</td>
                         </tr>
                         <tr>
                             <th>업태</th>
-                            <td>도소매</td>
+                            <td>${invoiceConfig.bizType || ''}</td>
                             <th>종목</th>
-                            <td>사무기기</td>
+                            <td>${invoiceConfig.bizItem || ''}</td>
                         </tr>
                     </table>
                 </div>
@@ -3876,8 +4052,8 @@ function generateInvoiceHtmlForCustomer(cust, month) {
             </div>
 
             <div class="ti-footer">
-                <p>위와 같이 계산하오니 청구하여 주시기 바랍니다.</p>
-                <p class="ti-account"><strong>국민은행 012345-01-678901 (예금주: 하영통신)</strong></p>
+                <p>${invoiceConfig.greeting || ''}</p>
+                <p class="ti-account"><strong>${invoiceConfig.account || ''} (예금주: ${invoiceConfig.accHolder || ''})</strong></p>
             </div>
         </div>
     `;

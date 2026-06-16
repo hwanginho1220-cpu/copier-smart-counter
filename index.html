@@ -516,6 +516,9 @@
                 <button type="button" id="settingsTabBackupBtn" class="modal-tab-btn" onclick="switchSettingsTab('backup')">
                     <i class="fa-solid fa-database"></i> 데이터 관리
                 </button>
+                <button type="button" id="settingsTabInvoiceBtn" class="modal-tab-btn" onclick="switchSettingsTab('invoice')">
+                    <i class="fa-solid fa-file-invoice-dollar"></i> 명세서 설정
+                </button>
             </div>
             
             <div class="modal-body" style="padding: 1.25rem 1.5rem 1.5rem 1.5rem;">
@@ -579,6 +582,66 @@
                         </button>
                     </div>
                 </div>
+                
+                <!-- Tab Panel 3: Invoice Template Settings -->
+                <div id="settingsTabInvoice" class="settings-tab-panel" style="display:none;">
+                    <form id="invoiceConfigForm" onsubmit="handleInvoiceConfigSubmit(event)">
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.6;">
+                            거래명세표에 표시될 공급자 정보 및 기본 설정을 변경할 수 있습니다.
+                        </p>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+                            <div class="form-group">
+                                <label for="invConfRegNo">등록번호</label>
+                                <input type="text" id="invConfRegNo" class="form-control" placeholder="예: 119-20-43750" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="invConfName">상호(법인명)</label>
+                                <input type="text" id="invConfName" class="form-control" placeholder="예: 하영통신" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="invConfCeo">성명(대표자)</label>
+                                <input type="text" id="invConfCeo" class="form-control" placeholder="예: 황인호" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="invConfStampText">도장 표시 문구 (4글자)</label>
+                                <input type="text" id="invConfStampText" class="form-control" placeholder="예: 하영통신" maxlength="4" required style="text-align:center;">
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label for="invConfAddress">사업장 소재지</label>
+                            <input type="text" id="invConfAddress" class="form-control" placeholder="예: 서울 금천구 독산동 146-24 (2층)" required>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+                            <div class="form-group">
+                                <label for="invConfBizType">업태</label>
+                                <input type="text" id="invConfBizType" class="form-control" placeholder="예: 도소매" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="invConfBizItem">종목</label>
+                                <input type="text" id="invConfBizItem" class="form-control" placeholder="예: 사무기기" required>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+                            <div class="form-group">
+                                <label for="invConfAccount">계좌번호 (은행명 포함)</label>
+                                <input type="text" id="invConfAccount" class="form-control" placeholder="예: 국민은행 012345-01-678901" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="invConfAccHolder">예금주</label>
+                                <input type="text" id="invConfAccHolder" class="form-control" placeholder="예: 하영통신" required>
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1.25rem;">
+                            <label for="invConfGreeting">하단 문구</label>
+                            <input type="text" id="invConfGreeting" class="form-control" placeholder="예: 위와 같이 계산하오니 청구하여 주시기 바랍니다." required>
+                        </div>
+                        
+                        <div class="modal-footer" style="padding: 1.25rem 0 0 0; border-top: none; justify-content: flex-end;">
+                            <button type="button" class="btn btn-secondary" onclick="closeFirebaseModal()" style="margin-right: 0.5rem;">취소</button>
+                            <button type="submit" class="btn btn-primary">설정 저장</button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
@@ -602,16 +665,16 @@
                                 <table class="ti-supplier-table">
                                     <tr>
                                         <th>등록번호</th>
-                                        <td colspan="3" style="font-weight: bold; font-size: 1.1em; letter-spacing: 2px;">119-20-43750</td>
+                                        <td colspan="3" id="invSupplierRegNo" style="font-weight: bold; font-size: 1.1em; letter-spacing: 2px;">119-20-43750</td>
                                     </tr>
                                     <tr>
                                         <th>상호<br>(법인명)</th>
-                                        <td style="font-weight: bold;">하영통신</td>
+                                        <td id="invSupplierName" style="font-weight: bold;">하영통신</td>
                                         <th>성명<br>(대표자)</th>
                                         <td style="position: relative; padding-right: 40px;">
-                                            <span style="font-weight: bold;">황인호</span>
+                                            <span id="invSupplierCeo" style="font-weight: bold;">황인호</span>
                                             <div class="ti-stamp">
-                                                <div class="ti-stamp-inner">
+                                                <div id="invSupplierStamp" class="ti-stamp-inner">
                                                     하영<br>통신<br>인
                                                 </div>
                                             </div>
@@ -619,13 +682,13 @@
                                     </tr>
                                     <tr>
                                         <th>사업장<br>소재지</th>
-                                        <td colspan="3">서울 금천구 독산동 146-24 (2층)</td>
+                                        <td colspan="3" id="invSupplierAddress">서울 금천구 독산동 146-24 (2층)</td>
                                     </tr>
                                     <tr>
                                         <th>업태</th>
-                                        <td>도소매</td>
+                                        <td id="invSupplierBizType">도소매</td>
                                         <th>종목</th>
-                                        <td>사무기기</td>
+                                        <td id="invSupplierBizItem">사무기기</td>
                                     </tr>
                                 </table>
                             </div>
@@ -668,8 +731,8 @@
                         </div>
 
                         <div class="ti-footer">
-                            <p>위와 같이 계산하오니 청구하여 주시기 바랍니다.</p>
-                            <p class="ti-account"><strong>국민은행 012345-01-678901 (예금주: 하영통신)</strong></p>
+                            <p id="invFooterGreeting">위와 같이 계산하오니 청구하여 주시기 바랍니다.</p>
+                            <p class="ti-account"><strong id="invFooterAccount">국민은행 012345-01-678901 (예금주: 하영통신)</strong></p>
                         </div>
                     </div>
                 </div>
