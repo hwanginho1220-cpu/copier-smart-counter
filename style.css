@@ -1694,8 +1694,293 @@ select.form-control option {
     font-weight: bold;
 }
 
-         b o r d e r - r a d i u s :   2 0 p x ; 
-         b o r d e r :   1 p x   s o l i d   # b f d b f e ; 
- } 
-  
- 
+/* - - - Traditional Invoice (Korean) Styles - - - */
+.traditional-invoice {
+    --ti-primary: #3b82f6;
+    --ti-primary-dark: #1e3a8a;
+    --ti-border: #bfdbfe;
+    --ti-bg: #eff6ff;
+    --ti-bg-even: #f8fafc;
+
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    color: #0f172a !important;
+    background: #ffffff !important;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.traditional-invoice.theme-slate {
+    --ti-primary: #64748b;
+    --ti-primary-dark: #334155;
+    --ti-border: #cbd5e1;
+    --ti-bg: #f1f5f9;
+    --ti-bg-even: #f8fafc;
+}
+
+.traditional-invoice.theme-green {
+    --ti-primary: #10b981;
+    --ti-primary-dark: #064e3b;
+    --ti-border: #a7f3d0;
+    --ti-bg: #ecfdf5;
+    --ti-bg-even: #fafdfb;
+}
+
+/* Force Light Theme Colors and borders to override global Dark Mode */
+.traditional-invoice,
+.traditional-invoice div,
+.traditional-invoice p,
+.traditional-invoice span,
+.traditional-invoice strong {
+    color: #0f172a !important;
+}
+
+.traditional-invoice table,
+.traditional-invoice tr,
+.traditional-invoice th,
+.traditional-invoice td {
+    color: #0f172a !important;
+    border-color: var(--ti-border) !important;
+    background: transparent !important;
+}
+
+.ti-header {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.ti-title {
+    text-align: center;
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: 15px;
+    margin: 0 0 15px 0;
+    padding-bottom: 10px;
+    border-bottom: 3px double var(--ti-primary) !important;
+    color: var(--ti-primary-dark) !important;
+}
+
+.ti-supplier-area {
+    display: flex;
+    border: 2px solid var(--ti-primary) !important;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.ti-vertical-label {
+    width: 40px;
+    background: var(--ti-bg) !important;
+    border-right: 1px solid var(--ti-primary) !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: var(--ti-primary-dark) !important;
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+    letter-spacing: 5px;
+    padding: 10px 0;
+}
+
+.ti-supplier-table {
+    flex: 1;
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.ti-supplier-table th, .ti-supplier-table td {
+    border: 1px solid var(--ti-border) !important;
+    padding: 6px 8px;
+    font-size: 0.85rem;
+}
+
+.ti-supplier-table th {
+    background: var(--ti-bg) !important;
+    text-align: center;
+    color: var(--ti-primary-dark) !important;
+    width: 80px;
+}
+
+.ti-stamp {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 45px;
+    height: 45px;
+    border: 2px solid #ef4444 !important;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ti-stamp-inner {
+    font-family: "Gungsuh", serif;
+    color: #ef4444 !important;
+    font-size: 0.8rem;
+    font-weight: bold;
+    text-align: center;
+    line-height: 1.1;
+    letter-spacing: -1px;
+}
+
+.ti-customer-area {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--ti-primary) !important;
+}
+
+.ti-date {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-right: 20px;
+}
+
+.ti-customer {
+    flex: 1;
+    font-size: 1.2rem;
+}
+
+.ti-customer-name {
+    font-weight: 800;
+    font-size: 1.4rem;
+}
+
+.ti-customer-suffix {
+    font-size: 1rem;
+    margin-left: 5px;
+}
+
+.ti-total-amount {
+    display: flex;
+    align-items: center;
+    background: var(--ti-bg) !important;
+    padding: 8px 15px;
+    border-radius: 4px;
+    border: 1px solid var(--ti-border) !important;
+}
+
+.ti-amount-label {
+    font-size: 0.85rem;
+    color: var(--ti-primary-dark) !important;
+    margin-right: 10px;
+    font-weight: 600;
+}
+
+.ti-amount-text {
+    font-weight: bold;
+    font-size: 1.1rem;
+    margin-right: 15px;
+}
+
+.ti-amount-num {
+    font-weight: 800;
+    font-size: 1.3rem;
+    color: #ef4444 !important;
+}
+
+.ti-item-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    border-top: 2px solid var(--ti-primary) !important;
+    border-bottom: 2px solid var(--ti-primary) !important;
+}
+
+.ti-item-table th, .ti-item-table td {
+    border: 1px solid var(--ti-border) !important;
+    padding: 8px;
+    font-size: 0.85rem;
+}
+
+.ti-item-table th {
+    background: var(--ti-bg) !important;
+    color: var(--ti-primary-dark) !important;
+    text-align: center;
+    font-weight: 600;
+}
+
+.ti-item-table td {
+    text-align: right;
+}
+
+.ti-item-table td:nth-child(1),
+.ti-item-table td:nth-child(2),
+.ti-item-table td:nth-child(3),
+.ti-item-table td:nth-child(7) {
+    text-align: center;
+}
+
+.ti-item-table tbody tr:nth-child(even) {
+    background-color: var(--ti-bg-even) !important;
+}
+
+.ti-item-table tfoot th {
+    text-align: center;
+    background: #f1f5f9 !important;
+    color: #334155 !important;
+}
+
+.ti-item-table tfoot td {
+    font-weight: bold;
+    background: #f1f5f9 !important;
+}
+
+.ti-counter-area {
+    margin-bottom: 20px;
+    border: 1px solid var(--ti-border) !important;
+    border-radius: 4px;
+    padding: 15px;
+    background: #fafafa !important;
+}
+
+.ti-counter-title {
+    font-weight: 600;
+    color: var(--ti-primary-dark) !important;
+    margin-bottom: 10px;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ti-counter-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.ti-counter-table th, .ti-counter-table td {
+    border: 1px solid var(--ti-border) !important;
+    padding: 6px;
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+.ti-counter-table th {
+    background: #f1f5f9 !important;
+    color: #475569 !important;
+}
+
+.ti-footer {
+    text-align: center;
+    font-size: 0.95rem;
+    color: #334155 !important;
+    padding-top: 15px;
+}
+
+.ti-account {
+    margin-top: 10px;
+    font-size: 1.1rem;
+    color: #0f172a !important;
+    background: var(--ti-bg) !important;
+    display: inline-block;
+    padding: 8px 20px;
+    border-radius: 20px;
+    border: 1px solid var(--ti-border) !important;
+}

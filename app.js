@@ -383,7 +383,10 @@ function setupEventListeners() {
     const printReportBtn = document.getElementById('printReportBtn');
     if (printReportBtn) {
         printReportBtn.addEventListener('click', () => {
-            window.print();
+            document.body.classList.add('print-report');
+            setTimeout(() => {
+                window.print();
+            }, 50);
         });
     }
     // Window resize event for report scaling
@@ -3275,7 +3278,6 @@ function downloadReportImage() {
         const opt = {
             scale: 2, 
             useCORS: true, 
-            allowTaint: true,
             letterRendering: true,
             scrollX: 0,
             scrollY: 0,
@@ -3296,8 +3298,11 @@ function downloadReportImage() {
             console.error("이미지 다운로드 에러:", err);
             alert("이미지 생성을 진행할 수 없습니다. 네이티브 '인쇄/저장' 방식을 호출합니다.");
             finalizeExport();
-            // Fallback to native print
-            window.print();
+            // Fallback to native print with print-report class and delay
+            document.body.classList.add('print-report');
+            setTimeout(() => {
+                window.print();
+            }, 50);
         });
     }
 
@@ -3328,7 +3333,10 @@ function downloadReportImage() {
             script.onerror = () => {
                 finalizeExport();
                 alert('이미지 생성 라이브러리를 로드할 수 없습니다. 대신 네이티브 인쇄 창을 띄웁니다.');
-                window.print();
+                document.body.classList.add('print-report');
+                setTimeout(() => {
+                    window.print();
+                }, 50);
             };
             document.head.appendChild(script);
         } else {
@@ -3549,7 +3557,10 @@ function openInvoiceModal(customerId, month) {
 
     // Setup events
     document.getElementById('invPrintBtn').onclick = () => {
-        window.print();
+        document.body.classList.add('print-invoice');
+        setTimeout(() => {
+            window.print();
+        }, 50);
     };
 
     document.getElementById('invImageBtn').onclick = () => {
@@ -3871,7 +3882,10 @@ function openManualInvoice(customerId, month, vatEnabled, items) {
 
     // Bind event handlers for manual invoice print/download/email buttons
     document.getElementById('invPrintBtn').onclick = () => {
-        window.print();
+        document.body.classList.add('print-invoice');
+        setTimeout(() => {
+            window.print();
+        }, 50);
     };
 
     document.getElementById('invImageBtn').onclick = () => {
@@ -4164,6 +4178,9 @@ window.printAllInvoices = function() {
     if (bulkPrintArea) {
         bulkPrintArea.innerHTML = bulkHtml;
         bulkPrintArea.style.display = 'block';
-        window.print();
+        document.body.classList.add('print-bulk-invoice');
+        setTimeout(() => {
+            window.print();
+        }, 50);
     }
 };
