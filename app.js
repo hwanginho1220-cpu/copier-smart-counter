@@ -2411,8 +2411,35 @@ window.addEventListener('beforeprint', () => {
         document.body.classList.add('print-invoice');
     } else {
         const reportView = document.getElementById('reportView');
+        const inspectionsView = document.getElementById('inspectionsView');
         if (reportView && reportView.classList.contains('active')) {
             document.body.classList.add('print-report');
+        } else if (inspectionsView && inspectionsView.classList.contains('active')) {
+            const monthVal = document.getElementById('inspectionMonthFilter').value;
+            const searchVal = document.getElementById('inspectionSearchInput').value.trim();
+            const titleEl = document.getElementById('inspectionPrintTitle');
+            const subtitleEl = document.getElementById('inspectionPrintSubtitle');
+            
+            let titleText = '점검 대장';
+            let subtitleText = '';
+            
+            if (monthVal) {
+                const parts = monthVal.split('-');
+                titleText = `${parts[0]}년 ${parts[1]}월 점검대장`;
+            } else {
+                titleText = '전체 점검대장';
+            }
+            
+            if (searchVal) {
+                subtitleText = `검색어: "${searchVal}" | 출력일: ${new Date().toISOString().split('T')[0]}`;
+            } else {
+                subtitleText = `출력일: ${new Date().toISOString().split('T')[0]}`;
+            }
+            
+            if (titleEl) titleEl.textContent = titleText;
+            if (subtitleEl) subtitleEl.textContent = subtitleText;
+            
+            document.body.classList.add('print-ledger');
         }
     }
 });
