@@ -383,10 +383,51 @@ function setupEventListeners() {
     const printReportBtn = document.getElementById('printReportBtn');
     if (printReportBtn) {
         printReportBtn.addEventListener('click', () => {
+            if (isInAppBrowser()) {
+                alert("카카오톡/인앱 브라우저에서는 인쇄(PDF 저장) 기능이 지원되지 않을 수 있습니다. 우측 상단 메뉴(...)를 눌러 '다른 브라우저로 열기(Safari/Chrome)'를 선택하신 후 진행해 주세요.");
+            }
             document.body.classList.add('print-report');
             setTimeout(() => {
                 window.print();
-            }, 50);
+            }, 150);
+        });
+    }
+    const printInspectionLedgerBtn = document.getElementById('printInspectionLedgerBtn');
+    if (printInspectionLedgerBtn) {
+        printInspectionLedgerBtn.addEventListener('click', () => {
+            const monthVal = document.getElementById('inspectionMonthFilter').value;
+            const searchVal = document.getElementById('inspectionSearchInput').value.trim();
+            
+            const titleEl = document.getElementById('inspectionPrintTitle');
+            const subtitleEl = document.getElementById('inspectionPrintSubtitle');
+            
+            let titleText = '점검 대장';
+            let subtitleText = '';
+            
+            if (monthVal) {
+                const parts = monthVal.split('-');
+                titleText = `${parts[0]}년 ${parts[1]}월 점검대장`;
+            } else {
+                titleText = '전체 점검대장';
+            }
+            
+            if (searchVal) {
+                subtitleText = `검색어: "${searchVal}" | 출력일: ${new Date().toISOString().split('T')[0]}`;
+            } else {
+                subtitleText = `출력일: ${new Date().toISOString().split('T')[0]}`;
+            }
+            
+            if (titleEl) titleEl.textContent = titleText;
+            if (subtitleEl) subtitleEl.textContent = subtitleText;
+            
+            if (isInAppBrowser()) {
+                alert("카카오톡/인앱 브라우저에서는 인쇄(PDF 저장) 기능이 지원되지 않을 수 있습니다. 우측 상단 메뉴(...)를 눌러 '다른 브라우저로 열기(Safari/Chrome)'를 선택하신 후 진행해 주세요.");
+            }
+            
+            document.body.classList.add('print-ledger');
+            setTimeout(() => {
+                window.print();
+            }, 150);
         });
     }
     // Window resize event for report scaling
@@ -500,8 +541,10 @@ async function recalculateUsageForCustomer(customerId) {
     
     // Sort by date ascending, then by ID (order of creation) if dates match
     custInspections.sort((a, b) => {
-        const dateDiff = new Date(a.date) - new Date(b.date);
-        return dateDiff !== 0 ? dateDiff : a.id.localeCompare(b.id);
+        const timeA = a.date ? new Date(a.date).getTime() : 0;
+        const timeB = b.date ? new Date(b.date).getTime() : 0;
+        if (timeA !== timeB) return timeA - timeB;
+        return (a.id || '').localeCompare(b.id || '');
     });
 
     const changedInspections = [];
@@ -517,9 +560,17 @@ async function recalculateUsageForCustomer(customerId) {
             let newColorUsage = 0;
             if (index > 0) {
                 const prev = devInspections[index - 1];
-                newBwUsage = insp.bwCounter - prev.bwCounter;
-                newColorUsage = insp.colorCounter - prev.colorCounter;
+                const prevBw = Number(prev.bwCounter) || 0;
+                const prevColor = Number(prev.colorCounter) || 0;
+                const currBw = Number(insp.bwCounter) || 0;
+                const currColor = Number(insp.colorCounter) || 0;
+                
+                newBwUsage = Math.max(0, currBw - prevBw);
+                newColorUsage = Math.max(0, currColor - prevColor);
             }
+            
+            newBwUsage = Number(newBwUsage) || 0;
+            newColorUsage = Number(newColorUsage) || 0;
 
             if (insp.bwUsage !== newBwUsage || insp.colorUsage !== newColorUsage) {
                 insp.bwUsage = newBwUsage;
@@ -679,8 +730,13 @@ function renderRecentInspections() {
     const tbody = document.getElementById('recentInspectionsTbody');
     tbody.innerHTML = '';
 
-    // Take top 5 most recent inspections
-    const sorted = [...state.inspections].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
+    // Take top 5 most recent inspections, sorting by date descending, then ID descending
+    const sorted = [...state.inspections].sort((a, b) => {
+        const timeA = a.date ? new Date(a.date).getTime() : 0;
+        const timeB = b.date ? new Date(b.date).getTime() : 0;
+        if (timeB !== timeA) return timeB - timeA;
+        return (b.id || '').localeCompare(a.id || '');
+    }).slice(0, 5);
 
     if (sorted.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">점검 기록이 없습니다.</td></tr>';
@@ -691,23 +747,36 @@ function renderRecentInspections() {
         const customer = state.customers.find(c => c.id === insp.customerId);
         const customerName = customer ? customer.name : '알 수 없는 고객';
         
+        const bwCounterVal = Number(insp.bwCounter) || 0;
+        const colorCounterVal = Number(insp.colorCounter) || 0;
+        const bwUsageVal = Number(insp.bwUsage) || 0;
+        const colorUsageVal = Number(insp.colorUsage) || 0;
+
         let bwBadge = '';
-        if (insp.bwUsage > 0) {
-            bwBadge = `<span class="badge badge-success">+${insp.bwUsage.toLocaleString()}</span>`;
-            if (customer && customer.contractBw > 0 && insp.bwUsage > customer.contractBw) {
-                const over = insp.bwUsage - customer.contractBw;
-                bwBadge += `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
+        if (bwUsageVal > 0) {
+            bwBadge = `<span class="badge badge-success">+${bwUsageVal.toLocaleString()}</span>`;
+            if (customer) {
+                const dev = customer.devices ? customer.devices.find(d => d.id === insp.deviceId) : null;
+                const limit = dev ? Number(dev.contractBw) : (Number(customer.contractBw) || 0);
+                if (limit > 0 && bwUsageVal > limit) {
+                    const over = bwUsageVal - limit;
+                    bwBadge += `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
+                }
             }
         } else {
             bwBadge = '<span class="badge badge-info">기준</span>';
         }
 
         let colorBadge = '';
-        if (insp.colorUsage > 0) {
-            colorBadge = `<span class="badge badge-success" style="background:rgba(217,70,239,0.15); color:#f472b6;">+${insp.colorUsage.toLocaleString()}</span>`;
-            if (customer && customer.contractColor > 0 && insp.colorUsage > customer.contractColor) {
-                const over = insp.colorUsage - customer.contractColor;
-                colorBadge += `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
+        if (colorUsageVal > 0) {
+            colorBadge = `<span class="badge badge-success" style="background:rgba(217,70,239,0.15); color:#f472b6;">+${colorUsageVal.toLocaleString()}</span>`;
+            if (customer) {
+                const dev = customer.devices ? customer.devices.find(d => d.id === insp.deviceId) : null;
+                const limit = dev ? Number(dev.contractColor) : (Number(customer.contractColor) || 0);
+                if (limit > 0 && colorUsageVal > limit) {
+                    const over = colorUsageVal - limit;
+                    colorBadge += `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
+                }
             }
         } else {
             colorBadge = '<span class="badge badge-info">기준</span>';
@@ -715,19 +784,19 @@ function renderRecentInspections() {
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td data-label="점검일" style="font-weight:600;">${insp.date}</td>
+            <td data-label="점검일" style="font-weight:600;">${insp.date || '-'}</td>
             <td data-label="고객사명"><span style="font-weight: 500;">${customerName}</span></td>
-            <td data-label="흑백 카운터">${insp.bwCounter.toLocaleString()}</td>
-            <td data-label="컬러 카운터" style="color:#d8b4fe;">${insp.colorCounter.toLocaleString()}</td>
+            <td data-label="흑백 카운터">${bwCounterVal.toLocaleString()}</td>
+            <td data-label="컬러 카운터" style="color:#d8b4fe;">${colorCounterVal.toLocaleString()}</td>
             <td data-label="흑백 사용량">
                 <div style="display: flex; align-items: center; gap: 0.35rem; justify-content: flex-end;">
-                    <span style="font-weight:600;">${insp.bwUsage.toLocaleString()}</span>
+                    <span style="font-weight:600;">${bwUsageVal.toLocaleString()}</span>
                     ${bwBadge}
                 </div>
             </td>
             <td data-label="컬러 사용량">
                 <div style="display: flex; align-items: center; gap: 0.35rem; justify-content: flex-end;">
-                    <span style="font-weight:600;">${insp.colorUsage.toLocaleString()}</span>
+                    <span style="font-weight:600;">${colorUsageVal.toLocaleString()}</span>
                     ${colorBadge}
                 </div>
             </td>
@@ -948,6 +1017,9 @@ function renderCustomersTable() {
         );
         return queryMatchName || queryMatchDevice;
     });
+
+    // Sort alphabetically (가나다 순)
+    filtered.sort((a, b) => a.name.localeCompare(b.name, 'ko', { sensitivity: 'base' }));
 
     if (filtered.length === 0) {
         tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 3rem 0;">등록된 고객사가 없거나 검색 결과가 없습니다.</td></tr>';
@@ -2337,7 +2409,7 @@ window.addEventListener('beforeprint', () => {
 });
 
 window.addEventListener('afterprint', () => {
-    document.body.classList.remove('print-report', 'print-invoice', 'print-bulk-invoice');
+    document.body.classList.remove('print-report', 'print-invoice', 'print-bulk-invoice', 'print-ledger');
     const bulkArea = document.getElementById('bulkInvoicePrintArea');
     if (bulkArea) {
         bulkArea.style.display = 'none';
@@ -2888,6 +2960,17 @@ window.openUninspectedModal = function() {
         container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; margin-top: 2rem;">이번 달 점검 대상 업체의 점검이 모두 완료되었습니다! 🎉</p>';
     } else {
         uninspected.forEach(cust => {
+            let copierModelStr = '-';
+            if (cust.devices && cust.devices.length > 0) {
+                const firstDev = cust.devices[0];
+                copierModelStr = firstDev.model || '미지정';
+                if (cust.devices.length > 1) {
+                    copierModelStr += ` 외 ${cust.devices.length - 1}대`;
+                }
+            } else if (cust.copierModel) {
+                copierModelStr = cust.copierModel;
+            }
+
             const card = document.createElement('div');
             card.style.display = 'flex';
             card.style.justifyContent = 'space-between';
@@ -2901,7 +2984,7 @@ window.openUninspectedModal = function() {
             card.innerHTML = `
                 <div style="display:flex; flex-direction:column; gap:0.25rem;">
                     <span style="font-weight:600; font-size:0.95rem; color:var(--text-primary);">${cust.name}</span>
-                    <span style="font-size:0.8rem; color:var(--text-secondary);">${cust.copierModel} | ${cust.location || '위치 미지정'}</span>
+                    <span style="font-size:0.8rem; color:var(--text-secondary);">${copierModelStr} | ${cust.location || '위치 미지정'}</span>
                     ${cust.contact ? `<span style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-solid fa-phone" style="margin-right:0.25rem;"></i>${cust.contact}</span>` : ''}
                 </div>
                 <button type="button" class="btn btn-primary" style="padding:0.4rem 0.75rem; font-size:0.8rem; border-radius:6px; flex-shrink:0; cursor:pointer;" onclick="registerInspectionForCustomer('${cust.id}')">
@@ -2988,8 +3071,13 @@ function generateMonthlyReport() {
         return;
     }
 
-    // Sort inspections chronologically by date
-    filteredInsps.sort((a, b) => new Date(a.date) - new Date(b.date));
+    // Sort inspections chronologically by date safely
+    filteredInsps.sort((a, b) => {
+        const timeA = a.date ? new Date(a.date).getTime() : 0;
+        const timeB = b.date ? new Date(b.date).getTime() : 0;
+        if (timeA !== timeB) return timeA - timeB;
+        return (a.id || '').localeCompare(b.id || '');
+    });
 
     // Calculate metrics
     const totalCustomers = state.customers.filter(c => c.isMonthlyInspection !== false).length;
@@ -3246,6 +3334,21 @@ function generateMonthlyReport() {
     }
 }
 
+function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+        || (navigator.maxTouchPoints && navigator.maxTouchPoints > 2) 
+        || window.innerWidth <= 768;
+}
+
+function isInAppBrowser() {
+    const ua = navigator.userAgent.toLowerCase();
+    return ua.indexOf('kakaotalk') > -1 || ua.indexOf('line') > -1 || ua.indexOf('instagram') > -1 || ua.indexOf('fb') > -1;
+}
+
+window.closeMobileImageModal = function() {
+    document.getElementById('mobileImageModalBackdrop').classList.remove('active');
+};
+
 function downloadReportImage() {
     const selectedMonth = document.getElementById('reportMonthFilter').value;
     const element = document.getElementById('reportPrintArea');
@@ -3287,22 +3390,49 @@ function downloadReportImage() {
             windowHeight: element.scrollHeight
         };
 
-        // 3. Export Image using html2canvas directly
-        html2canvas(element, opt).then(canvas => {
-            const link = document.createElement('a');
-            link.download = `SmartCounter_Report_${selectedMonth}.jpg`;
-            link.href = canvas.toDataURL('image/jpeg', 0.98);
-            link.click();
+        const canvasPromise = html2canvas(element, opt);
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('html2canvas rendering timed out (4s limit)')), 4000)
+        );
+
+        // 3. Export Image using html2canvas directly with a race timeout
+        Promise.race([canvasPromise, timeoutPromise]).then(canvas => {
+            const imgUrl = canvas.toDataURL('image/jpeg', 0.95);
+            if (isMobileDevice()) {
+                // Show mobile guidance modal instead of downloading
+                const imgEl = document.createElement('img');
+                imgEl.src = imgUrl;
+                imgEl.style.width = '100%';
+                imgEl.style.height = 'auto';
+                imgEl.style.display = 'block';
+                
+                const imgContainer = document.getElementById('mobileImageContainer');
+                if (imgContainer) {
+                    imgContainer.innerHTML = '';
+                    imgContainer.appendChild(imgEl);
+                }
+                
+                const mobileModal = document.getElementById('mobileImageModalBackdrop');
+                if (mobileModal) {
+                    mobileModal.classList.add('active');
+                }
+            } else {
+                // Regular desktop file download
+                const link = document.createElement('a');
+                link.download = `SmartCounter_Report_${selectedMonth}.jpg`;
+                link.href = imgUrl;
+                link.click();
+            }
             finalizeExport();
         }).catch(err => {
-            console.error("이미지 다운로드 에러:", err);
-            alert("이미지 생성을 진행할 수 없습니다. 네이티브 '인쇄/저장' 방식을 호출합니다.");
+            console.error("이미지 다운로드/타임아웃 에러:", err);
+            alert("이미지 생성이 지연되어 인쇄/저장(PDF) 화면으로 대체합니다. 인쇄 창에서 PDF 저장을 선택하실 수 있습니다.");
             finalizeExport();
             // Fallback to native print with print-report class and delay
             document.body.classList.add('print-report');
             setTimeout(() => {
                 window.print();
-            }, 50);
+            }, 150);
         });
     }
 
@@ -3334,7 +3464,7 @@ function downloadReportImage() {
             document.body.classList.add('print-report');
             setTimeout(() => {
                 window.print();
-            }, 50);
+            }, 150);
         }
     }, 100);
 }
