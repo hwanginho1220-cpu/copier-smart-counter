@@ -415,6 +415,10 @@
                         </div>
                     </div>
                     <div class="form-group">
+                        <label for="discountAmount">추가요금 할인 (D/C) 금액</label>
+                        <input type="number" id="discountAmount" class="form-control" min="0" value="0" placeholder="추가요금 할인 금액 입력 (예: 5000)">
+                    </div>
+                    <div class="form-group">
                         <label for="inspectionNotes">특이사항 및 점검 메모</label>
                         <textarea id="inspectionNotes" class="form-control" rows="3" placeholder="예: 토너 교체 완료, 급지 롤러 세척 등"></textarea>
                     </div>
@@ -878,7 +882,7 @@
                     </div>
                     <div class="form-group">
                         <label for="partPrice">가격 (단가) <span style="color:var(--danger)">*</span></label>
-                        <input type="number" id="partPrice" class="form-control" required min="0" placeholder="예: 45000">
+                        <input type="number" id="partPrice" class="form-control" required placeholder="예: 45000">
                     </div>
                 </div>
                 <div class="modal-footer">

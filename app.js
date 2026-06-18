@@ -1548,6 +1548,7 @@ async function handleInspectionFormSubmit(e) {
     const date = document.getElementById('inspectionDate').value;
     const bwCounter = parseInt(document.getElementById('bwCounter').value, 10);
     const colorCounter = parseInt(document.getElementById('colorCounter').value, 10);
+    const discountAmount = parseInt(document.getElementById('discountAmount').value, 10) || 0;
     const notes = document.getElementById('inspectionNotes').value.trim();
 
     if (!customerId || !deviceId || !date || isNaN(bwCounter) || isNaN(colorCounter)) {
@@ -1583,6 +1584,7 @@ async function handleInspectionFormSubmit(e) {
         colorCounter: colorCounter,
         bwUsage: 0,
         colorUsage: 0,
+        discountAmount: discountAmount,
         notes: notes,
         parts: currentInspectionParts
     };
@@ -1629,6 +1631,7 @@ async function handleInspectionFormSubmit(e) {
                 insp.date = date;
                 insp.bwCounter = bwCounter;
                 insp.colorCounter = colorCounter;
+                insp.discountAmount = discountAmount;
                 insp.notes = notes;
                 insp.parts = currentInspectionParts;
 
@@ -2028,6 +2031,7 @@ function openInspectionModal(id = null, customerId = null) {
             document.getElementById('inspectionDate').value = insp.date;
             document.getElementById('bwCounter').value = insp.bwCounter;
             document.getElementById('colorCounter').value = insp.colorCounter;
+            document.getElementById('discountAmount').value = insp.discountAmount || 0;
             document.getElementById('inspectionNotes').value = insp.notes || '';
             
             // Show previous info (excluding this record)
@@ -3153,6 +3157,7 @@ function generateMonthlyReport() {
         let totalColorOver = 0;
         let partsTotal = 0;
         let billingSubtotal = 0;
+        let totalDiscount = 0;
         
         // Base rents
         if (cust && cust.devices) {
@@ -3175,9 +3180,12 @@ function generateMonthlyReport() {
             if (insp.parts && Array.isArray(insp.parts)) {
                 partsTotal += insp.parts.reduce((sum, p) => sum + (Number(p.price || 0) * Number(p.quantity || 0)), 0);
             }
+            
+            totalDiscount += Number(insp.discountAmount || 0);
         });
         
         billingSubtotal += partsTotal;
+        billingSubtotal = Math.max(0, billingSubtotal - totalDiscount);
         const billingVat = vatEnabled ? Math.floor(billingSubtotal * 0.1) : 0;
         const billingTotal = billingSubtotal + billingVat;
         
@@ -3506,6 +3514,27 @@ function openInvoiceModal(customerId, month) {
             });
         }
     });
+
+    // 4. Discount (D/C)
+    let totalDiscount = 0;
+    insps.forEach(insp => {
+        const disc = Number(insp.discountAmount || 0);
+        if (disc > 0) {
+            html += `
+                <tr style="color: #dc2626; font-weight: 500;">
+                    <td>${insp.date.split('-')[1]}/${insp.date.split('-')[2]}</td>
+                    <td class="text-left">[할인] 추가요금 D/C</td>
+                    <td>식</td>
+                    <td>1</td>
+                    <td class="text-right">-${disc.toLocaleString()}</td>
+                    <td class="text-right">-${disc.toLocaleString()}</td>
+                    <td></td>
+                </tr>
+            `;
+            totalDiscount += disc;
+        }
+    });
+    subTotal = Math.max(0, subTotal - totalDiscount);
 
     // Fill empty rows to make it look like a standard receipt
     const rowCount = (html.match(/<tr/g) || []).length;
@@ -4016,6 +4045,27 @@ function generateInvoiceHtmlForCustomer(cust, month) {
             });
         }
     });
+
+    // 4. Discount (D/C)
+    let totalDiscount = 0;
+    insps.forEach(insp => {
+        const disc = Number(insp.discountAmount || 0);
+        if (disc > 0) {
+            htmlItems += `
+                <tr style="color: #dc2626; font-weight: 500;">
+                    <td>${insp.date.split('-')[1]}/${insp.date.split('-')[2]}</td>
+                    <td class="text-left">[할인] 추가요금 D/C</td>
+                    <td>식</td>
+                    <td>1</td>
+                    <td class="text-right">-${disc.toLocaleString()}</td>
+                    <td class="text-right">-${disc.toLocaleString()}</td>
+                    <td></td>
+                </tr>
+            `;
+            totalDiscount += disc;
+        }
+    });
+    subTotal = Math.max(0, subTotal - totalDiscount);
 
     // Fill empty rows to make it look like a standard receipt (7 rows)
     const rowCount = (htmlItems.match(/<tr/g) || []).length;
