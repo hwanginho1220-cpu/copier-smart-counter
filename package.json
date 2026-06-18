@@ -4,7 +4,8 @@
   "description": "복사기 점검 & 카운터 관리 웹 프로그램",
   "main": "index.html",
   "scripts": {
-    "dev": "npx http-server ./ -p 3000 -o"
+    "dev": "npx http-server ./ -p 3000 -o",
+    "build": "echo 'No build step required'"
   },
   "keywords": [],
   "author": "",
