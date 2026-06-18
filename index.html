@@ -301,9 +301,6 @@
                             <button class="btn btn-secondary" onclick="printAllInvoices()" style="background: #10b981; color: #fff; border-color: #10b981; font-weight: 600;">
                                 <i class="fa-solid fa-print"></i> 전체 명세서 인쇄
                             </button>
-                            <button class="btn btn-secondary" id="downloadImageBtn" style="display: none; background: #60a5fa; color: #0f172a; border-color: #60a5fa; font-weight: 600;">
-                                <i class="fa-solid fa-image"></i>이미지 다운로드
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -902,27 +899,7 @@
         </div>
     </div>
 
-    <!-- MODAL 6: MOBILE IMAGE SAVE NOTICE -->
-    <div class="modal-backdrop" id="mobileImageModalBackdrop">
-        <div class="modal" style="max-width: 92%; width: 480px; background: var(--bg-card); border: 1px solid var(--border-color); backdrop-filter: blur(20px);">
-            <div class="modal-header">
-                <h2>이미지 저장 안내</h2>
-                <button class="close-btn" onclick="closeMobileImageModal()"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="modal-body" style="text-align: center; padding: 1.5rem;">
-                <p style="margin-bottom: 1.25rem; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">
-                    모바일 환경(카카오톡, Safari, Chrome 등)에서는 직접 다운로드가 제한될 수 있습니다.<br>
-                    <strong>아래 이미지를 꾹 누르시면(길게 누르기)</strong> 스마트폰에 저장할 수 있습니다.
-                </p>
-                <div id="mobileImageContainer" style="max-height: 55vh; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: #ffffff; padding: 0.5rem; display: flex; justify-content: center;">
-                    <!-- Image inserted dynamically -->
-                </div>
-            </div>
-            <div class="modal-footer" style="padding: 1rem; justify-content: center;">
-                <button class="btn btn-secondary" onclick="closeMobileImageModal()" style="padding: 0.6rem 2rem;">닫기</button>
-            </div>
-        </div>
-    </div>
+
 
     <!-- Application Logic Script -->
     <script src="app.js?v=1.0.24"></script>

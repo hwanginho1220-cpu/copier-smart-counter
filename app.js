@@ -376,10 +376,7 @@ function setupEventListeners() {
     if (generateReportBtn) {
         generateReportBtn.addEventListener('click', generateMonthlyReport);
     }
-    const downloadImageBtn = document.getElementById('downloadImageBtn');
-    if (downloadImageBtn) {
-        downloadImageBtn.addEventListener('click', downloadReportImage);
-    }
+
 
     const printInspectionLedgerBtn = document.getElementById('printInspectionLedgerBtn');
     if (printInspectionLedgerBtn) {
@@ -3061,7 +3058,6 @@ function generateMonthlyReport() {
     try {
         const selectedMonth = document.getElementById('reportMonthFilter').value;
         const printArea = document.getElementById('reportPrintArea');
-        const downloadBtn = document.getElementById('downloadImageBtn');
     
     if (!selectedMonth) {
         alert('대상 월을 선택해 주세요.');
@@ -3078,7 +3074,6 @@ function generateMonthlyReport() {
                 <p>선택하신 월(${selectedMonth})에 등록된 점검 기록이 없습니다.</p>
             </div>
         `;
-        if (downloadBtn) downloadBtn.style.display = 'none';
         
         // Reset scale style
         const container = document.querySelector('.report-paper-container');
@@ -3345,7 +3340,6 @@ function generateMonthlyReport() {
     `;
 
     printArea.innerHTML = reportHtml;
-    if (downloadBtn) downloadBtn.style.display = 'block';
     
     // Recalculate scaling for current screen width
     setTimeout(adjustReportScale, 20);
@@ -3366,121 +3360,7 @@ function isInAppBrowser() {
     return ua.indexOf('kakaotalk') > -1 || ua.indexOf('line') > -1 || ua.indexOf('instagram') > -1 || ua.indexOf('fb') > -1;
 }
 
-window.closeMobileImageModal = function() {
-    document.getElementById('mobileImageModalBackdrop').classList.remove('active');
-};
 
-function downloadReportImage() {
-    const selectedMonth = document.getElementById('reportMonthFilter').value;
-    const element = document.getElementById('reportPrintArea');
-    const container = document.querySelector('.report-paper-container');
-    
-    if (!selectedMonth || !element || !container) return;
-
-    const downloadBtn = document.getElementById('downloadImageBtn');
-    const loadingOverlay = document.getElementById('imageLoadingOverlay');
-    
-    const originalText = downloadBtn.innerHTML;
-    
-    // Enable loading overlay and disable actions
-    downloadBtn.disabled = true;
-    if (loadingOverlay) loadingOverlay.style.display = 'flex';
-
-    // 1. Temporarily scroll to top (crucial for html2canvas to capture full view offset correctly)
-    const originalScrollY = window.scrollY;
-    const originalScrollX = window.scrollX;
-    window.scrollTo(0, 0);
-
-    // 2. Temporarily reset scaling styles of the live DOM element for capturing
-    container.classList.add('report-exporting');
-    element.style.transform = 'none';
-    container.style.height = 'auto';
-
-    function runExport() {
-        const opt = {
-            scale: 2, 
-            useCORS: true, 
-            letterRendering: true,
-            scrollX: 0,
-            scrollY: 0,
-            width: 820,
-            height: element.scrollHeight,
-            windowWidth: 820,
-            windowHeight: element.scrollHeight
-        };
-
-        const canvasPromise = html2canvas(element, opt);
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('html2canvas rendering timed out (4s limit)')), 4000)
-        );
-
-        // 3. Export Image using html2canvas directly with a race timeout
-        Promise.race([canvasPromise, timeoutPromise]).then(canvas => {
-            const imgUrl = canvas.toDataURL('image/jpeg', 0.95);
-            if (isMobileDevice()) {
-                // Show mobile guidance modal instead of downloading
-                const imgEl = document.createElement('img');
-                imgEl.src = imgUrl;
-                imgEl.style.width = '100%';
-                imgEl.style.height = 'auto';
-                imgEl.style.display = 'block';
-                
-                const imgContainer = document.getElementById('mobileImageContainer');
-                if (imgContainer) {
-                    imgContainer.innerHTML = '';
-                    imgContainer.appendChild(imgEl);
-                }
-                
-                const mobileModal = document.getElementById('mobileImageModalBackdrop');
-                if (mobileModal) {
-                    mobileModal.classList.add('active');
-                }
-            } else {
-                // Regular desktop file download
-                const link = document.createElement('a');
-                link.download = `SmartCounter_Report_${selectedMonth}.jpg`;
-                link.href = imgUrl;
-                link.click();
-            }
-            finalizeExport();
-        }).catch(err => {
-            console.error("이미지 다운로드/타임아웃 에러:", err);
-            alert("이미지 다운로드 중 에러가 발생했습니다. 잠시 후 다시 시도해 주세요.");
-            finalizeExport();
-        });
-    }
-
-    function finalizeExport() {
-        // 4. Restore original layout states
-        container.classList.remove('report-exporting');
-        
-        // Restore scroll position
-        window.scrollTo(originalScrollX, originalScrollY);
-        
-        // Hide loading overlay
-        if (loadingOverlay) loadingOverlay.style.display = 'none';
-        
-        downloadBtn.disabled = false;
-        downloadBtn.innerHTML = originalText;
-        
-        // Recalculate scaling
-        adjustReportScale();
-    }
-
-    // Give browser 100ms to repaint the report element to 820px scale before capturing
-    setTimeout(() => {
-        if (typeof html2canvas !== 'undefined') {
-            runExport();
-        } else {
-            finalizeExport();
-            alert('이미지 생성 라이브러리를 로드할 수 없습니다. 대신 네이티브 인쇄 창을 띄웁니다.');
-            document.body.classList.add('print-report');
-            setTimeout(() => {
-                window.print();
-            }, 150);
-        }
-    }, 100);
-}
 
 // ==========================================
 // INVOICE LOGIC
