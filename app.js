@@ -869,20 +869,20 @@ function renderTopUsageCustomers(currentMonthStr) {
         const card = document.createElement('div');
         card.style.display = 'flex';
         card.style.flexDirection = 'column';
-        card.style.gap = '0.25rem';
-        card.style.padding = '0.5rem 0';
+        card.style.gap = '0.4rem';
+        card.style.padding = '0.75rem 0';
         
         card.innerHTML = `
             <div style="display:flex; justify-content:space-between; font-size:0.9rem;">
                 <span style="font-weight:600;">${item.name} <span style="font-size:0.75rem; color:var(--text-muted); font-weight:normal;">(${item.model})</span></span>
-                <span style="font-weight:700; color:var(--primary);">${item.total.toLocaleString()} 매</span>
+                <span style="font-weight:700; color:var(--primary);">${(Number(item.total) || 0).toLocaleString()} 매</span>
             </div>
-            <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-secondary); margin-bottom:0.15rem;">
-                <span>흑백: ${item.bw.toLocaleString()}매</span>
-                <span>컬러: ${item.color.toLocaleString()}매</span>
+            <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-secondary); margin-bottom:0.2rem;">
+                <span>흑백: ${(Number(item.bw) || 0).toLocaleString()}매</span>
+                <span>컬러: ${(Number(item.color) || 0).toLocaleString()}매</span>
             </div>
-            <div style="width:100%; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
-                <div style="width:${percent}%; height:100%; background:var(--primary-gradient); border-radius:3px;"></div>
+            <div style="width:100%; height:8px; background:rgba(255,255,255,0.06); border-radius:4px; overflow:hidden;">
+                <div style="width:${percent}%; height:100%; background:var(--primary-gradient); border-radius:4px;"></div>
             </div>
         `;
         container.appendChild(card);
@@ -1454,8 +1454,12 @@ function renderInspectionsTable() {
 
     // Sort inspections by date descending, then ID
     filtered.sort((a, b) => {
-        const dateDiff = new Date(b.date) - new Date(a.date);
-        return dateDiff !== 0 ? dateDiff : b.id.localeCompare(a.id);
+        let timeA = a.date ? new Date(a.date).getTime() : 0;
+        let timeB = b.date ? new Date(b.date).getTime() : 0;
+        if (isNaN(timeA)) timeA = 0;
+        if (isNaN(timeB)) timeB = 0;
+        if (timeB !== timeA) return timeB - timeA;
+        return (b.id || '').localeCompare(a.id || '');
     });
 
     if (filtered.length === 0) {
@@ -1469,46 +1473,51 @@ function renderInspectionsTable() {
         const customerName = customer ? customer.name : '알 수 없음';
         const model = dev ? (dev.model || dev.name) : '-';
 
+        const bwCounterVal = Number(insp.bwCounter) || 0;
+        const colorCounterVal = Number(insp.colorCounter) || 0;
+        const bwUsageVal = Number(insp.bwUsage) || 0;
+        const colorUsageVal = Number(insp.colorUsage) || 0;
+
         let bwBadge = '';
-        if (insp.bwUsage > 0) {
-            bwBadge = `<span class="badge badge-success">+${insp.bwUsage.toLocaleString()}</span>`;
-            if (dev && dev.contractBw > 0 && insp.bwUsage > dev.contractBw) {
-                const over = insp.bwUsage - dev.contractBw;
+        if (bwUsageVal > 0) {
+            bwBadge = `<span class="badge badge-success">+${bwUsageVal.toLocaleString()}</span>`;
+            if (dev && dev.contractBw > 0 && bwUsageVal > dev.contractBw) {
+                const over = bwUsageVal - dev.contractBw;
                 bwBadge += `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
             }
-        } else if (insp.bwUsage < 0) {
-            bwBadge = `<span class="badge badge-danger">${insp.bwUsage.toLocaleString()} (감소)</span>`;
+        } else if (bwUsageVal < 0) {
+            bwBadge = `<span class="badge badge-danger">${bwUsageVal.toLocaleString()} (감소)</span>`;
         } else {
             bwBadge = '<span class="badge badge-info">기준</span>';
         }
 
         let colorBadge = '';
-        if (insp.colorUsage > 0) {
-            colorBadge = `<span class="badge badge-success" style="background:rgba(217,70,239,0.15); color:#f472b6;">+${insp.colorUsage.toLocaleString()}</span>`;
-            if (dev && dev.contractColor > 0 && insp.colorUsage > dev.contractColor) {
-                const over = insp.colorUsage - dev.contractColor;
+        if (colorUsageVal > 0) {
+            colorBadge = `<span class="badge badge-success" style="background:rgba(217,70,239,0.15); color:#f472b6;">+${colorUsageVal.toLocaleString()}</span>`;
+            if (dev && dev.contractColor > 0 && colorUsageVal > dev.contractColor) {
+                const over = colorUsageVal - dev.contractColor;
                 colorBadge += `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
             }
-        } else if (insp.colorUsage < 0) {
-            colorBadge = `<span class="badge badge-danger">${insp.colorUsage.toLocaleString()} (감소)</span>`;
+        } else if (colorUsageVal < 0) {
+            colorBadge = `<span class="badge badge-danger">${colorUsageVal.toLocaleString()} (감소)</span>`;
         } else {
             colorBadge = '<span class="badge badge-info">기준</span>';
         }
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td data-label="점검일" style="font-weight: 600;">${insp.date}</td>
+            <td data-label="점검일" style="font-weight: 600;">${insp.date || '-'}</td>
             <td data-label="고객사명"><span style="font-weight: 600;">${customerName}</span></td>
             <td data-label="복사기 모델">${model}</td>
             <td data-label="흑백 카운터">
                 <div style="display: flex; align-items: center; gap: 0.35rem;">
-                    <span>${insp.bwCounter.toLocaleString()}</span>
+                    <span>${bwCounterVal.toLocaleString()}</span>
                     ${bwBadge}
                 </div>
             </td>
             <td data-label="컬러 카운터">
                 <div style="display: flex; align-items: center; gap: 0.35rem;">
-                    <span>${insp.colorCounter.toLocaleString()}</span>
+                    <span>${colorCounterVal.toLocaleString()}</span>
                     ${colorBadge}
                 </div>
             </td>
@@ -3194,19 +3203,24 @@ function generateMonthlyReport() {
                 `;
             }
             
+            const bwCounterVal = Number(insp.bwCounter) || 0;
+            const bwUsageVal = Number(insp.bwUsage) || 0;
+            const colorCounterVal = Number(insp.colorCounter) || 0;
+            const colorUsageVal = Number(insp.colorUsage) || 0;
+
             tableRowsHtml += `
-                <td class="center" style="font-size:0.68rem; letter-spacing:-0.5px;">${insp.date}</td>
+                <td class="center" style="font-size:0.68rem; letter-spacing:-0.5px;">${insp.date || '-'}</td>
                 <td class="center" style="font-size:0.68rem; color:#475569;">${model}</td>
                 <td class="right" style="line-height:1.25;">
-                    <div style="font-weight:600;">${insp.bwCounter.toLocaleString()}</div>
+                    <div style="font-weight:600;">${bwCounterVal.toLocaleString()}</div>
                     <div style="font-size:0.65rem; color:#22c55e; display:flex; align-items:center; justify-content:flex-end; gap:0.15rem; margin-top:0.1rem;">
-                        <span>+${insp.bwUsage.toLocaleString()}</span>
+                        <span>+${bwUsageVal.toLocaleString()}</span>
                     </div>
                 </td>
                 <td class="right" style="line-height:1.25;">
-                    <div style="font-weight:600;">${insp.colorCounter.toLocaleString()}</div>
+                    <div style="font-weight:600;">${colorCounterVal.toLocaleString()}</div>
                     <div style="font-size:0.65rem; color:#a855f7; display:flex; align-items:center; justify-content:flex-end; gap:0.15rem; margin-top:0.1rem;">
-                        <span>+${insp.colorUsage.toLocaleString()}</span>
+                        <span>+${colorUsageVal.toLocaleString()}</span>
                     </div>
                 </td>
                 <td style="font-size:0.65rem; line-height:1.2; word-break:break-all;">${partsText}</td>
