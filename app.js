@@ -380,18 +380,7 @@ function setupEventListeners() {
     if (downloadImageBtn) {
         downloadImageBtn.addEventListener('click', downloadReportImage);
     }
-    const printReportBtn = document.getElementById('printReportBtn');
-    if (printReportBtn) {
-        printReportBtn.addEventListener('click', () => {
-            if (isInAppBrowser()) {
-                alert("카카오톡/인앱 브라우저에서는 인쇄(PDF 저장) 기능이 지원되지 않을 수 있습니다. 우측 상단 메뉴(...)를 눌러 '다른 브라우저로 열기(Safari/Chrome)'를 선택하신 후 진행해 주세요.");
-            }
-            document.body.classList.add('print-report');
-            setTimeout(() => {
-                window.print();
-            }, 150);
-        });
-    }
+
     const printInspectionLedgerBtn = document.getElementById('printInspectionLedgerBtn');
     if (printInspectionLedgerBtn) {
         printInspectionLedgerBtn.addEventListener('click', () => {
@@ -2410,11 +2399,8 @@ window.addEventListener('beforeprint', () => {
     } else if (invoiceModal && invoiceModal.classList.contains('active')) {
         document.body.classList.add('print-invoice');
     } else {
-        const reportView = document.getElementById('reportView');
         const inspectionsView = document.getElementById('inspectionsView');
-        if (reportView && reportView.classList.contains('active')) {
-            document.body.classList.add('print-report');
-        } else if (inspectionsView && inspectionsView.classList.contains('active')) {
+        if (inspectionsView && inspectionsView.classList.contains('active')) {
             const monthVal = document.getElementById('inspectionMonthFilter').value;
             const searchVal = document.getElementById('inspectionSearchInput').value.trim();
             const titleEl = document.getElementById('inspectionPrintTitle');
@@ -3076,8 +3062,6 @@ function generateMonthlyReport() {
         const selectedMonth = document.getElementById('reportMonthFilter').value;
         const printArea = document.getElementById('reportPrintArea');
         const downloadBtn = document.getElementById('downloadImageBtn');
-        const printBtn = document.getElementById('printReportBtn');
-        const guideBanner = document.getElementById('reportGuideBanner');
     
     if (!selectedMonth) {
         alert('대상 월을 선택해 주세요.');
@@ -3095,8 +3079,6 @@ function generateMonthlyReport() {
             </div>
         `;
         if (downloadBtn) downloadBtn.style.display = 'none';
-        if (printBtn) printBtn.style.display = 'none';
-        if (guideBanner) guideBanner.style.display = 'none';
         
         // Reset scale style
         const container = document.querySelector('.report-paper-container');
@@ -3364,8 +3346,6 @@ function generateMonthlyReport() {
 
     printArea.innerHTML = reportHtml;
     if (downloadBtn) downloadBtn.style.display = 'block';
-    if (printBtn) printBtn.style.display = 'block';
-    if (guideBanner) guideBanner.style.display = 'flex';
     
     // Recalculate scaling for current screen width
     setTimeout(adjustReportScale, 20);
@@ -3398,14 +3378,12 @@ function downloadReportImage() {
     if (!selectedMonth || !element || !container) return;
 
     const downloadBtn = document.getElementById('downloadImageBtn');
-    const printBtn = document.getElementById('printReportBtn');
     const loadingOverlay = document.getElementById('imageLoadingOverlay');
     
     const originalText = downloadBtn.innerHTML;
     
     // Enable loading overlay and disable actions
     downloadBtn.disabled = true;
-    if (printBtn) printBtn.disabled = true;
     if (loadingOverlay) loadingOverlay.style.display = 'flex';
 
     // 1. Temporarily scroll to top (crucial for html2canvas to capture full view offset correctly)
@@ -3467,13 +3445,8 @@ function downloadReportImage() {
             finalizeExport();
         }).catch(err => {
             console.error("이미지 다운로드/타임아웃 에러:", err);
-            alert("이미지 생성이 지연되어 인쇄/저장(PDF) 화면으로 대체합니다. 인쇄 창에서 PDF 저장을 선택하실 수 있습니다.");
+            alert("이미지 다운로드 중 에러가 발생했습니다. 잠시 후 다시 시도해 주세요.");
             finalizeExport();
-            // Fallback to native print with print-report class and delay
-            document.body.classList.add('print-report');
-            setTimeout(() => {
-                window.print();
-            }, 150);
         });
     }
 
@@ -3489,7 +3462,6 @@ function downloadReportImage() {
         
         downloadBtn.disabled = false;
         downloadBtn.innerHTML = originalText;
-        if (printBtn) printBtn.disabled = false;
         
         // Recalculate scaling
         adjustReportScale();
