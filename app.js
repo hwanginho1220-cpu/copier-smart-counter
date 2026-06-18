@@ -3141,79 +3141,82 @@ function generateMonthlyReport() {
     // Build Report Content HTML
     let tableRowsHtml = '';
     
-    // Sort customer IDs by name
-    const customerIds = Object.keys(groupedInspections).sort((a, b) => {
-        const nameA = state.customers.find(c => c.id === a)?.name || '';
-        const nameB = state.customers.find(c => c.id === b)?.name || '';
-        return nameA.localeCompare(nameB);
-    });
-
-    customerIds.forEach((customerId, custIdx) => {
+    // Calculate customer billing info in advance
+    const customerBillingMap = {};
+    const uniqueCustomerIds = [...new Set(filteredInsps.map(i => i.customerId))];
+    uniqueCustomerIds.forEach(customerId => {
         const cust = state.customers.find(c => c.id === customerId);
-        const custInsps = groupedInspections[customerId];
-        
-        const customerName = cust ? cust.name : '알 수 없음';
+        const custInsps = filteredInsps.filter(i => i.customerId === customerId);
         const vatEnabled = cust ? cust.vatEnabled !== false : true;
-
-        let totalBwOverForCust = 0;
-        let totalColorOverForCust = 0;
+        
+        let totalBwOver = 0;
+        let totalColorOver = 0;
         let partsTotal = 0;
         let billingSubtotal = 0;
-
+        
         // Base rents
         if (cust && cust.devices) {
             cust.devices.forEach(d => billingSubtotal += Number(d.price || 0));
         }
-
+        
         custInsps.forEach(insp => {
             const dev = cust && cust.devices ? cust.devices.find(d => d.id === insp.deviceId) : null;
             if (dev) {
                 const bwOver = Math.max(0, Number(insp.bwUsage || 0) - Number(dev.contractBw || 0));
                 const colorOver = Math.max(0, Number(insp.colorUsage || 0) - Number(dev.contractColor || 0));
                 
-                totalBwOverForCust += bwOver;
-                totalColorOverForCust += colorOver;
-
+                totalBwOver += bwOver;
+                totalColorOver += colorOver;
+                
                 billingSubtotal += (bwOver * Number(dev.overBwPrice || 0));
                 billingSubtotal += (colorOver * Number(dev.overColorPrice || 0));
             }
-
+            
             if (insp.parts && Array.isArray(insp.parts)) {
-                const pTotal = insp.parts.reduce((sum, p) => sum + (Number(p.price || 0) * Number(p.quantity || 0)), 0);
-                partsTotal += pTotal;
-                billingSubtotal += pTotal;
+                partsTotal += insp.parts.reduce((sum, p) => sum + (Number(p.price || 0) * Number(p.quantity || 0)), 0);
             }
         });
-
+        
+        billingSubtotal += partsTotal;
         const billingVat = vatEnabled ? Math.floor(billingSubtotal * 0.1) : 0;
         const billingTotal = billingSubtotal + billingVat;
+        
+        customerBillingMap[customerId] = {
+            totalBwOver,
+            totalColorOver,
+            billingTotal,
+            vatEnabled
+        };
+    });
 
-        custInsps.forEach((insp, idx) => {
-            const dev = cust && cust.devices ? cust.devices.find(d => d.id === insp.deviceId) : null;
-            const model = dev ? `${dev.name} (${dev.model})` : '-';
-            
-            let partsText = '-';
-            if (insp.parts && Array.isArray(insp.parts) && insp.parts.length > 0) {
-                partsText = insp.parts.map(p => `${p.name} x${p.quantity}<br>(₩${(Number(p.price || 0) * Number(p.quantity || 0)).toLocaleString()})`).join('<br>');
-            }
+    // Render each inspection as an independent row sorted by date
+    filteredInsps.forEach((insp, idx) => {
+        const customerId = insp.customerId;
+        const cust = state.customers.find(c => c.id === customerId);
+        const customerName = cust ? cust.name : '알 수 없음';
+        const billingInfo = customerBillingMap[customerId] || { billingTotal: 0, vatEnabled: true, totalBwOver: 0, totalColorOver: 0 };
+        
+        const dev = cust && cust.devices ? cust.devices.find(d => d.id === insp.deviceId) : null;
+        const model = dev ? `${dev.name} (${dev.model})` : '-';
+        
+        let partsText = '-';
+        if (insp.parts && Array.isArray(insp.parts) && insp.parts.length > 0) {
+            partsText = insp.parts.map(p => `${p.name} x${p.quantity}<br>(₩${(Number(p.price || 0) * Number(p.quantity || 0)).toLocaleString()})`).join('<br>');
+        }
+        
+        const bwCounterVal = Number(insp.bwCounter) || 0;
+        const bwUsageVal = Number(insp.bwUsage) || 0;
+        const colorCounterVal = Number(insp.colorCounter) || 0;
+        const colorUsageVal = Number(insp.colorUsage) || 0;
+        
+        const bwOverBadge = billingInfo.totalBwOver > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${billingInfo.totalBwOver.toLocaleString()}(흑백)</span></div>` : '';
+        const colorOverBadge = billingInfo.totalColorOver > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${billingInfo.totalColorOver.toLocaleString()}(컬러)</span></div>` : '';
 
-            tableRowsHtml += `<tr>`;
-            
-            // Render common columns only for the first row of this customer
-            if (idx === 0) {
-                tableRowsHtml += `
-                    <td class="center" rowspan="${custInsps.length}">${custIdx + 1}</td>
-                    <td style="font-weight:600; font-size:0.75rem; word-break:break-all;" rowspan="${custInsps.length}">${customerName}</td>
-                `;
-            }
-            
-            const bwCounterVal = Number(insp.bwCounter) || 0;
-            const bwUsageVal = Number(insp.bwUsage) || 0;
-            const colorCounterVal = Number(insp.colorCounter) || 0;
-            const colorUsageVal = Number(insp.colorUsage) || 0;
-
-            tableRowsHtml += `
+        tableRowsHtml += `
+            <tr>
+                <td class="center">${idx + 1}</td>
                 <td class="center" style="font-size:0.68rem; letter-spacing:-0.5px;">${insp.date || '-'}</td>
+                <td style="font-weight:600; font-size:0.75rem; word-break:break-all;">${customerName}</td>
                 <td class="center" style="font-size:0.68rem; color:#475569;">${model}</td>
                 <td class="right" style="line-height:1.25;">
                     <div style="font-weight:600;">${bwCounterVal.toLocaleString()}</div>
@@ -3228,29 +3231,19 @@ function generateMonthlyReport() {
                     </div>
                 </td>
                 <td style="font-size:0.65rem; line-height:1.2; word-break:break-all;">${partsText}</td>
-            `;
-
-            if (idx === 0) {
-                const bwOverBadge = totalBwOverForCust > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${totalBwOverForCust.toLocaleString()}(흑백)</span></div>` : '';
-                const colorOverBadge = totalColorOverForCust > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${totalColorOverForCust.toLocaleString()}(컬러)</span></div>` : '';
-                
-                tableRowsHtml += `
-                    <td class="right" rowspan="${custInsps.length}">
-                        <div style="font-weight:600; color:#0f172a;">₩${billingTotal.toLocaleString()}</div>
-                        <div style="font-size:0.65rem; color:var(--text-secondary); margin-top:0.1rem;">${vatEnabled ? '(VAT포함)' : '(VAT면세)'}</div>
-                        ${bwOverBadge}
-                        ${colorOverBadge}
-                    </td>
-                    <td class="center" rowspan="${custInsps.length}">
-                        <button class="btn-icon btn-secondary" onclick="openInvoiceModal('${customerId}', '${selectedMonth}')" title="거래명세서 발급" style="padding: 0.3rem 0.5rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-weight:600;">
-                            <i class="fa-solid fa-file-invoice-dollar" style="color:#10b981;"></i> 발급
-                        </button>
-                    </td>
-                `;
-            }
-            
-            tableRowsHtml += `</tr>`;
-        });
+                <td class="right">
+                    <div style="font-weight:600; color:#0f172a;">₩${billingInfo.billingTotal.toLocaleString()}</div>
+                    <div style="font-size:0.65rem; color:var(--text-secondary); margin-top:0.1rem;">${billingInfo.vatEnabled ? '(VAT포함)' : '(VAT면세)'}</div>
+                    ${bwOverBadge}
+                    ${colorOverBadge}
+                </td>
+                <td class="center">
+                    <button class="btn-icon btn-secondary" onclick="openInvoiceModal('${customerId}', '${selectedMonth}')" title="거래명세서 발급" style="padding: 0.3rem 0.5rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-weight:600;">
+                        <i class="fa-solid fa-file-invoice-dollar" style="color:#10b981;"></i> 발급
+                    </button>
+                </td>
+            </tr>
+        `;
     });
 
     const reportHtml = `
