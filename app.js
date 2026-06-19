@@ -513,7 +513,7 @@ function switchView(viewName) {
  */
 async function recalculateUsageForCustomer(customerId) {
     // Get all inspections for this customer
-    const custInspections = state.inspections.filter(i => i.customerId === customerId);
+    const custInspections = state.inspections.filter(i => String(i.customerId) === String(customerId));
     
     // Sort by date ascending, then by ID (order of creation) if dates match
     custInspections.sort((a, b) => {
@@ -560,8 +560,8 @@ async function recalculateUsageForCustomer(customerId) {
 
     // Update main state array
     state.inspections = state.inspections.map(insp => {
-        if (insp.customerId === customerId) {
-            const updated = custInspections.find(ci => ci.id === insp.id);
+        if (String(insp.customerId) === String(customerId)) {
+            const updated = custInspections.find(ci => String(ci.id) === String(insp.id));
             return updated || insp;
         }
         return insp;
@@ -596,8 +596,8 @@ function getPreviousInspection(deviceId, beforeDateStr, excludeId = null) {
     const beforeDate = new Date(beforeDateStr);
     
     const candidates = state.inspections.filter(i => {
-        if (i.deviceId !== deviceId) return false;
-        if (excludeId && i.id === excludeId) return false;
+        if (String(i.deviceId) !== String(deviceId)) return false;
+        if (excludeId && String(i.id) === String(excludeId)) return false;
         return new Date(i.date) < beforeDate;
     });
 
@@ -728,7 +728,7 @@ function renderRecentInspections() {
     }
 
     sorted.forEach(insp => {
-        const customer = state.customers.find(c => c.id === insp.customerId);
+        const customer = state.customers.find(c => String(c.id) === String(insp.customerId));
         const customerName = customer ? customer.name : '알 수 없는 고객';
         
         const bwCounterVal = Number(insp.bwCounter) || 0;
@@ -740,7 +740,7 @@ function renderRecentInspections() {
         if (bwUsageVal > 0) {
             bwBadge = `<span class="badge badge-success">+${bwUsageVal.toLocaleString()}</span>`;
             if (customer) {
-                const dev = customer.devices ? customer.devices.find(d => d.id === insp.deviceId) : null;
+                const dev = customer.devices ? customer.devices.find(d => String(d.id) === String(insp.deviceId)) : null;
                 const limit = dev ? Number(dev.contractBw) : (Number(customer.contractBw) || 0);
                 if (limit > 0 && bwUsageVal > limit) {
                     const over = bwUsageVal - limit;
@@ -755,7 +755,7 @@ function renderRecentInspections() {
         if (colorUsageVal > 0) {
             colorBadge = `<span class="badge badge-success" style="background:rgba(217,70,239,0.15); color:#f472b6;">+${colorUsageVal.toLocaleString()}</span>`;
             if (customer) {
-                const dev = customer.devices ? customer.devices.find(d => d.id === insp.deviceId) : null;
+                const dev = customer.devices ? customer.devices.find(d => String(d.id) === String(insp.deviceId)) : null;
                 const limit = dev ? Number(dev.contractColor) : (Number(customer.contractColor) || 0);
                 if (limit > 0 && colorUsageVal > limit) {
                     const over = colorUsageVal - limit;
@@ -1423,9 +1423,9 @@ function renderInspectionsTable() {
 
     // Filter inspections
     const filtered = state.inspections.filter(insp => {
-        const customer = state.customers.find(c => c.id === insp.customerId);
+        const customer = state.customers.find(c => String(c.id) === String(insp.customerId));
         const customerName = customer ? customer.name.toLowerCase() : '';
-        const dev = customer && customer.devices ? customer.devices.find(d => d.id === insp.deviceId) || customer.devices[0] : null;
+        const dev = customer && customer.devices ? customer.devices.find(d => String(d.id) === String(insp.deviceId)) || customer.devices[0] : null;
         
         const modelName = dev && dev.model ? dev.model.toLowerCase() : '';
         const devName = dev && dev.name ? dev.name.toLowerCase() : '';
@@ -1452,8 +1452,8 @@ function renderInspectionsTable() {
     }
 
     filtered.forEach(insp => {
-        const customer = state.customers.find(c => c.id === insp.customerId);
-        const dev = customer && customer.devices ? customer.devices.find(d => d.id === insp.deviceId) || customer.devices[0] : null;
+        const customer = state.customers.find(c => String(c.id) === String(insp.customerId));
+        const dev = customer && customer.devices ? customer.devices.find(d => String(d.id) === String(insp.deviceId)) || customer.devices[0] : null;
         const customerName = customer ? customer.name : '알 수 없음';
         const model = dev ? (dev.model || dev.name) : '-';
 
@@ -1555,7 +1555,7 @@ async function handleInspectionFormSubmit(e) {
     }
 
     if (!id) {
-        const duplicate = state.inspections.find(i => i.deviceId === deviceId && i.date === date);
+        const duplicate = state.inspections.find(i => String(i.deviceId) === String(deviceId) && i.date === date);
         if (duplicate) {
             if (!confirm('해당 기기에 이미 등록된 같은 날짜의 점검 기록이 있습니다. 덮어쓰시겠습니까?')) {
                 return;
@@ -1567,7 +1567,7 @@ async function handleInspectionFormSubmit(e) {
                     console.error("기존 중복 점검 기록 삭제 실패:", err);
                 }
             } else {
-                state.inspections = state.inspections.filter(i => i.id !== duplicate.id);
+                state.inspections = state.inspections.filter(i => String(i.id) !== String(duplicate.id));
             }
         }
     }
@@ -1589,12 +1589,12 @@ async function handleInspectionFormSubmit(e) {
 
     if (isCloudMode && db) {
         try {
-            const oldCustomerId = id ? (state.inspections.find(i => i.id === id)?.customerId) : null;
+            const oldCustomerId = id ? (state.inspections.find(i => String(i.id) === String(id))?.customerId) : null;
             
             // Temporary local sync for recalculation
-            const exists = state.inspections.find(i => i.id === targetId);
+            const exists = state.inspections.find(i => String(i.id) === String(targetId));
             if (exists) {
-                state.inspections = state.inspections.map(i => i.id === targetId ? inspectionData : i);
+                state.inspections = state.inspections.map(i => String(i.id) === String(targetId) ? inspectionData : i);
             } else {
                 state.inspections.push(inspectionData);
             }
@@ -1606,7 +1606,7 @@ async function handleInspectionFormSubmit(e) {
             }
 
             // Sync the recalculated result back to Firestore
-            const calculatedInsp = state.inspections.find(i => i.id === targetId);
+            const calculatedInsp = state.inspections.find(i => String(i.id) === String(targetId));
             if (calculatedInsp) {
                 const cleanedData = JSON.parse(JSON.stringify(calculatedInsp));
                 lastSavedInspections[targetId] = {
@@ -1622,7 +1622,7 @@ async function handleInspectionFormSubmit(e) {
         }
     } else {
         if (id) {
-            const insp = state.inspections.find(i => i.id === id);
+            const insp = state.inspections.find(i => String(i.id) === String(id));
             if (insp) {
                 const oldCustomerId = insp.customerId;
                 insp.customerId = customerId;
@@ -2020,7 +2020,7 @@ function openInspectionModal(id = null, customerId = null) {
 
     if (id) {
         title.textContent = '복사기 점검 기록 수정';
-        const insp = state.inspections.find(i => i.id === id);
+        const insp = state.inspections.find(i => String(i.id) === String(id));
         if (insp) {
             document.getElementById('inspectionId').value = insp.id;
             document.getElementById('inspectionCustomerSelect').value = insp.customerId;
@@ -2079,7 +2079,7 @@ function handleInspectionCustomerChange() {
         return;
     }
 
-    const customer = state.customers.find(c => c.id === customerId);
+    const customer = state.customers.find(c => String(c.id) === String(customerId));
     if (customer && customer.devices && customer.devices.length > 0) {
         customer.devices.forEach(dev => {
             const option = document.createElement('option');
@@ -3080,9 +3080,9 @@ function generateMonthlyReport() {
     let totalPartCost = 0;
 
     filteredInsps.forEach(insp => {
-        const cust = state.customers.find(c => c.id === insp.customerId);
+        const cust = state.customers.find(c => String(c.id) === String(insp.customerId));
         if (cust && cust.devices) {
-            const dev = cust.devices.find(d => d.id === insp.deviceId) || cust.devices[0];
+            const dev = cust.devices.find(d => String(d.id) === String(insp.deviceId)) || cust.devices[0];
             if (dev) {
                 const bwOver = Math.max(0, Number(insp.bwUsage || 0) - Number(dev.contractBw || 0));
                 const colorOver = Math.max(0, Number(insp.colorUsage || 0) - Number(dev.contractColor || 0));
@@ -3119,8 +3119,8 @@ function generateMonthlyReport() {
     const customerBillingMap = {};
     const uniqueCustomerIds = [...new Set(filteredInsps.map(i => i.customerId))];
     uniqueCustomerIds.forEach(customerId => {
-        const cust = state.customers.find(c => c.id === customerId);
-        const custInsps = filteredInsps.filter(i => i.customerId === customerId);
+        const cust = state.customers.find(c => String(c.id) === String(customerId));
+        const custInsps = filteredInsps.filter(i => String(i.customerId) === String(customerId));
         const vatEnabled = cust ? cust.vatEnabled !== false : true;
         
         let totalBwOver = 0;
@@ -3135,7 +3135,7 @@ function generateMonthlyReport() {
         }
         
         custInsps.forEach(insp => {
-            const dev = cust && cust.devices ? cust.devices.find(d => d.id === insp.deviceId) : null;
+            const dev = cust && cust.devices ? cust.devices.find(d => String(d.id) === String(insp.deviceId)) : null;
             if (dev) {
                 const bwOver = Math.max(0, Number(insp.bwUsage || 0) - Number(dev.contractBw || 0));
                 const colorOver = Math.max(0, Number(insp.colorUsage || 0) - Number(dev.contractColor || 0));
@@ -3181,11 +3181,11 @@ function generateMonthlyReport() {
     // Render each inspection as an independent row sorted by date
     filteredInsps.forEach((insp, idx) => {
         const customerId = insp.customerId;
-        const cust = state.customers.find(c => c.id === customerId);
+        const cust = state.customers.find(c => String(c.id) === String(customerId));
         const customerName = cust ? cust.name : '알 수 없음';
         const billingInfo = customerBillingMap[customerId] || { billingTotal: 0, vatEnabled: true, totalBwOver: 0, totalColorOver: 0 };
         
-        const dev = cust && cust.devices ? cust.devices.find(d => d.id === insp.deviceId) : null;
+        const dev = cust && cust.devices ? cust.devices.find(d => String(d.id) === String(insp.deviceId)) : null;
         const model = dev ? `${dev.name} (${dev.model})` : '-';
         
         let partsText = '-';
