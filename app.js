@@ -139,7 +139,7 @@ function migrateState() {
     
     // Migrate customers
     state.customers.forEach(c => {
-        if (!c.devices) {
+        if (!c.devices || c.devices.length === 0) {
             c.devices = [{
                 id: c.id + '-dev1',
                 type: '복사기',
@@ -546,11 +546,13 @@ async function recalculateUsageForCustomer(customerId) {
         try {
             const batch = db.batch();
             changedInspections.forEach(insp => {
-                const docRef = db.collection('inspections').doc(insp.id);
-                batch.update(docRef, {
-                    bwUsage: insp.bwUsage,
-                    colorUsage: insp.colorUsage
-                });
+                if (insp && insp.id) {
+                    const docRef = db.collection('inspections').doc(insp.id);
+                    batch.update(docRef, {
+                        bwUsage: insp.bwUsage || 0,
+                        colorUsage: insp.colorUsage || 0
+                    });
+                }
             });
             await batch.commit();
         } catch (err) {
