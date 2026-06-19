@@ -489,8 +489,10 @@ async function recalculateUsageForCustomer(customerId) {
     
     // Sort by date ascending, then by ID (order of creation) if dates match
     custInspections.sort((a, b) => {
-        const timeA = a.date ? new Date(a.date).getTime() : 0;
-        const timeB = b.date ? new Date(b.date).getTime() : 0;
+        const parsedA = a.date ? new Date(a.date).getTime() : 0;
+        const parsedB = b.date ? new Date(b.date).getTime() : 0;
+        const timeA = isNaN(parsedA) ? 0 : parsedA;
+        const timeB = isNaN(parsedB) ? 0 : parsedB;
         if (timeA !== timeB) return timeA - timeB;
         return (a.id || '').localeCompare(b.id || '');
     });
@@ -1572,11 +1574,12 @@ async function handleInspectionFormSubmit(e) {
             // Sync the recalculated result back to Firestore
             const calculatedInsp = state.inspections.find(i => i.id === targetId);
             if (calculatedInsp) {
+                const cleanedData = JSON.parse(JSON.stringify(calculatedInsp));
                 lastSavedInspections[targetId] = {
-                    data: JSON.parse(JSON.stringify(calculatedInsp)),
+                    data: cleanedData,
                     timestamp: Date.now()
                 };
-                await db.collection('inspections').doc(targetId).set(calculatedInsp);
+                await db.collection('inspections').doc(targetId).set(cleanedData);
             }
         } catch (err) {
             console.error("점검 기록 저장 중 오류:", err);
@@ -2085,13 +2088,13 @@ function updatePreviousCountersInfo(overrideDeviceId = null, excludeId = null) {
             <div style="font-weight: 600; margin-bottom: 0.15rem; color: var(--primary);">
                 <i class="fa-solid fa-clock-rotate-left"></i> 직전 점검 내역 (${prev.date})
             </div>
-            <div>흑백 카운터: <span style="font-weight:600; color:var(--text-primary);">${prev.bwCounter.toLocaleString()}</span></div>
-            <div>컬러 카운터: <span style="font-weight:600; color:var(--text-primary);">${prev.colorCounter.toLocaleString()}</span></div>
+            <div>흑백 카운터: <span style="font-weight:600; color:var(--text-primary);">${Number(prev.bwCounter || 0).toLocaleString()}</span></div>
+            <div>컬러 카운터: <span style="font-weight:600; color:var(--text-primary);">${Number(prev.colorCounter || 0).toLocaleString()}</span></div>
             <div style="font-size:0.75rem; color:var(--text-muted); margin-top: 0.25rem;">* 입력하시는 카운터 값과 비교하여 사용량을 자동 계산합니다.</div>
         `;
         // Pre-populate input fields as suggestion (so user doesn't start from 0 if they don't want to)
-        document.getElementById('bwCounter').placeholder = prev.bwCounter;
-        document.getElementById('colorCounter').placeholder = prev.colorCounter;
+        document.getElementById('bwCounter').placeholder = prev.bwCounter !== undefined ? prev.bwCounter : '0';
+        document.getElementById('colorCounter').placeholder = prev.colorCounter !== undefined ? prev.colorCounter : '0';
     } else {
         infoBox.style.display = 'block';
         infoBox.innerHTML = `
@@ -3136,6 +3139,11 @@ function generateMonthlyReport() {
         grandTotalBilling += Number(info.billingTotal || 0);
     });
 
+    let totalDiscountSum = 0;
+    filteredInsps.forEach(insp => {
+        totalDiscountSum += Number(insp.discountAmount || 0);
+    });
+
     // Render each inspection as an independent row sorted by date
     filteredInsps.forEach((insp, idx) => {
         const customerId = insp.customerId;
@@ -3158,6 +3166,8 @@ function generateMonthlyReport() {
         
         const bwOverBadge = billingInfo.totalBwOver > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${billingInfo.totalBwOver.toLocaleString()}(흑백)</span></div>` : '';
         const colorOverBadge = billingInfo.totalColorOver > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${billingInfo.totalColorOver.toLocaleString()}(컬러)</span></div>` : '';
+        const discountVal = Number(insp.discountAmount) || 0;
+        const discountBadge = discountVal > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge" style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; font-size:0.6rem; padding: 0.1rem 0.25rem; font-weight:600; border-radius:3px; display:inline-block;">D/C -₩${discountVal.toLocaleString()}</span></div>` : '';
 
         tableRowsHtml += `
             <tr>
@@ -3183,6 +3193,7 @@ function generateMonthlyReport() {
                     <div style="font-size:0.65rem; color:var(--text-secondary); margin-top:0.1rem;">${billingInfo.vatEnabled ? '(VAT포함)' : '(VAT면세)'}</div>
                     ${bwOverBadge}
                     ${colorOverBadge}
+                    ${discountBadge}
                 </td>
                 <td class="center">
                     <button class="btn-icon btn-secondary" onclick="openInvoiceModal('${customerId}', '${selectedMonth}')" title="거래명세서 발급" style="padding: 0.3rem 0.5rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-weight:600;">
@@ -3262,8 +3273,13 @@ function generateMonthlyReport() {
                         <td colspan="4" style="text-align: center;">합계</td>
                         <td class="right" style="color: #22c55e;">+${totalBwUsage.toLocaleString()} 매</td>
                         <td class="right" style="color: #a855f7;">+${totalColorUsage.toLocaleString()} 매</td>
-                        <td></td>
-                        <td class="right" style="color: #0f172a; font-size: 0.85rem;">₩${grandTotalBilling.toLocaleString()}</td>
+                        <td class="right" style="color: #ef4444; font-size: 0.7rem; font-weight: bold; vertical-align: middle;">
+                            ${totalDiscountSum > 0 ? `총 D/C: -₩${totalDiscountSum.toLocaleString()}` : ''}
+                        </td>
+                        <td class="right" style="color: #0f172a; font-size: 0.85rem; line-height: 1.3;">
+                            <div>₩${grandTotalBilling.toLocaleString()}</div>
+                            <div style="font-size:0.65rem; color:#64748b; font-weight:normal; margin-top:0.15rem;">(D/C 및 VAT 반영)</div>
+                        </td>
                         <td></td>
                     </tr>
                 </tfoot>
