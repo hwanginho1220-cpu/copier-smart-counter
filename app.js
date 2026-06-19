@@ -378,44 +378,6 @@ function setupEventListeners() {
     }
 
 
-    const printInspectionLedgerBtn = document.getElementById('printInspectionLedgerBtn');
-    if (printInspectionLedgerBtn) {
-        printInspectionLedgerBtn.addEventListener('click', () => {
-            const monthVal = document.getElementById('inspectionMonthFilter').value;
-            const searchVal = document.getElementById('inspectionSearchInput').value.trim();
-            
-            const titleEl = document.getElementById('inspectionPrintTitle');
-            const subtitleEl = document.getElementById('inspectionPrintSubtitle');
-            
-            let titleText = '점검 대장';
-            let subtitleText = '';
-            
-            if (monthVal) {
-                const parts = monthVal.split('-');
-                titleText = `${parts[0]}년 ${parts[1]}월 점검대장`;
-            } else {
-                titleText = '전체 점검대장';
-            }
-            
-            if (searchVal) {
-                subtitleText = `검색어: "${searchVal}" | 출력일: ${new Date().toISOString().split('T')[0]}`;
-            } else {
-                subtitleText = `출력일: ${new Date().toISOString().split('T')[0]}`;
-            }
-            
-            if (titleEl) titleEl.textContent = titleText;
-            if (subtitleEl) subtitleEl.textContent = subtitleText;
-            
-            if (isInAppBrowser()) {
-                alert("카카오톡/인앱 브라우저에서는 인쇄(PDF 저장) 기능이 지원되지 않을 수 있습니다. 우측 상단 메뉴(...)를 눌러 '다른 브라우저로 열기(Safari/Chrome)'를 선택하신 후 진행해 주세요.");
-            }
-            
-            document.body.classList.add('print-ledger');
-            setTimeout(() => {
-                window.print();
-            }, 150);
-        });
-    }
     // Window resize event for report scaling
     window.addEventListener('resize', () => {
         const reportView = document.getElementById('reportView');
@@ -2399,40 +2361,11 @@ window.addEventListener('beforeprint', () => {
         document.body.classList.add('print-bulk-invoice');
     } else if (invoiceModal && invoiceModal.classList.contains('active')) {
         document.body.classList.add('print-invoice');
-    } else {
-        const inspectionsView = document.getElementById('inspectionsView');
-        if (inspectionsView && inspectionsView.classList.contains('active')) {
-            const monthVal = document.getElementById('inspectionMonthFilter').value;
-            const searchVal = document.getElementById('inspectionSearchInput').value.trim();
-            const titleEl = document.getElementById('inspectionPrintTitle');
-            const subtitleEl = document.getElementById('inspectionPrintSubtitle');
-            
-            let titleText = '점검 대장';
-            let subtitleText = '';
-            
-            if (monthVal) {
-                const parts = monthVal.split('-');
-                titleText = `${parts[0]}년 ${parts[1]}월 점검대장`;
-            } else {
-                titleText = '전체 점검대장';
-            }
-            
-            if (searchVal) {
-                subtitleText = `검색어: "${searchVal}" | 출력일: ${new Date().toISOString().split('T')[0]}`;
-            } else {
-                subtitleText = `출력일: ${new Date().toISOString().split('T')[0]}`;
-            }
-            
-            if (titleEl) titleEl.textContent = titleText;
-            if (subtitleEl) subtitleEl.textContent = subtitleText;
-            
-            document.body.classList.add('print-ledger');
-        }
     }
 });
 
 window.addEventListener('afterprint', () => {
-    document.body.classList.remove('print-report', 'print-invoice', 'print-bulk-invoice', 'print-ledger');
+    document.body.classList.remove('print-report', 'print-invoice', 'print-bulk-invoice');
     const bulkArea = document.getElementById('bulkInvoicePrintArea');
     if (bulkArea) {
         bulkArea.style.display = 'none';
