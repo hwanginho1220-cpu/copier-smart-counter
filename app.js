@@ -3197,6 +3197,11 @@ function generateMonthlyReport() {
         };
     });
 
+    let grandTotalBilling = 0;
+    Object.values(customerBillingMap).forEach(info => {
+        grandTotalBilling += Number(info.billingTotal || 0);
+    });
+
     // Render each inspection as an independent row sorted by date
     filteredInsps.forEach((insp, idx) => {
         const customerId = insp.customerId;
@@ -3318,6 +3323,16 @@ function generateMonthlyReport() {
                 <tbody>
                     ${tableRowsHtml}
                 </tbody>
+                <tfoot>
+                    <tr style="background: #f8fafc; font-weight: bold; border-top: 2px solid #cbd5e1;">
+                        <td colspan="4" style="text-align: center;">합계</td>
+                        <td class="right" style="color: #22c55e;">+${totalBwUsage.toLocaleString()} 매</td>
+                        <td class="right" style="color: #a855f7;">+${totalColorUsage.toLocaleString()} 매</td>
+                        <td></td>
+                        <td class="right" style="color: #0f172a; font-size: 0.85rem;">₩${grandTotalBilling.toLocaleString()}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
 
