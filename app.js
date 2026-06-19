@@ -186,12 +186,40 @@ function migrateState() {
 
     // Migrate inspections
     state.inspections.forEach(i => {
+        let localMigrated = false;
+
+        // Ensure date is a valid string
+        if (!i.date) {
+            i.date = new Date().toISOString().split('T')[0];
+            localMigrated = true;
+            migrated = true;
+        } else if (typeof i.date !== 'string') {
+            if (i.date.toDate && typeof i.date.toDate === 'function') {
+                i.date = i.date.toDate().toISOString().split('T')[0];
+            } else {
+                try {
+                    const parsedDate = new Date(i.date).toISOString().split('T')[0];
+                    if (parsedDate === 'Invalid Date') {
+                        i.date = new Date().toISOString().split('T')[0];
+                    } else {
+                        i.date = parsedDate;
+                    }
+                } catch (e) {
+                    i.date = new Date().toISOString().split('T')[0];
+                }
+            }
+            localMigrated = true;
+            migrated = true;
+        }
+
         if (!i.deviceId) {
             i.deviceId = i.customerId + '-dev1';
+            localMigrated = true;
             migrated = true;
-            if (isCloudMode && db) {
-                db.collection('inspections').doc(i.id).set(i, {merge: true});
-            }
+        }
+
+        if (localMigrated && isCloudMode && db) {
+            db.collection('inspections').doc(i.id).set(i, {merge: true});
         }
     });
 
@@ -583,99 +611,103 @@ function getPreviousInspection(deviceId, beforeDateStr, excludeId = null) {
 // --- UI Rendering: Dashboard ---
 
 function renderDashboard() {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth(); // 0-11
-    
-    const currentMonthStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
-    
-    // Previous month details
-    let prevYear = currentYear;
-    let prevMonth = currentMonth - 1;
-    if (prevMonth < 0) {
-        prevMonth = 11;
-        prevYear -= 1;
+    try {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth(); // 0-11
+        
+        const currentMonthStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+        
+        // Previous month details
+        let prevYear = currentYear;
+        let prevMonth = currentMonth - 1;
+        if (prevMonth < 0) {
+            prevMonth = 11;
+            prevYear -= 1;
+        }
+        const prevMonthStr = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}`;
+
+        // Filter inspections for this month and previous month
+        const thisMonthInsps = state.inspections.filter(i => i.date && typeof i.date === 'string' && i.date.startsWith(currentMonthStr));
+        const prevMonthInsps = state.inspections.filter(i => i.date && typeof i.date === 'string' && i.date.startsWith(prevMonthStr));
+
+        // Stat 1: Total Customers
+        const totalCustomers = state.customers.length;
+        document.getElementById('totalCustomersVal').textContent = totalCustomers;
+        
+        // Customer growth this month
+        const addedThisMonth = state.customers.filter(c => c.createdAt && typeof c.createdAt === 'string' && c.createdAt.startsWith(currentMonthStr)).length;
+        const customerDiffEl = document.getElementById('customersDiffVal');
+        if (addedThisMonth > 0) {
+            customerDiffEl.className = 'diff plus';
+            customerDiffEl.innerHTML = `<i class="fa-solid fa-caret-up"></i> 이번 달 +${addedThisMonth} 신규`;
+        } else {
+            customerDiffEl.className = 'diff zero';
+            customerDiffEl.innerHTML = '변동 없음';
+        }
+
+        // Stat 2: Total B&W Usage
+        const thisMonthBwUsage = thisMonthInsps.reduce((sum, curr) => sum + (curr.bwUsage || 0), 0);
+        const prevMonthBwUsage = prevMonthInsps.reduce((sum, curr) => sum + (curr.bwUsage || 0), 0);
+        document.getElementById('monthlyBwVal').textContent = thisMonthBwUsage.toLocaleString();
+        
+        const bwDiffEl = document.getElementById('monthlyBwDiffVal');
+        const bwDiffVal = thisMonthBwUsage - prevMonthBwUsage;
+        if (bwDiffVal > 0) {
+            bwDiffEl.className = 'diff plus';
+            bwDiffEl.innerHTML = `<i class="fa-solid fa-caret-up"></i> 전월대비 +${bwDiffVal.toLocaleString()}`;
+        } else if (bwDiffVal < 0) {
+            bwDiffEl.className = 'diff minus';
+            bwDiffEl.innerHTML = `<i class="fa-solid fa-caret-down"></i> 전월대비 ${bwDiffVal.toLocaleString()}`;
+        } else {
+            bwDiffEl.className = 'diff zero';
+            bwDiffEl.innerHTML = '전월 대비 동일';
+        }
+
+        // Stat 3: Total Color Usage
+        const thisMonthColorUsage = thisMonthInsps.reduce((sum, curr) => sum + (curr.colorUsage || 0), 0);
+        const prevMonthColorUsage = prevMonthInsps.reduce((sum, curr) => sum + (curr.colorUsage || 0), 0);
+        document.getElementById('monthlyColorVal').textContent = thisMonthColorUsage.toLocaleString();
+        
+        const colorDiffEl = document.getElementById('monthlyColorDiffVal');
+        const colorDiffVal = thisMonthColorUsage - prevMonthColorUsage;
+        if (colorDiffVal > 0) {
+            colorDiffEl.className = 'diff plus';
+            colorDiffEl.innerHTML = `<i class="fa-solid fa-caret-up"></i> 전월대비 +${colorDiffVal.toLocaleString()}`;
+        } else if (colorDiffVal < 0) {
+            colorDiffEl.className = 'diff minus';
+            colorDiffEl.innerHTML = `<i class="fa-solid fa-caret-down"></i> 전월대비 ${colorDiffVal.toLocaleString()}`;
+        } else {
+            colorDiffEl.className = 'diff zero';
+            colorDiffEl.innerHTML = '전월 대비 동일';
+        }
+
+        // Stat 4: Inspection Progress (Inspected TARGET Customers this month / Total TARGET Customers)
+        const targetCustomers = state.customers.filter(c => c.isMonthlyInspection !== false);
+        const totalTargetCount = targetCustomers.length;
+        const targetCustomerIds = new Set(targetCustomers.map(c => c.id));
+        
+        const inspectedCustomerIds = new Set(thisMonthInsps.map(i => i.customerId));
+        const inspectedTargetCount = [...inspectedCustomerIds].filter(id => targetCustomerIds.has(id)).length;
+        
+        const progressPercent = totalTargetCount > 0 ? Math.round((inspectedTargetCount / totalTargetCount) * 100) : 0;
+        
+        document.getElementById('inspectionProgressVal').textContent = `${progressPercent}%`;
+        const progressDiffEl = document.getElementById('inspectionProgressDiffVal');
+        progressDiffEl.className = 'diff zero';
+        progressDiffEl.innerHTML = `점검 완료: ${inspectedTargetCount} / 전체 대상: ${totalTargetCount} 개소`;
+
+        // Render Recent Inspections Table
+        renderRecentInspections();
+
+        // Render Charts
+        renderUsageChart();
+
+        // Render Top Usage Customers
+        renderTopUsageCustomers(currentMonthStr);
+    } catch (err) {
+        console.error("대시보드 렌더링 중 오류:", err);
     }
-    const prevMonthStr = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}`;
-
-    // Filter inspections for this month and previous month
-    const thisMonthInsps = state.inspections.filter(i => i.date.startsWith(currentMonthStr));
-    const prevMonthInsps = state.inspections.filter(i => i.date.startsWith(prevMonthStr));
-
-    // Stat 1: Total Customers
-    const totalCustomers = state.customers.length;
-    document.getElementById('totalCustomersVal').textContent = totalCustomers;
-    
-    // Customer growth this month
-    const addedThisMonth = state.customers.filter(c => c.createdAt && c.createdAt.startsWith(currentMonthStr)).length;
-    const customerDiffEl = document.getElementById('customersDiffVal');
-    if (addedThisMonth > 0) {
-        customerDiffEl.className = 'diff plus';
-        customerDiffEl.innerHTML = `<i class="fa-solid fa-caret-up"></i> 이번 달 +${addedThisMonth} 신규`;
-    } else {
-        customerDiffEl.className = 'diff zero';
-        customerDiffEl.innerHTML = '변동 없음';
-    }
-
-    // Stat 2: Total B&W Usage
-    const thisMonthBwUsage = thisMonthInsps.reduce((sum, curr) => sum + (curr.bwUsage || 0), 0);
-    const prevMonthBwUsage = prevMonthInsps.reduce((sum, curr) => sum + (curr.bwUsage || 0), 0);
-    document.getElementById('monthlyBwVal').textContent = thisMonthBwUsage.toLocaleString();
-    
-    const bwDiffEl = document.getElementById('monthlyBwDiffVal');
-    const bwDiffVal = thisMonthBwUsage - prevMonthBwUsage;
-    if (bwDiffVal > 0) {
-        bwDiffEl.className = 'diff plus';
-        bwDiffEl.innerHTML = `<i class="fa-solid fa-caret-up"></i> 전월대비 +${bwDiffVal.toLocaleString()}`;
-    } else if (bwDiffVal < 0) {
-        bwDiffEl.className = 'diff minus';
-        bwDiffEl.innerHTML = `<i class="fa-solid fa-caret-down"></i> 전월대비 ${bwDiffVal.toLocaleString()}`;
-    } else {
-        bwDiffEl.className = 'diff zero';
-        bwDiffEl.innerHTML = '전월 대비 동일';
-    }
-
-    // Stat 3: Total Color Usage
-    const thisMonthColorUsage = thisMonthInsps.reduce((sum, curr) => sum + (curr.colorUsage || 0), 0);
-    const prevMonthColorUsage = prevMonthInsps.reduce((sum, curr) => sum + (curr.colorUsage || 0), 0);
-    document.getElementById('monthlyColorVal').textContent = thisMonthColorUsage.toLocaleString();
-    
-    const colorDiffEl = document.getElementById('monthlyColorDiffVal');
-    const colorDiffVal = thisMonthColorUsage - prevMonthColorUsage;
-    if (colorDiffVal > 0) {
-        colorDiffEl.className = 'diff plus';
-        colorDiffEl.innerHTML = `<i class="fa-solid fa-caret-up"></i> 전월대비 +${colorDiffVal.toLocaleString()}`;
-    } else if (colorDiffVal < 0) {
-        colorDiffEl.className = 'diff minus';
-        colorDiffEl.innerHTML = `<i class="fa-solid fa-caret-down"></i> 전월대비 ${colorDiffVal.toLocaleString()}`;
-    } else {
-        colorDiffEl.className = 'diff zero';
-        colorDiffEl.innerHTML = '전월 대비 동일';
-    }
-
-    // Stat 4: Inspection Progress (Inspected TARGET Customers this month / Total TARGET Customers)
-    const targetCustomers = state.customers.filter(c => c.isMonthlyInspection !== false);
-    const totalTargetCount = targetCustomers.length;
-    const targetCustomerIds = new Set(targetCustomers.map(c => c.id));
-    
-    const inspectedCustomerIds = new Set(thisMonthInsps.map(i => i.customerId));
-    const inspectedTargetCount = [...inspectedCustomerIds].filter(id => targetCustomerIds.has(id)).length;
-    
-    const progressPercent = totalTargetCount > 0 ? Math.round((inspectedTargetCount / totalTargetCount) * 100) : 0;
-    
-    document.getElementById('inspectionProgressVal').textContent = `${progressPercent}%`;
-    const progressDiffEl = document.getElementById('inspectionProgressDiffVal');
-    progressDiffEl.className = 'diff zero';
-    progressDiffEl.innerHTML = `점검 완료: ${inspectedTargetCount} / 전체 대상: ${totalTargetCount} 개소`;
-
-    // Render Recent Inspections Table
-    renderRecentInspections();
-
-    // Render Charts
-    renderUsageChart();
-
-    // Render Top Usage Customers
-    renderTopUsageCustomers(currentMonthStr);
 }
 
 function renderRecentInspections() {
@@ -781,7 +813,7 @@ function renderTopUsageCustomers(currentMonthStr) {
     container.innerHTML = '';
 
     // Filter inspections for this month
-    const thisMonthInsps = state.inspections.filter(i => i.date.startsWith(currentMonthStr));
+    const thisMonthInsps = state.inspections.filter(i => i.date && typeof i.date === 'string' && i.date.startsWith(currentMonthStr));
 
     // Calculate usage per customer
     const usageMap = {};
@@ -869,7 +901,7 @@ function renderUsageChart() {
     });
 
     months.forEach(m => {
-        const insps = state.inspections.filter(i => i.date.startsWith(m));
+        const insps = state.inspections.filter(i => i.date && typeof i.date === 'string' && i.date.startsWith(m));
         const bwSum = insps.reduce((sum, curr) => sum + (curr.bwUsage || 0), 0);
         const colorSum = insps.reduce((sum, curr) => sum + (curr.colorUsage || 0), 0);
         bwData.push(bwSum);
@@ -993,7 +1025,7 @@ function renderCustomersTable() {
             lastInspectionDate = custInsps[0].date;
             
             // Check if there's any inspection this month
-            isInspectedThisMonth = custInsps.some(i => i.date.startsWith(todayStr));
+            isInspectedThisMonth = custInsps.some(i => i.date && typeof i.date === 'string' && i.date.startsWith(todayStr));
         }
 
         let totalBw = 0;
@@ -1399,7 +1431,7 @@ function renderInspectionsTable() {
         const devName = dev && dev.name ? dev.name.toLowerCase() : '';
         
         const matchesQuery = customerName.includes(query) || modelName.includes(query) || devName.includes(query);
-        const matchesMonth = monthFilter ? insp.date.startsWith(monthFilter) : true;
+        const matchesMonth = (monthFilter && insp.date && typeof insp.date === 'string') ? insp.date.startsWith(monthFilter) : true;
 
         return matchesQuery && matchesMonth;
     });
@@ -2906,7 +2938,7 @@ window.openUninspectedModal = function() {
     const targetCustomers = state.customers.filter(c => c.isMonthlyInspection !== false);
     
     // Get inspected customer IDs this month
-    const thisMonthInsps = state.inspections.filter(i => i.date.startsWith(currentMonthStr));
+    const thisMonthInsps = state.inspections.filter(i => i.date && typeof i.date === 'string' && i.date.startsWith(currentMonthStr));
     const inspectedIds = new Set(thisMonthInsps.map(i => i.customerId));
     
     // Filter uninspected customers
@@ -3007,7 +3039,7 @@ function generateMonthlyReport() {
     }
 
     // Filter inspections for the selected month
-    const filteredInsps = state.inspections.filter(i => i.date.startsWith(selectedMonth));
+    const filteredInsps = state.inspections.filter(i => i.date && typeof i.date === 'string' && i.date.startsWith(selectedMonth));
     
     if (filteredInsps.length === 0) {
         printArea.innerHTML = `
@@ -3372,7 +3404,7 @@ function openInvoiceModal(customerId, month) {
     if (counterArea) counterArea.style.display = 'block';
 
     // Default to today if month isn't fully given or is just for current context
-    const insps = state.inspections.filter(i => i.customerId === customerId && i.date.startsWith(month));
+    const insps = state.inspections.filter(i => i.customerId === customerId && i.date && typeof i.date === 'string' && i.date.startsWith(month));
     if (insps.length === 0) return;
 
     currentInvoiceData = { insps, cust, month };
@@ -3908,7 +3940,7 @@ function openManualInvoice(customerId, month, vatEnabled, items) {
 
 // Helper to generate Invoice HTML for Bulk Print
 function generateInvoiceHtmlForCustomer(cust, month) {
-    const insps = state.inspections.filter(i => i.customerId === cust.id && i.date.startsWith(month));
+    const insps = state.inspections.filter(i => i.customerId === cust.id && i.date && typeof i.date === 'string' && i.date.startsWith(month));
     if (insps.length === 0) return '';
 
     const issueDateStr = new Date().toISOString().split('T')[0];
@@ -4188,7 +4220,7 @@ window.printAllInvoices = function() {
         return;
     }
 
-    const filteredInsps = state.inspections.filter(i => i.date.startsWith(selectedMonth));
+    const filteredInsps = state.inspections.filter(i => i.date && typeof i.date === 'string' && i.date.startsWith(selectedMonth));
     if (filteredInsps.length === 0) {
         alert("선택하신 월에 등록된 점검 기록이 없어 일괄 명세서를 발행할 수 없습니다.");
         return;
