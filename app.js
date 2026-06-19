@@ -3187,7 +3187,8 @@ function generateMonthlyReport() {
         billingSubtotal += partsTotal;
         billingSubtotal = Math.max(0, billingSubtotal - totalDiscount);
         const billingVat = vatEnabled ? Math.floor(billingSubtotal * 0.1) : 0;
-        const billingTotal = billingSubtotal + billingVat;
+        let billingTotal = billingSubtotal + billingVat;
+        billingTotal = Math.floor(billingTotal / 100) * 100;
         
         customerBillingMap[customerId] = {
             totalBwOver,
@@ -3560,7 +3561,8 @@ function openInvoiceModal(customerId, month) {
     document.getElementById('invItemBody').innerHTML = html;
 
     const vat = vatEnabled ? Math.floor(subTotal * 0.1) : 0;
-    const total = subTotal + vat;
+    let total = subTotal + vat;
+    total = Math.floor(total / 100) * 100;
 
     document.getElementById('invTotalAmountNum').textContent = `₩${total.toLocaleString()}`;
     document.getElementById('invTotalAmountText').textContent = `일금 ${numToKoreanStr(total)} 원정`;
@@ -4089,7 +4091,8 @@ function generateInvoiceHtmlForCustomer(cust, month) {
     }
 
     const vat = vatEnabled ? Math.floor(subTotal * 0.1) : 0;
-    const total = subTotal + vat;
+    let total = subTotal + vat;
+    total = Math.floor(total / 100) * 100;
 
     const totalAmountNum = `₩${total.toLocaleString()}`;
     const totalAmountText = `일금 ${numToKoreanStr(total)} 원정`;
