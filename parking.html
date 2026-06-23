@@ -1,0 +1,1718 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartCounter - B4 주차 안내 시뮬레이터 (CAD 도면 완벽 일치형)</title>
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="style.css?v=1.0.22">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --zone-techno: #0088ff; /* 파랑 */
+            --zone-fashion: #e06080; /* 분홍 */
+            --zone-living: #00aa60; /* 초록 */
+            --zone-church: #ff5500; /* 주황 */
+            --zone-central: #60cfbf; /* 민트 (공동광장) */
+            --bg-darker: #0d1117;
+            --bg-card: #161b22;
+            --border-glow: #30363d;
+        }
+
+        body {
+            background-color: var(--bg-darker);
+            color: #c9d1d9;
+            font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        .parking-app-container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .parking-sidebar {
+            width: 340px;
+            background-color: var(--bg-card);
+            border-right: 1px solid var(--border-glow);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            box-sizing: border-box;
+            flex-shrink: 0;
+            overflow-y: auto;
+        }
+
+        .parking-main {
+            flex-grow: 1;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        .parking-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-glow);
+            padding-bottom: 1rem;
+        }
+
+        .parking-header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(45deg, #0088ff, #ff5500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .parking-header p {
+            margin: 0.25rem 0 0 0;
+            color: #8b949e;
+            font-size: 0.9rem;
+        }
+
+        .simulator-layout {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 1.5rem;
+        }
+
+        .canvas-container {
+            position: relative;
+            background-color: #0b0e14;
+            border: 1px solid var(--border-glow);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            display: block;
+            background-color: #0d1117;
+        }
+
+        .control-group {
+            background-color: rgba(22, 27, 34, 0.6);
+            border: 1px solid var(--border-glow);
+            border-radius: 8px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .control-group h3 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1rem;
+            color: #f0f6fc;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-bottom: 1px solid var(--border-glow);
+            padding-bottom: 0.5rem;
+        }
+
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: #8b949e;
+        }
+
+        .control-input {
+            width: 100%;
+            background-color: #0d1117;
+            border: 1px solid var(--border-glow);
+            border-radius: 6px;
+            color: #c9d1d9;
+            padding: 0.5rem;
+            box-sizing: border-box;
+        }
+
+        .btn-sim {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        .btn-sim-primary {
+            background-color: #1f6feb;
+            color: white;
+        }
+
+        .btn-sim-primary:hover {
+            background-color: #388bfd;
+        }
+
+        .btn-sim-secondary {
+            background-color: #21262d;
+            color: #c9d1d9;
+            border: 1px solid var(--border-glow);
+        }
+
+        .btn-sim-secondary:hover {
+            background-color: #30363d;
+        }
+
+        .sim-speed-btns {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.25rem;
+        }
+
+        .sim-speed-btn {
+            background-color: #21262d;
+            border: 1px solid var(--border-glow);
+            color: #8b949e;
+            padding: 0.35rem;
+            font-size: 0.8rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .sim-speed-btn.active {
+            background-color: #1f6feb;
+            color: white;
+            border-color: #388bfd;
+        }
+
+        .metric-mini-card {
+            background-color: rgba(22, 27, 34, 0.8);
+            border: 1px solid var(--border-glow);
+            border-radius: 8px;
+            padding: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .metric-mini-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+        }
+
+        .metric-mini-info {
+            flex-grow: 1;
+        }
+
+        .metric-mini-info h4 {
+            margin: 0;
+            font-size: 0.8rem;
+            color: #8b949e;
+            font-weight: 500;
+        }
+
+        .metric-mini-info .value {
+            margin: 0.15rem 0 0 0;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #f0f6fc;
+        }
+
+        .zone-progress-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .zone-progress-item {
+            background-color: rgba(13, 17, 23, 0.5);
+            border: 1px solid var(--border-glow);
+            padding: 0.75rem;
+            border-radius: 6px;
+        }
+
+        .zone-progress-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            margin-bottom: 0.35rem;
+        }
+
+        .zone-progress-bar-bg {
+            height: 8px;
+            background-color: #21262d;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .zone-progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .guide-inspector {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            box-sizing: border-box;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        }
+
+        .guide-inspector h3 {
+            margin: 0;
+            font-size: 1.1rem;
+            color: #f0f6fc;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .guide-badge {
+            background-color: #ffa500;
+            color: #0d1117;
+            font-size: 0.75rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-weight: 700;
+        }
+
+        .guide-desc {
+            font-size: 0.85rem;
+            line-height: 1.4;
+            color: #c9d1d9;
+            background-color: #0d1117;
+            padding: 0.75rem;
+            border-radius: 6px;
+            border-left: 3px solid #1f6feb;
+        }
+
+        .radio-script {
+            font-size: 0.8rem;
+            font-family: 'Courier New', monospace;
+            background-color: #0b0e14;
+            padding: 0.65rem;
+            border-radius: 6px;
+            border: 1px dashed var(--border-glow);
+            color: #79c0ff;
+        }
+
+        .back-to-counter {
+            margin-top: auto;
+            text-align: center;
+            border-top: 1px solid var(--border-glow);
+            padding-top: 1rem;
+        }
+
+        .back-to-counter a {
+            color: #58a6ff;
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .back-to-counter a:hover {
+            text-decoration: underline;
+        }
+
+        .warning-glow {
+            animation: glow-red 1.5s infinite alternate;
+        }
+
+        @keyframes glow-red {
+            from {
+                box-shadow: 0 0 4px rgba(248, 81, 73, 0.4), inset 0 0 4px rgba(248, 81, 73, 0.2);
+                border-color: rgba(248, 81, 73, 0.6);
+            }
+            to {
+                box-shadow: 0 0 12px rgba(248, 81, 73, 0.8), inset 0 0 8px rgba(248, 81, 73, 0.4);
+                border-color: rgba(248, 81, 73, 1);
+            }
+        }
+
+        .strategy-info-section {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .strategy-info-section h2 {
+            margin-top: 0;
+            font-size: 1.3rem;
+            color: #f0f6fc;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-bottom: 1px solid var(--border-glow);
+            padding-bottom: 0.75rem;
+        }
+
+        .strategy-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .strategy-card {
+            background-color: #0d1117;
+            border: 1px solid var(--border-glow);
+            border-radius: 8px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .strategy-card h4 {
+            margin: 0;
+            font-size: 0.95rem;
+            color: #f0f6fc;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .strategy-card p {
+            margin: 0;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            color: #8b949e;
+        }
+
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            background-color: #161b22;
+            border-left: 4px solid #ffa500;
+            border-radius: 4px;
+            padding: 0.75rem 1rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            color: #c9d1d9;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(120%); }
+            to { transform: translateX(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="parking-app-container">
+        <!-- SIDEBAR -->
+        <aside class="parking-sidebar">
+            <div class="logo">
+                <i class="fa-solid fa-square-parking" style="color: var(--zone-techno); font-size: 1.6rem;"></i>
+                <span>SmartCounter</span>
+            </div>
+            
+            <div class="control-group">
+                <h3><i class="fa-solid fa-sliders"></i> 시뮬레이션 설정</h3>
+                
+                <div>
+                    <div class="control-label">
+                        <span>안내 유도 전략</span>
+                    </div>
+                    <select class="control-input" id="strategySelect" style="margin-top: 0.35rem;">
+                        <option value="none">유도 안내 없음 (혼잡 초래)</option>
+                        <option value="static">수동/정적 안내 (지연 대처)</option>
+                        <option value="dynamic" selected>실시간 스마트 유도 (제안안)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <div class="control-label">
+                        <span>진입 차량 유량</span>
+                        <span id="flowRateVal">보통 (60대/분)</span>
+                    </div>
+                    <input type="range" class="control-input" id="flowRateSlider" min="20" max="120" step="10" value="60" style="margin-top: 0.35rem;">
+                </div>
+
+                <div>
+                    <div class="control-label">
+                        <span>배속 제어</span>
+                    </div>
+                    <div class="sim-speed-btns" style="margin-top: 0.35rem;">
+                        <button class="sim-speed-btn active" data-speed="1">1x</button>
+                        <button class="sim-speed-btn" data-speed="2">2x</button>
+                        <button class="sim-speed-btn" data-speed="4">4x</button>
+                        <button class="sim-speed-btn" data-speed="8">8x</button>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                    <button class="btn-sim btn-sim-primary" id="btnPlayPause" style="flex-grow: 1;">
+                        <i class="fa-solid fa-pause"></i> 일시정지
+                    </button>
+                    <button class="btn-sim btn-sim-secondary" id="btnReset" title="초기화">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Occupancy Stats -->
+            <div class="control-group">
+                <h3><i class="fa-solid fa-chart-simple"></i> 구역별 점유 현황</h3>
+                <div class="zone-progress-wrapper">
+                    <!-- Techno -->
+                    <div class="zone-progress-item">
+                        <div class="zone-progress-header">
+                            <span style="color: var(--zone-techno); font-weight: 600;">테크노관 (파랑)</span>
+                            <span id="occupancyText_techno">0 / 48 (0%)</span>
+                        </div>
+                        <div class="zone-progress-bar-bg">
+                            <div class="zone-progress-bar-fill" id="progressBar_techno" style="background-color: var(--zone-techno);"></div>
+                        </div>
+                    </div>
+                    <!-- Fashion -->
+                    <div class="zone-progress-item">
+                        <div class="zone-progress-header">
+                            <span style="color: var(--zone-fashion); font-weight: 600;">패션관 (분홍)</span>
+                            <span id="occupancyText_fashion">0 / 64 (0%)</span>
+                        </div>
+                        <div class="zone-progress-bar-bg">
+                            <div class="zone-progress-bar-fill" id="progressBar_fashion" style="background-color: var(--zone-fashion);"></div>
+                        </div>
+                    </div>
+                    <!-- Living -->
+                    <div class="zone-progress-item">
+                        <div class="zone-progress-header">
+                            <span style="color: var(--zone-living); font-weight: 600;">리빙관 (초록)</span>
+                            <span id="occupancyText_living">0 / 36 (0%)</span>
+                        </div>
+                        <div class="zone-progress-bar-bg">
+                            <div class="zone-progress-bar-fill" id="progressBar_living" style="background-color: var(--zone-living);"></div>
+                        </div>
+                    </div>
+                    <!-- Church -->
+                    <div class="zone-progress-item">
+                        <div class="zone-progress-header">
+                            <span style="color: var(--zone-church); font-weight: 600;">새로운교회 (주황)</span>
+                            <span id="occupancyText_church">0 / 64 (0%)</span>
+                        </div>
+                        <div class="zone-progress-bar-bg">
+                            <div class="zone-progress-bar-fill" id="progressBar_church" style="background-color: var(--zone-church);"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="back-to-counter">
+                <a href="index.html"><i class="fa-solid fa-arrow-left"></i> 복사기 관리 대시보드로 가기</a>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="parking-main">
+            <!-- Header -->
+            <div class="parking-header">
+                <div>
+                    <h1><i class="fa-solid fa-traffic-light"></i> 가든파이브 B4 주차 안내 시뮬레이터 (도면 동선 동기화)</h1>
+                    <p>주일 예배(새로운교회) 시 집중 차량 유입 대응 및 10시 방향 진출입구 통로 폐쇄 상황 분석 프로그램</p>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <div class="badge badge-info" id="statusBadge" style="padding: 0.5rem 0.75rem; font-size: 0.85rem;">
+                        <i class="fa-solid fa-sync fa-spin"></i> 시뮬레이션 동작 중
+                    </div>
+                </div>
+            </div>
+
+            <!-- Simulator View -->
+            <div class="simulator-layout">
+                <!-- Canvas Area -->
+                <div class="canvas-container">
+                    <canvas id="parkingCanvas" width="960" height="660"></canvas>
+                </div>
+
+                <!-- Inspector Sidebar Panel -->
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <!-- Real-Time Metrics -->
+                    <div class="metric-mini-card" id="cardGridlock">
+                        <div class="metric-mini-icon" style="background-color: rgba(248, 81, 73, 0.15); color: #f85149;">
+                            <i class="fa-solid fa-car-burst"></i>
+                        </div>
+                        <div class="metric-mini-info">
+                            <h4>대기 통로 지연 차량</h4>
+                            <div class="value" id="metricsGridlocked">0대</div>
+                        </div>
+                    </div>
+
+                    <div class="metric-mini-card" id="cardSpillover">
+                        <div class="metric-mini-icon" style="background-color: rgba(255, 165, 0, 0.15); color: #ffa500;">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                        <div class="metric-mini-info">
+                            <h4>도로 혼잡 위험도</h4>
+                            <div class="value" id="metricsSpillover">안전</div>
+                        </div>
+                    </div>
+
+                    <div class="metric-mini-card">
+                        <div class="metric-mini-icon" style="background-color: rgba(56, 139, 253, 0.15); color: #388bfd;">
+                            <i class="fa-solid fa-check-double"></i>
+                        </div>
+                        <div class="metric-mini-info">
+                            <h4>성공 주차 완료 수</h4>
+                            <div class="value" id="metricsParked">0대</div>
+                        </div>
+                    </div>
+
+                    <!-- Guide Inspector Card -->
+                    <div class="guide-inspector" id="guideInspectorPanel">
+                        <h3><i class="fa-solid fa-user-tie"></i> 요원 상세 브리핑 <span class="guide-badge" id="inspGuideId">P1</span></h3>
+                        <p style="margin: 0; font-size: 0.85rem; font-weight: 600; color: #f0f6fc;" id="inspGuideName">법원로 야외 진입로 제어 요원</p>
+                        <div style="font-size: 0.8rem; color: #8b949e;"><strong>위치:</strong> <span id="inspGuideLoc">법원로 야외 진입 램프 초입</span></div>
+                        <div>
+                            <strong style="font-size: 0.8rem; color: #8b949e;">담당 의무:</strong>
+                            <div class="guide-desc" id="inspGuideDesc">
+                                야외 법원로 상의 진입 차량 대기줄이 가든파이브 사거리 교차로까지 번지지 않도록 대기열을 관리합니다. 대기 차량이 임계치를 초과할 시 충민로 램프로 우회를 수신호로 안내합니다.
+                            </div>
+                        </div>
+                        <div>
+                            <strong style="font-size: 0.8rem; color: #8b949e;">무전/수신호 스크립트:</strong>
+                            <div class="radio-script" id="inspGuideScript">
+                                "무전 알림: 현재 법원로 진입 대기 차량이 길어지고 있으니, 직진하여 충민로 램프로 우회 유도를 시작하겠습니다!"
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Strategic Guide Information -->
+            <div class="strategy-info-section">
+                <h2><i class="fa-solid fa-circle-info"></i> 차량 유입 집중에 대응하는 주차 유도 매뉴얼</h2>
+                <div style="font-size: 0.9rem; line-height: 1.6; color: #c9d1d9;">
+                    <p>
+                        **가든파이브 라이프동 B4 평면도**의 바둑판식(Grid) 실제 차선과 완벽히 동기화되었습니다. 10시 방향 서북측 통로가 폐쇄됨에 따라 진출입 교통량은 **충민로 북측 램프(상단 중앙)**와 **법원로 남동측 램프(우측 하단)**로 완전히 분리 집중됩니다. 새로운교회 구역(주황색)이 점유 70%가 넘으면 중앙 민트색 공동구역의 수직 통로를 원활히 관리하기 위해 요원들이 리빙관(초록색), 패션관(분홍색), 테크노관(파란색)으로 선제 우회시키는 매뉴얼을 수행합니다.
+                    </p>
+                </div>
+                
+                <div class="strategy-grid">
+                    <div class="strategy-card">
+                        <h4><span style="color: #f85149;"><i class="fa-solid fa-circle"></i></span> 1단계: 통행 안내 없음 (Free)</h4>
+                        <p>
+                            모든 차량이 목적지(새로운교회 오렌지색)를 향해 돌진하며, 가득 차면 통로에 정차하여 중앙 민트색 구역과 충민/법원 램프 진입로 전체에 극심한 연쇄 마비(Gridlock)를 초래합니다.
+                        </p>
+                    </div>
+                    <div class="strategy-card">
+                        <h4><span style="color: #ffa500;"><i class="fa-solid fa-circle"></i></span> 2단계: 수동/정적 안내 (Static)</h4>
+                        <p>
+                            오렌지 구역이 100% 만차가 된 시점에 수동 통제를 시작합니다. 이미 램프 내부 통로에 차량들이 빽빽이 대기하고 있어 리빙/패션관 영역으로 유도하는 데 시간이 오래 지체됩니다.
+                        </p>
+                    </div>
+                    <div class="strategy-card">
+                        <h4><span style="color: #39ff14;"><i class="fa-solid fa-circle"></i></span> 3단계: 스마트 선제 분산 (Dynamic)</h4>
+                        <p>
+                            오렌지 구역 점유율이 <strong>70%를 돌파하는 시점</strong>부터 P5, P6 요원이 리빙관(초록색), 패션관(분홍색)으로 진입 차량을 선제적으로 50% 우회시키고, 85% 만차 시에는 램프 출구(P2, P3)에서 테크노관(파란색) 등으로 입차 즉시 분배를 진행합니다.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Simulator Engine Script -->
+    <script>
+        // --- CONSTANTS & DATA STRUCTURES ---
+        const CANVAS_WIDTH = 960;
+        const CANVAS_HEIGHT = 660;
+
+        const COLORS = {
+            bgDark: '#0d1117',
+            bgAisle: '#21262d',
+            bgAisleLine: '#30363d',
+            closedZone: '#2c313c',
+            grid: '#161b22',
+            text: '#c9d1d9',
+            textDark: '#0d1117',
+            border: '#30363d',
+            techno: '#0088ff',  // 파랑 (도면과 동기화)
+            fashion: '#e06080', // 분홍 (도면과 동기화)
+            living: '#00aa60',  // 초록 (도면과 동기화)
+            church: '#ff5500',  // 주황 (도면과 동기화)
+            central: '#60cfbf', // 민트 (도면 중앙 공동광장)
+            car: '#e6edf3',
+            carWaiting: '#f85149',
+            guide: '#ffa500',
+            guideActive: '#39ff14'
+        };
+
+        // Graph Nodes
+        const Nodes = {
+            // Outdoor road entries
+            chungmin_road: { id: 'chungmin_road', x: 500, y: 50, type: 'road' },
+            beobwon_road: { id: 'beobwon_road', x: 800, y: 640, type: 'road' },
+
+            // Ramps
+            chungmin_ramp: { id: 'chungmin_ramp', x: 500, y: 120, type: 'ramp' },
+            beobwon_ramp: { id: 'beobwon_ramp', x: 800, y: 580, type: 'ramp' },
+
+            // B4 internal junctions
+            junc_chungmin_exit: { id: 'junc_chungmin_exit', x: 500, y: 200, type: 'aisle' },
+            junc_beobwon_exit: { id: 'junc_beobwon_exit', x: 800, y: 520, type: 'aisle' },
+
+            // Central Mint zone nodes (Replacing roundabout with straight grid lanes)
+            junc_mid_center: { id: 'junc_mid_center', x: 500, y: 360, type: 'aisle' },
+            junc_mid_left: { id: 'junc_mid_left', x: 420, y: 360, type: 'aisle' },
+            junc_mid_right: { id: 'junc_mid_right', x: 580, y: 360, type: 'aisle' },
+
+            // Horizontal corridors
+            corridor_north: { id: 'corridor_north', x: 420, y: 220, type: 'aisle' },
+            corridor_south: { id: 'corridor_south', x: 420, y: 520, type: 'aisle' },
+
+            // Left side junctions
+            junc_left_top: { id: 'junc_left_top', x: 250, y: 220, type: 'aisle' },
+            junc_left_center: { id: 'junc_left_center', x: 250, y: 360, type: 'aisle' },
+            junc_left_bottom: { id: 'junc_left_bottom', x: 250, y: 520, type: 'aisle' },
+
+            // Connector points
+            connect_fashion_church: { id: 'connect_fashion_church', x: 740, y: 350, type: 'connector' },
+            connect_living_church: { id: 'connect_living_church', x: 450, y: 480, type: 'connector' },
+
+            // Zones
+            zone_techno: { id: 'zone_techno', x: 250, y: 260, type: 'zone', name: 'techno' },
+            zone_fashion: { id: 'zone_fashion', x: 780, y: 260, type: 'zone', name: 'fashion' },
+            zone_living: { id: 'zone_living', x: 220, y: 440, type: 'zone', name: 'living' },
+            zone_church: { id: 'zone_church', x: 680, y: 480, type: 'zone', name: 'church' }
+        };
+
+        const Links = [
+            // North Ramp (Chungmin-ro)
+            { from: 'chungmin_road', to: 'chungmin_ramp' },
+            { from: 'chungmin_ramp', to: 'junc_chungmin_exit' },
+
+            // South-East Ramp (Beobwon-ro)
+            { from: 'beobwon_road', to: 'beobwon_ramp' },
+            { from: 'beobwon_ramp', to: 'junc_beobwon_exit' },
+
+            // Vertical Aisles running through Central Mint Zone
+            { from: 'junc_chungmin_exit', to: 'junc_mid_center' },
+            { from: 'junc_mid_center', to: 'corridor_south' },
+            { from: 'corridor_north', to: 'junc_mid_left' },
+            { from: 'junc_mid_left', to: 'corridor_south' },
+
+            { from: 'junc_chungmin_exit', to: 'corridor_north' },
+            { from: 'junc_chungmin_exit', to: 'zone_fashion' },
+
+            { from: 'junc_beobwon_exit', to: 'zone_church' },
+            { from: 'junc_beobwon_exit', to: 'connect_fashion_church' },
+            { from: 'junc_beobwon_exit', to: 'connect_living_church' },
+
+            // Corridors going West (left half)
+            { from: 'corridor_north', to: 'junc_left_top' },
+            { from: 'corridor_south', to: 'junc_left_bottom' },
+
+            // Left side connections
+            { from: 'junc_left_top', to: 'zone_techno' },
+            { from: 'junc_left_center', to: 'zone_living' },
+            { from: 'junc_left_bottom', to: 'zone_living' },
+            
+            { from: 'junc_left_top', to: 'junc_left_center' },
+            { from: 'junc_left_center', to: 'junc_left_bottom' },
+
+            // Connectors to zones
+            { from: 'connect_fashion_church', to: 'zone_fashion' },
+            { from: 'connect_fashion_church', to: 'zone_church' },
+            { from: 'connect_living_church', to: 'zone_living' },
+            { from: 'connect_living_church', to: 'zone_church' }
+        ];
+
+        // Guides Placements
+        const Guides = [
+            {
+                id: 'P1',
+                name: '법원로 야외 진입로 제어 요원',
+                nodeId: 'beobwon_road',
+                x: 820,
+                y: 625,
+                desc: '야외 법원로 상의 진입 차량 대기줄이 가든파이브 사거리 교차로까지 번지지 않도록 대기열을 관리합니다. 대기 차량이 임계치를 초과할 시 충민로 램프로 우회를 수신호로 안내합니다.',
+                script: '"법원로 진입로 안내: 현재 램프 대기줄이 길어 사거리 정체가 우려되니, 충민로 램프로 우회하여 주십시오!"',
+                status: '정상안내'
+            },
+            {
+                id: 'P2',
+                name: '법원로 B4 진입 안내 요원',
+                nodeId: 'junc_beobwon_exit',
+                x: 820,
+                y: 520,
+                desc: '우측 하단 법원로 램프를 통해 지하 4층으로 입차한 차량들의 1차 분기를 담당합니다. 교회구역이 혼잡할 경우 리빙관(초록) 및 패션관(분홍) 방향으로 우회시킵니다.',
+                script: '"B4 법원로 진출구: 교회구역이 혼잡하오니 바로 좌회전하셔서 리빙/패션관 영역으로 주차 바랍니다!"',
+                status: '정상안내'
+            },
+            {
+                id: 'P3',
+                name: '충민로 B4 진입 안내 요원',
+                nodeId: 'junc_chungmin_exit',
+                x: 525,
+                y: 200,
+                desc: '10시 방향 통로가 폐쇄되어 충민로 램프 유입량이 증가했습니다. 차량을 교회구역이 아닌 패션관(분홍색)과 테크노관(파란색)으로 분산 진입하도록 안내합니다.',
+                script: '"충민로 유입 안내: 교회 방향으로 가지 마시고 좌회전하여 패션관(A, B존) 빈 공간을 이용해 주십시오!"',
+                status: '정상안내'
+            },
+            {
+                id: 'P4',
+                name: '중앙 공동광장 통행 제어 요원',
+                nodeId: 'junc_mid_center',
+                x: 500,
+                y: 360,
+                desc: '민트색 공동광장 구역의 수직 통로 정체를 관리합니다. 차가 통로에서 멈춰 램프 입차를 방해하는 현상을 미연에 방지하기 위해 차량 지도를 진행합니다.',
+                script: '"중앙 통로 제어: 멈추지 마시고 바로 리빙관 방향 통로로 이동해 주시기 바랍니다!"',
+                status: '정상안내'
+            },
+            {
+                id: 'P5',
+                name: '리빙-교회 연결로 통제 요원',
+                nodeId: 'connect_living_church',
+                x: 450,
+                y: 480,
+                desc: '가장 극심한 연결 통로 병목 지점입니다. 교회구역 포화 시 추가 진입을 전면 차단하고 리빙관(초록색)에 차량을 대고 걸어가도록 지시합니다.',
+                script: '"무전 알림: 교회 구역 만차입니다! 리빙관 방향으로 우회 회차하여 빈 자리에 세우고 도보로 이동하게 통제합니다!"',
+                status: '정상안내'
+            },
+            {
+                id: 'P6',
+                name: '패션-교회 연결로 통제 요원',
+                nodeId: 'connect_fashion_church',
+                x: 740,
+                y: 350,
+                desc: '패션관에서 교회구역으로 통과하려는 통로를 차단합니다. 차량이 새로운교회 구역 진로가 막혀 되돌아 나오며 유턴하느라 엉키는 대란을 방지합니다.',
+                script: '"패션-교회 차로: 교회구역 만차로 진입 불가합니다. 패션관 라인에 주차 후 승강기로 이동하십시오!"',
+                status: '정상안내'
+            },
+            {
+                id: 'P7',
+                name: '새로운교회 주행로 안내 요원',
+                nodeId: 'zone_church',
+                x: 680,
+                y: 480,
+                desc: '새로운교회 구역 내부의 순차 주차를 유도하며 이중주차와 무단 정차를 차단합니다. 만차 75%, 85% 등 혼잡 임계 지점에서 무전으로 상황실과 타 요원에게 상황을 전파합니다.',
+                script: '"본부 수신: 현재 교회구역 점유 80% 돌파했습니다. P5, P6 요원은 선제적 우회 유도 가동 바랍니다!"',
+                status: '정상안내'
+            }
+        ];
+
+        // Zones Settings aligning to the floor plan shapes and COLORS
+        const Zones = {
+            techno: {
+                id: 'techno',
+                name: '테크노관 (파랑)',
+                color: COLORS.techno,
+                slots: [],
+                maxSlots: 48,
+                generate: function() {
+                    this.slots = [];
+                    const cols = [210, 240, 270, 300, 330, 360];
+                    cols.forEach(col => {
+                        for (let i = 0; i < 8; i++) {
+                            this.slots.push({
+                                id: `techno_${col}_${i}`,
+                                x: col,
+                                y: 140 + i * 14,
+                                occupiedBy: null,
+                                angle: 0
+                            });
+                        }
+                    });
+                }
+            },
+            fashion: {
+                id: 'fashion',
+                name: '패션관 (분홍)',
+                color: COLORS.fashion,
+                slots: [],
+                maxSlots: 64,
+                generate: function() {
+                    this.slots = [];
+                    const columns = [700, 730, 840, 870];
+                    columns.forEach(col => {
+                        for (let i = 0; i < 16; i++) {
+                            this.slots.push({
+                                id: `fashion_${col}_${i}`,
+                                x: col,
+                                y: 140 + i * 12,
+                                occupiedBy: null,
+                                angle: 0
+                            });
+                        }
+                    });
+                }
+            },
+            living: {
+                id: 'living',
+                name: '리빙관 (초록)',
+                color: COLORS.living,
+                slots: [],
+                maxSlots: 36,
+                generate: function() {
+                    this.slots = [];
+                    for (let r = 0; r < 3; r++) {
+                        for (let i = 0; i < 12; i++) {
+                            this.slots.push({
+                                id: `living_${r}_${i}`,
+                                x: 160 + i * 18 + r * 10,
+                                y: 440 + r * 24 - i * 4,
+                                occupiedBy: null,
+                                angle: Math.PI / 4 
+                            });
+                        }
+                    }
+                }
+            },
+            church: {
+                id: 'church',
+                name: '새로운교회 (주황)',
+                color: COLORS.church,
+                slots: [],
+                maxSlots: 64,
+                generate: function() {
+                    this.slots = [];
+                    const columns = [700, 730, 840, 870];
+                    columns.forEach(col => {
+                        for (let i = 0; i < 16; i++) {
+                            this.slots.push({
+                                id: `church_${col}_${i}`,
+                                x: col,
+                                y: 390 + i * 12,
+                                occupiedBy: null,
+                                angle: 0
+                            });
+                        }
+                    });
+                }
+            }
+        };
+
+        function initSlots() {
+            Object.keys(Zones).forEach(zKey => {
+                Zones[zKey].generate();
+            });
+        }
+
+        // --- SIMULATOR ENGINE CLASS ---
+        class Simulation {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.cars = [];
+                this.strategy = 'dynamic';
+                this.inflowRate = 60;
+                this.simSpeed = 1;
+                this.isPaused = false;
+                
+                this.spawnTimer = 0;
+                this.lastTime = 0;
+                this.metrics = {
+                    parkedCount: 0,
+                    gridlockCount: 0,
+                    spilloverState: '안전'
+                };
+                
+                this.activeGuideId = 'P1';
+                this.totalCarsSpawned = 0;
+                this.gridlockedVehicles = new Set();
+            }
+
+            init() {
+                initSlots();
+                this.cars = [];
+                this.totalCarsSpawned = 0;
+                this.metrics.parkedCount = 0;
+                this.metrics.gridlockCount = 0;
+                this.metrics.spilloverState = '안전';
+                this.gridlockedVehicles.clear();
+                this.lastTime = performance.now();
+                this.updateUI();
+            }
+
+            setStrategy(strategy) {
+                this.strategy = strategy;
+                showToast(`안내 전략이 [${strategy === 'none' ? '안내 없음' : strategy === 'static' ? '수동/정적 안내' : '실시간 스마트 유도'}]로 전환되었습니다.`);
+                this.updateGuidesStatus();
+            }
+
+            setInflowRate(rate) {
+                this.inflowRate = rate;
+                document.getElementById('flowRateVal').textContent = `${rate === 20 ? '여유' : rate === 60 ? '보통' : rate === 90 ? '혼잡' : '매우 혼잡'} (${rate}대/분)`;
+            }
+
+            setSimSpeed(speed) {
+                this.simSpeed = speed;
+            }
+
+            togglePlayPause() {
+                this.isPaused = !this.isPaused;
+                const btn = document.getElementById('btnPlayPause');
+                const badge = document.getElementById('statusBadge');
+                if (this.isPaused) {
+                    btn.innerHTML = '<i class="fa-solid fa-play"></i> 계속하기';
+                    badge.innerHTML = '<i class="fa-solid fa-pause"></i> 일시정지됨';
+                    badge.className = 'badge badge-warning';
+                } else {
+                    btn.innerHTML = '<i class="fa-solid fa-pause"></i> 일시정지';
+                    badge.innerHTML = '<i class="fa-solid fa-sync fa-spin"></i> 시뮬레이션 동작 중';
+                    badge.className = 'badge badge-info';
+                    this.lastTime = performance.now();
+                }
+            }
+
+            findPath(startId, targetId) {
+                if (startId === targetId) return [startId];
+                
+                const queue = [[startId]];
+                const visited = new Set([startId]);
+                
+                while (queue.length > 0) {
+                    const path = queue.shift();
+                    const current = path[path.length - 1];
+                    
+                    if (current === targetId) return path;
+                    
+                    const neighbors = Links
+                        .filter(l => l.from === current)
+                        .map(l => l.to);
+                        
+                    for (const neighbor of neighbors) {
+                        if (!visited.has(neighbor)) {
+                            visited.add(neighbor);
+                            queue.push([...path, neighbor]);
+                        }
+                    }
+                }
+                return null;
+            }
+
+            updateGuidesStatus() {
+                const churchOccupancy = this.getZoneOccupancyRatio('church');
+                
+                Guides.forEach(guide => {
+                    if (this.strategy === 'none') {
+                        guide.status = '비활성화';
+                    } else if (this.strategy === 'static') {
+                        if (churchOccupancy >= 1.0) {
+                            guide.status = '우회안내';
+                        } else {
+                            guide.status = '대기중';
+                        }
+                    } else { // dynamic
+                        if (churchOccupancy >= 0.85) {
+                            guide.status = '우회안내 (강력)';
+                        } else if (churchOccupancy >= 0.70) {
+                            if (guide.id === 'P5' || guide.id === 'P6' || guide.id === 'P2') {
+                                guide.status = '부분우회(50%)';
+                            } else {
+                                guide.status = '경계중';
+                            }
+                        } else {
+                            guide.status = '정상안내';
+                        }
+                    }
+                });
+
+                const activeG = Guides.find(g => g.id === this.activeGuideId);
+                if (activeG) {
+                    this.inspectGuide(activeG.id);
+                }
+            }
+
+            inspectGuide(id) {
+                this.activeGuideId = id;
+                const g = Guides.find(guide => guide.id === id);
+                if (!g) return;
+
+                document.getElementById('inspGuideId').textContent = g.id;
+                document.getElementById('inspGuideName').textContent = g.name;
+                document.getElementById('inspGuideLoc').textContent = Nodes[g.nodeId] ? Nodes[g.nodeId].label : '야외';
+                
+                let statusText = `[상태: ${g.status}] `;
+                let desc = g.desc;
+                let script = g.script;
+
+                if (g.status === '비활성화') {
+                    desc = '안내 전략이 [유도안내 없음] 상태이므로 요원이 자리를 비웠거나 안내를 진행하지 않습니다.';
+                    script = '"현재 요원이 부재중이거나 안내를 중단하여 차량들이 무작위로 지나가고 있습니다."';
+                } else if (g.status === '부분우회(50%)') {
+                    desc = `새로운교회 점유율이 70%를 돌파하여 P7 요원의 무전 요청을 접수했습니다. 진입 차량의 50%를 리빙관/패션관 방향으로 유도 분산하는 병목 예방 단계입니다.`;
+                    script = `"[무전] P7 수신 완료. 현시간부로 교회구역 방향 혼잡도 분산을 위해 일부 차량 리빙/패션관으로 회차 안내 시작합니다!"`;
+                } else if (g.status === '우회안내 (강력)' || g.status === '우회안내') {
+                    desc = `새로운교회 구역이 포화(만차) 상태이므로 해당 구역 진입 통로를 전면 차단하고 있습니다. 모든 신도 차량은 인근 권역(리빙, 패션, 테크노)으로 주차하여 마비를 막아야 합니다.`;
+                    script = `"[수신호] 정지! 교회 통로 진입이 불가합니다! 뒤차가 밀리고 있으니 속히 빈 구역인 리빙관/패션관으로 우회전하십시오!"`;
+                }
+
+                document.getElementById('inspGuideDesc').innerHTML = `<strong>${statusText}</strong><br>${desc}`;
+                document.getElementById('inspGuideScript').textContent = script;
+            }
+
+            spawnCar() {
+                const activeRamps = ['beobwon_road', 'chungmin_road'];
+                let spawnNodeId = activeRamps[Math.floor(Math.random() * activeRamps.length)];
+                
+                const churchRatio = this.getZoneOccupancyRatio('church');
+                if (this.strategy === 'dynamic' && churchRatio >= 0.85 && Math.random() < 0.6) {
+                    spawnNodeId = 'chungmin_road'; 
+                }
+
+                let targetZone = 'church';
+                if (Math.random() < 0.15) {
+                    const nonChurch = ['techno', 'fashion', 'living'];
+                    targetZone = nonChurch[Math.floor(Math.random() * nonChurch.length)];
+                }
+
+                const startNode = Nodes[spawnNodeId];
+                const car = {
+                    id: `car_${++this.totalCarsSpawned}`,
+                    x: startNode.x + (Math.random() * 8 - 4),
+                    y: startNode.y + (Math.random() * 8 - 4),
+                    speed: 1.5 + Math.random() * 0.5,
+                    targetZoneType: targetZone, 
+                    actualTargetZone: targetZone, 
+                    currentNodeId: spawnNodeId,
+                    nextNodeIndex: 1,
+                    path: null,
+                    state: 'moving', 
+                    parkedTime: 0,
+                    parkedDuration: 12000 + Math.random() * 8000, 
+                    slot: null,
+                    angle: 0,
+                    stoppedFrames: 0,
+                    color: `hsl(${200 + Math.random()*20}, 70%, ${50 + Math.random()*15}%)` 
+                };
+
+                const targetNodeId = `zone_${car.targetZoneType}`;
+                car.path = this.findPath(spawnNodeId, targetNodeId);
+                
+                if (car.path) {
+                    this.cars.push(car);
+                }
+            }
+
+            getZoneOccupancyRatio(zoneId) {
+                const zone = Zones[zoneId];
+                const occupiedCount = zone.slots.filter(s => s.occupiedBy !== null).length;
+                return occupiedCount / zone.maxSlots;
+            }
+
+            update(deltaTime) {
+                if (this.isPaused) return;
+
+                for (let step = 0; step < this.simSpeed; step++) {
+                    const spawnInterval = (60 / this.inflowRate) * 60; 
+                    this.spawnTimer++;
+                    if (this.spawnTimer >= spawnInterval) {
+                        this.spawnTimer = 0;
+                        this.spawnCar();
+                    }
+
+                    this.updateGuidesStatus();
+
+                    const churchOccupancy = this.getZoneOccupancyRatio('church');
+
+                    for (let i = this.cars.length - 1; i >= 0; i--) {
+                        const car = this.cars[i];
+
+                        if (car.state === 'parked') {
+                            car.parkedTime += 1;
+                            if (car.parkedTime >= car.parkedDuration) {
+                                car.state = 'leaving';
+                                const currentZone = Zones[car.actualTargetZone];
+                                if (car.slot) {
+                                    car.slot.occupiedBy = null;
+                                    car.slot = null;
+                                }
+                                car.path = this.findPath(`zone_${car.actualTargetZone}`, 'beobwon_road');
+                                car.nextNodeIndex = 1;
+                                car.currentNodeId = `zone_${car.actualTargetZone}`;
+                            }
+                            continue;
+                        }
+
+                        if (car.state === 'leaving') {
+                            this.moveCarAlongPath(car);
+                            if (car.currentNodeId === 'beobwon_road') {
+                                this.cars.splice(i, 1);
+                                this.metrics.parkedCount++;
+                            }
+                            continue;
+                        }
+
+                        if (car.state === 'moving' || car.state === 'gridlocked') {
+                            const blocked = this.checkCarProximity(car);
+                            if (blocked) {
+                                car.stoppedFrames++;
+                                if (car.stoppedFrames > 60) {
+                                    if (car.state !== 'gridlocked') {
+                                        car.state = 'gridlocked';
+                                        this.gridlockedVehicles.add(car.id);
+                                    }
+                                }
+                            } else {
+                                car.stoppedFrames = 0;
+                                if (car.state === 'gridlocked') {
+                                    car.state = 'moving';
+                                    this.gridlockedVehicles.delete(car.id);
+                                }
+                                this.moveCarAlongPath(car);
+                            }
+
+                            this.handleDecisionPoints(car, churchOccupancy);
+                        }
+                    }
+                }
+
+                this.metrics.gridlockCount = this.gridlockedVehicles.size;
+                const churchRatio = this.getZoneOccupancyRatio('church');
+                if (this.metrics.gridlockCount > 15 || churchRatio > 0.95) {
+                    this.metrics.spilloverState = '위험';
+                } else if (this.metrics.gridlockCount > 5 || churchRatio > 0.8) {
+                    this.metrics.spilloverState = '주의';
+                } else {
+                    this.metrics.spilloverState = '안전';
+                }
+
+                this.updateUI();
+            }
+
+            checkCarProximity(car) {
+                for (const other of this.cars) {
+                    if (other.id === car.id || other.state === 'parked') continue;
+                    
+                    const dx = other.x - car.x;
+                    const dy = other.y - car.y;
+                    const distSq = dx * dx + dy * dy;
+                    
+                    if (distSq < 450) {
+                        const angleToOther = Math.atan2(dy, dx);
+                        const angleDiff = Math.abs(angleToOther - car.angle);
+                        
+                        if (angleDiff < Math.PI / 3) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            moveCarAlongPath(car) {
+                if (!car.path || car.nextNodeIndex >= car.path.length) {
+                    if (car.state === 'moving') {
+                        const zone = Zones[car.actualTargetZone];
+                        const freeSlot = zone.slots.find(s => s.occupiedBy === null);
+                        
+                        if (freeSlot) {
+                            freeSlot.occupiedBy = car.id;
+                            car.slot = freeSlot;
+                            car.x = freeSlot.x;
+                            car.y = freeSlot.y;
+                            car.angle = freeSlot.angle;
+                            car.state = 'parked';
+                            car.parkedTime = 0;
+                        } else {
+                            car.state = 'gridlocked';
+                            this.gridlockedVehicles.add(car.id);
+                        }
+                    }
+                    return;
+                }
+
+                const targetNode = Nodes[car.path[car.nextNodeIndex]];
+                const dx = targetNode.x - car.x;
+                const dy = targetNode.y - car.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < 8) {
+                    car.currentNodeId = targetNode.id;
+                    car.nextNodeIndex++;
+                } else {
+                    car.angle = Math.atan2(dy, dx);
+                    car.x += Math.cos(car.angle) * car.speed;
+                    car.y += Math.sin(car.angle) * car.speed;
+                }
+            }
+
+            handleDecisionPoints(car, churchOccupancy) {
+                if (car.targetZoneType === 'church' && car.actualTargetZone === 'church') {
+                    
+                    // Beobwon-ro Ramp exit (P2)
+                    if (car.currentNodeId === 'junc_beobwon_exit') {
+                        if (this.strategy === 'dynamic' && churchOccupancy >= 0.70) {
+                            const threshold = churchOccupancy >= 0.85 ? 1.0 : 0.50;
+                            if (Math.random() < threshold) {
+                                this.divertCar(car, 'living');
+                            }
+                        } else if (this.strategy === 'static' && churchOccupancy >= 1.0) {
+                            this.divertCar(car, 'living');
+                        }
+                    }
+
+                    // Chungmin Ramp exit (P3)
+                    if (car.currentNodeId === 'junc_chungmin_exit') {
+                        if (this.strategy === 'dynamic' && churchOccupancy >= 0.70) {
+                            this.divertCar(car, 'fashion');
+                        }
+                    }
+
+                    // Corridor Bottleneck (P5)
+                    if (car.currentNodeId === 'connect_living_church') {
+                        if (this.strategy === 'dynamic' && churchOccupancy >= 0.70) {
+                            const threshold = churchOccupancy >= 0.85 ? 1.0 : 0.50;
+                            if (Math.random() < threshold) {
+                                this.divertCar(car, 'living');
+                            }
+                        } else if (this.strategy === 'static' && churchOccupancy >= 1.0) {
+                            this.divertCar(car, 'living');
+                        }
+                    }
+
+                    // Corridor Bottleneck (P6)
+                    if (car.currentNodeId === 'connect_fashion_church') {
+                        if (this.strategy === 'dynamic' && churchOccupancy >= 0.70) {
+                            const threshold = churchOccupancy >= 0.85 ? 1.0 : 0.50;
+                            if (Math.random() < threshold) {
+                                this.divertCar(car, 'fashion');
+                            }
+                        } else if (this.strategy === 'static' && churchOccupancy >= 1.0) {
+                            this.divertCar(car, 'fashion');
+                        }
+                    }
+                }
+            }
+
+            divertCar(car, newZone) {
+                car.actualTargetZone = newZone;
+                const newTargetNodeId = `zone_${newZone}`;
+                car.path = this.findPath(car.currentNodeId, newTargetNodeId);
+                car.nextNodeIndex = 1;
+            }
+
+            updateUI() {
+                Object.keys(Zones).forEach(zKey => {
+                    const zone = Zones[zKey];
+                    const count = zone.slots.filter(s => s.occupiedBy !== null).length;
+                    const percent = Math.round((count / zone.maxSlots) * 100);
+                    
+                    document.getElementById(`occupancyText_${zKey}`).textContent = `${count} / ${zone.maxSlots} (${percent}%)`;
+                    document.getElementById(`progressBar_${zKey}`).style.width = `${percent}%`;
+                });
+
+                document.getElementById('metricsGridlocked').textContent = `${this.metrics.gridlockCount}대`;
+                document.getElementById('metricsParked').textContent = `${this.metrics.parkedCount}대`;
+                
+                const spilloverEl = document.getElementById('metricsSpillover');
+                const cardSpill = document.getElementById('cardSpillover');
+                const cardGrid = document.getElementById('cardGridlock');
+
+                spilloverEl.textContent = this.metrics.spilloverState;
+
+                if (this.metrics.spilloverState === '위험') {
+                    cardSpill.className = 'metric-mini-card warning-glow';
+                    spilloverEl.style.color = '#f85149';
+                } else if (this.metrics.spilloverState === '주의') {
+                    cardSpill.className = 'metric-mini-card';
+                    spilloverEl.style.color = '#ffa500';
+                } else {
+                    cardSpill.className = 'metric-mini-card';
+                    spilloverEl.style.color = '#58a6ff';
+                }
+
+                if (this.metrics.gridlockCount > 8) {
+                    cardGrid.className = 'metric-mini-card warning-glow';
+                } else {
+                    cardGrid.className = 'metric-mini-card';
+                }
+            }
+
+            draw() {
+                this.ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+                // 1. Outer Wall boundary (Polygonal)
+                this.ctx.strokeStyle = COLORS.border;
+                this.ctx.lineWidth = 3;
+                this.ctx.beginPath();
+                this.ctx.moveTo(180, 120); 
+                this.ctx.lineTo(920, 120); 
+                this.ctx.lineTo(920, 600); 
+                this.ctx.lineTo(550, 600); 
+                this.ctx.lineTo(320, 520); 
+                this.ctx.lineTo(100, 360); 
+                this.ctx.lineTo(180, 240); 
+                this.ctx.closePath();
+                this.ctx.fillStyle = '#090d13';
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                // Grid lines background
+                this.ctx.strokeStyle = '#161b22';
+                this.ctx.lineWidth = 1;
+                for (let x = 100; x < 920; x += 30) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x, 120);
+                    this.ctx.lineTo(x, 600);
+                    this.ctx.stroke();
+                }
+
+                // 2. Draw Color-Coded Zones matching the CAD plan
+                this.drawZoneArea(Zones.techno, 190, 130, 280, 210, '테크노관 (파랑)', 'rgba(0, 136, 255, 0.12)', COLORS.techno);
+                this.drawZoneArea(Zones.fashion, 640, 130, 270, 210, '패션관 (분홍)', 'rgba(224, 96, 128, 0.12)', COLORS.fashion);
+                this.drawZoneArea(Zones.living, 190, 350, 280, 210, '리빙관 (초록)', 'rgba(0, 170, 96, 0.12)', COLORS.living);
+                this.drawZoneArea(Zones.church, 430, 350, 480, 240, '새로운교회 (주황)', 'rgba(255, 85, 0, 0.12)', COLORS.church);
+
+                // Draw central mint circular shared zone (Visual backdrop only)
+                this.drawCentralPlaza();
+
+                // 3. Draw Closed 10 O'clock Ramp on the Left
+                this.drawClosedPassage();
+
+                // 4. Draw Active Ramps
+                this.drawRamp(Nodes.chungmin_ramp.x, Nodes.chungmin_ramp.y, '충민로 램프 (북측)', 'N');
+                this.drawRamp(Nodes.beobwon_ramp.x, Nodes.beobwon_ramp.y, '법원로 램프 (동남측)', 'S');
+
+                // 5. Draw Elevator Core labels matching CAD
+                this.drawCoreLabel(540, 170, 50, 24, '충민로', '#ffff00', '#00aa00');
+                this.drawCoreLabel(800, 520, 50, 24, '법원로', '#ffff00', '#00aa00');
+
+                // 6. Pillars Grid
+                this.drawColumns();
+
+                // 7. Lanes (Aisle System - Grid pathways)
+                this.drawAisleSystem();
+
+                // 8. Parking Slots
+                Object.keys(Zones).forEach(zKey => {
+                    const zone = Zones[zKey];
+                    zone.slots.forEach(slot => {
+                        this.ctx.fillStyle = slot.occupiedBy ? zone.color : 'rgba(48, 54, 61, 0.4)';
+                        this.ctx.strokeStyle = slot.occupiedBy ? zone.color : '#30363d';
+                        this.ctx.lineWidth = slot.occupiedBy ? 1.5 : 1;
+                        
+                        this.ctx.save();
+                        this.ctx.translate(slot.x, slot.y);
+                        this.ctx.rotate(slot.angle);
+                        this.ctx.fillRect(-4, -4, 8, 8);
+                        this.ctx.strokeRect(-4, -4, 8, 8);
+                        this.ctx.restore();
+                    });
+                });
+
+                // 9. Guides
+                Guides.forEach(guide => {
+                    const isActive = guide.status !== '비활성화' && guide.status !== '대기중';
+                    this.ctx.shadowBlur = 10;
+                    this.ctx.shadowColor = isActive ? COLORS.guideActive : COLORS.guide;
+                    
+                    this.ctx.fillStyle = isActive ? COLORS.guideActive : COLORS.guide;
+                    this.ctx.beginPath();
+                    this.ctx.arc(guide.x, guide.y, 9, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    
+                    this.ctx.shadowBlur = 0;
+                    
+                    this.ctx.strokeStyle = '#0d1117';
+                    this.ctx.lineWidth = 1.5;
+                    this.ctx.beginPath();
+                    this.ctx.arc(guide.x, guide.y, 9, 0, Math.PI * 2);
+                    this.ctx.stroke();
+
+                    this.ctx.fillStyle = '#0d1117';
+                    this.ctx.font = 'bold 8px Outfit';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    this.ctx.fillText(guide.id, guide.x, guide.y);
+
+                    if (guide.id === this.activeGuideId) {
+                        this.ctx.strokeStyle = '#ffffff';
+                        this.ctx.lineWidth = 1.5;
+                        this.ctx.beginPath();
+                        this.ctx.arc(guide.x, guide.y, 14, 0, Math.PI * 2);
+                        this.ctx.stroke();
+                    }
+                });
+
+                // 10. Cars
+                this.cars.forEach(car => {
+                    this.ctx.save();
+                    this.ctx.translate(car.x, car.y);
+                    this.ctx.rotate(car.angle);
+                    
+                    if (car.state === 'gridlocked') {
+                        this.ctx.fillStyle = COLORS.carWaiting;
+                    } else if (car.state === 'leaving') {
+                        this.ctx.fillStyle = '#8b949e';
+                    } else {
+                        this.ctx.fillStyle = car.color;
+                    }
+
+                    this.ctx.fillRect(-8, -4, 16, 8);
+                    
+                    this.ctx.fillStyle = '#0d1117';
+                    this.ctx.fillRect(3, -3, 3, 6);
+
+                    this.ctx.restore();
+                });
+            }
+
+            drawZoneArea(zone, x, y, w, h, label, bgStyle, borderStyle) {
+                this.ctx.fillStyle = bgStyle;
+                this.ctx.fillRect(x, y, w, h);
+                this.ctx.strokeStyle = borderStyle;
+                this.ctx.lineWidth = 1.5;
+                this.ctx.strokeRect(x, y, w, h);
+
+                this.ctx.fillStyle = 'rgba(238, 238, 238, 0.4)';
+                this.ctx.font = 'bold 9px Outfit';
+                this.ctx.textAlign = 'left';
+                this.ctx.textBaseline = 'top';
+                this.ctx.fillText(label, x + 8, y + 8);
+            }
+
+            drawCentralPlaza() {
+                // Central Shared Zone circle (No roundabout circular lanes - straight lanes only)
+                this.ctx.fillStyle = 'rgba(96, 207, 191, 0.15)';
+                this.ctx.strokeStyle = COLORS.central;
+                this.ctx.lineWidth = 2;
+                
+                const rx = 500, ry = 360, radius = 70; // Positioned correctly in center-middle
+                
+                this.ctx.beginPath();
+                this.ctx.arc(rx, ry, radius, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                this.ctx.fillStyle = 'rgba(238, 238, 238, 0.5)';
+                this.ctx.font = 'bold 9px Inter';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('중앙 공동구역 (Mint)', rx, ry - 42);
+            }
+
+            drawClosedPassage() {
+                const cx = 110, cy = 290;
+                
+                this.ctx.fillStyle = COLORS.closedZone;
+                this.ctx.beginPath();
+                this.ctx.moveTo(100, 270);
+                this.ctx.lineTo(180, 240);
+                this.ctx.lineTo(180, 310);
+                this.ctx.lineTo(100, 310);
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.strokeStyle = '#f85149';
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+
+                this.ctx.strokeStyle = '#ffa500';
+                this.ctx.lineWidth = 3;
+                for(let k = 110; k < 180; k += 12) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(k, 250);
+                    this.ctx.lineTo(k + 10, 310);
+                    this.ctx.stroke();
+                }
+
+                this.ctx.fillStyle = '#f85149';
+                this.ctx.font = 'bold 22px Outfit';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText('X', 145, 270);
+
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.font = 'bold 8px Inter';
+                this.ctx.fillText('10시 통로 폐쇄', 145, 292);
+            }
+
+            drawRamp(x, y, name, direction) {
+                this.ctx.fillStyle = '#161b22';
+                this.ctx.fillRect(x - 20, y - 20, 40, 40);
+                this.ctx.strokeStyle = '#388bfd';
+                this.ctx.lineWidth = 1.5;
+                this.ctx.strokeRect(x - 20, y - 20, 40, 40);
+
+                this.ctx.fillStyle = '#58a6ff';
+                this.ctx.font = 'bold 12px Outfit';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText(direction, x, y);
+
+                this.ctx.fillStyle = '#8b949e';
+                this.ctx.font = '8px Outfit';
+                this.ctx.fillText(name, x, y - 25);
+            }
+
+            drawCoreLabel(x, y, w, h, name, bgColor, borderColor) {
+                this.ctx.fillStyle = bgColor;
+                this.ctx.fillRect(x, y, w, h);
+                this.ctx.strokeStyle = borderColor;
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(x, y, w, h);
+
+                this.ctx.fillStyle = '#000000';
+                this.ctx.font = 'bold 10px Inter';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText(name, x + w/2, y + h/2);
+            }
+
+            drawColumns() {
+                this.ctx.fillStyle = '#30363d';
+                for (let px = 220; px < 600; px += 80) {
+                    for (let py = 180; py < 600; py += 80) {
+                        this.ctx.beginPath();
+                        this.ctx.arc(px, py, 4, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    }
+                }
+            }
+
+            drawAisleSystem() {
+                this.ctx.strokeStyle = 'rgba(48, 54, 61, 0.45)';
+                this.ctx.lineWidth = 12;
+                this.ctx.lineCap = 'round';
+                this.ctx.lineJoin = 'round';
+
+                Links.forEach(link => {
+                    const fromN = Nodes[link.from];
+                    const toN = Nodes[link.to];
+                    
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(fromN.x, fromN.y);
+                    this.ctx.lineTo(toN.x, toN.y);
+                    this.ctx.stroke();
+                });
+
+                this.ctx.strokeStyle = 'rgba(255, 165, 0, 0.35)';
+                this.ctx.lineWidth = 1;
+                this.ctx.setLineDash([4, 4]);
+                Links.forEach(link => {
+                    const fromN = Nodes[link.from];
+                    const toN = Nodes[link.to];
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(fromN.x, fromN.y);
+                    this.ctx.lineTo(toN.x, toN.y);
+                    this.ctx.stroke();
+                });
+                this.ctx.setLineDash([]);
+            }
+
+            handleCanvasClick(mx, my) {
+                for (const g of Guides) {
+                    const dx = g.x - mx;
+                    const dy = g.y - my;
+                    if (dx*dx + dy*dy < 225) {
+                        this.inspectGuide(g.id);
+                        showToast(`안내요원 [${g.id}]를 선택했습니다.`);
+                        return;
+                    }
+                }
+            }
+        }
+
+        // --- GLOBAL TOAST SYSTEM ---
+        function showToast(message) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerHTML = `<i class="fa-solid fa-bell" style="color: #ffa500;"></i> <span>${message}</span>`;
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-20px)';
+                toast.style.transition = 'all 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // --- SIMULATION INITIALIZATION ---
+        const canvas = document.getElementById('parkingCanvas');
+        const sim = new Simulation(canvas);
+        sim.init();
+        sim.inspectGuide('P1');
+
+        function loop(timestamp) {
+            const deltaTime = timestamp - sim.lastTime;
+            sim.lastTime = timestamp;
+            
+            sim.update(deltaTime);
+            sim.draw();
+            
+            requestAnimationFrame(loop);
+        }
+        requestAnimationFrame(loop);
+
+        // --- EVENT LISTENERS ---
+        document.getElementById('btnPlayPause').addEventListener('click', () => {
+            sim.togglePlayPause();
+        });
+
+        document.getElementById('btnReset').addEventListener('click', () => {
+            sim.init();
+            showToast('시뮬레이션이 초기화되었습니다.');
+        });
+
+        document.getElementById('strategySelect').addEventListener('change', (e) => {
+            sim.setStrategy(e.target.value);
+        });
+
+        const slider = document.getElementById('flowRateSlider');
+        slider.addEventListener('input', (e) => {
+            sim.setInflowRate(parseInt(e.target.value));
+        });
+
+        const speedBtns = document.querySelectorAll('.sim-speed-btn');
+        speedBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                speedBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                sim.setSimSpeed(parseInt(btn.getAttribute('data-speed')));
+            });
+        });
+
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const mx = (e.clientX - rect.left) * scaleX;
+            const my = (e.clientY - rect.top) * scaleY;
+            sim.handleCanvasClick(mx, my);
+        });
+    </script>
+</body>
+</html>

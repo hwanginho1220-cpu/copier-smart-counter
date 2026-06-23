@@ -243,6 +243,10 @@ function setupEventListeners() {
     // Sidebar view toggle
     document.querySelectorAll('.sidebar .nav-links li').forEach(li => {
         li.addEventListener('click', (e) => {
+            const a = li.querySelector('a');
+            if (a && a.getAttribute('href') && a.getAttribute('href') !== '#' && !a.getAttribute('href').startsWith('#')) {
+                return; // Let standard link navigation work
+            }
             e.preventDefault();
             const view = li.getAttribute('data-view');
             switchView(view);
@@ -477,7 +481,7 @@ function switchView(viewName) {
         viewSubtitle.textContent = '월별 전체 복사기 점검 내역 및 사용량 증감';
         headerActionBtn.innerHTML = '<i class="fa-solid fa-file-signature"></i><span>점검 기록 등록</span>';
         const inspectionMonthFilter = document.getElementById('inspectionMonthFilter');
-        if (inspectionMonthFilter) {
+        if (inspectionMonthFilter && !inspectionMonthFilter.value) {
             const today = new Date().toISOString().split('T')[0];
             const currentYearMonth = today.substring(0, 7);
             inspectionMonthFilter.value = currentYearMonth;
@@ -494,7 +498,7 @@ function switchView(viewName) {
         headerActionBtn.style.display = 'none';
         
         const reportMonthFilter = document.getElementById('reportMonthFilter');
-        if (reportMonthFilter) {
+        if (reportMonthFilter && !reportMonthFilter.value) {
             const today = new Date().toISOString().split('T')[0];
             const currentYearMonth = today.substring(0, 7); // "YYYY-MM"
             reportMonthFilter.value = currentYearMonth;
@@ -1014,7 +1018,7 @@ function renderCustomersTable() {
 
     filtered.forEach(cust => {
         // Find inspections for this customer
-        const custInsps = state.inspections.filter(i => i.customerId === cust.id);
+        const custInsps = state.inspections.filter(i => String(i.customerId) === String(cust.id));
         
         // Sort to find latest
         let lastInspectionDate = '-';
@@ -1391,7 +1395,7 @@ async function deleteCustomer(id) {
                 const batch = db.batch();
                 batch.delete(db.collection('customers').doc(id));
                 
-                const customerInspections = state.inspections.filter(i => i.customerId === id);
+                const customerInspections = state.inspections.filter(i => String(i.customerId) === String(id));
                 customerInspections.forEach(insp => {
                     batch.delete(db.collection('inspections').doc(insp.id));
                 });
@@ -1402,8 +1406,8 @@ async function deleteCustomer(id) {
                 alert("삭제 처리에 실패했습니다: " + err.message);
             }
         } else {
-            state.customers = state.customers.filter(c => c.id !== id);
-            state.inspections = state.inspections.filter(i => i.customerId !== id);
+            state.customers = state.customers.filter(c => String(c.id) !== String(id));
+            state.inspections = state.inspections.filter(i => String(i.customerId) !== String(id));
 
             saveToStorage();
             renderCustomersTable();
@@ -3577,7 +3581,7 @@ function openInvoiceModal(customerId, month) {
             </tr>
     `;
     insps.forEach(insp => {
-        const dev = cust.devices ? cust.devices.find(d => d.id === insp.deviceId) : null;
+        const dev = cust.devices ? cust.devices.find(d => String(d.id) === String(insp.deviceId)) : null;
         const devName = dev ? dev.name : '-';
         counterHtml += `
             <tr>
@@ -4107,7 +4111,7 @@ function generateInvoiceHtmlForCustomer(cust, month) {
             </tr>
     `;
     insps.forEach(insp => {
-        const dev = cust.devices ? cust.devices.find(d => d.id === insp.deviceId) : null;
+        const dev = cust.devices ? cust.devices.find(d => String(d.id) === String(insp.deviceId)) : null;
         const devName = dev ? dev.name : '-';
         counterHtml += `
             <tr>
