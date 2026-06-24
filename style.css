@@ -1535,6 +1535,14 @@ select.form-control option {
         background: #ffffff !important;
     }
 
+    body.print-invoice .receipt-container,
+    body.print-bulk-invoice .receipt-container {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        border: 2px solid var(--ti-primary) !important;
+    }
+
     /* Bulk Invoice Printing */
     body.print-bulk-invoice .app-container {
         display: none !important;
@@ -1701,11 +1709,11 @@ select.form-control option {
 
 /* - - - Traditional Invoice (Korean) Styles - - - */
 .traditional-invoice {
-    --ti-primary: #3b82f6;
-    --ti-primary-dark: #1e3a8a;
-    --ti-border: #bfdbfe;
-    --ti-bg: #eff6ff;
-    --ti-bg-even: #f8fafc;
+    --ti-primary: #2a5b8f;
+    --ti-primary-dark: #1b3d61;
+    --ti-border: #2a5b8f;
+    --ti-bg: #f9f9f9;
+    --ti-bg-even: #ffffff;
 
     width: 100%;
     max-width: 800px;
@@ -1728,9 +1736,142 @@ select.form-control option {
 .traditional-invoice.theme-green {
     --ti-primary: #10b981;
     --ti-primary-dark: #064e3b;
-    --ti-border: #a7f3d0;
+    --ti-border: #10b981;
     --ti-bg: #ecfdf5;
     --ti-bg-even: #fafdfb;
+}
+
+/* Scoped receipt styles for the new user layout */
+.traditional-invoice .receipt-container {
+    width: 100%;
+    max-width: 800px;
+    margin: 10px auto;
+    font-family: 'Malgun Gothic', '맑은 고딕', sans-serif;
+    font-size: 14px;
+    color: #000;
+    border: 2px solid var(--ti-primary); /* 전체 바깥 테두리 */
+    background-color: #fff;
+    box-sizing: border-box;
+}
+
+/* 공통 테이블 스타일 */
+.traditional-invoice .receipt-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: center;
+}
+.traditional-invoice .receipt-table th, 
+.traditional-invoice .receipt-table td {
+    border: 1px solid var(--ti-border) !important; /* 테두리 */
+    padding: 8px 4px;
+    box-sizing: border-box;
+    color: #000 !important;
+}
+
+/* 타이틀 영역 */
+.traditional-invoice .receipt-title {
+    text-align: center;
+    font-size: 24px;
+    font-weight: bold;
+    padding: 15px 0;
+    border-bottom: 1px solid var(--ti-border);
+    letter-spacing: 5px;
+    color: var(--ti-primary-dark) !important;
+}
+.traditional-invoice .receipt-title span {
+    font-size: 14px;
+    font-weight: normal;
+    letter-spacing: normal;
+}
+
+/* 상단 정보 영역 (공급받는자 / 공급자) */
+.traditional-invoice .info-section {
+    display: flex;
+    border-bottom: 1px solid var(--ti-border);
+}
+
+/* 좌측 공급받는자 영역 */
+.traditional-invoice .buyer-info {
+    width: 35%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 15px;
+    border-right: 1px solid var(--ti-border);
+    box-sizing: border-box;
+}
+.traditional-invoice .buyer-info .date { text-align: center; margin-bottom: 20px; }
+.traditional-invoice .buyer-info .name { text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 30px; }
+.traditional-invoice .buyer-info .message { text-align: center; }
+
+/* 우측 공급자 영역 */
+.traditional-invoice .seller-info {
+    width: 65%;
+}
+.traditional-invoice .seller-table th { background-color: var(--ti-bg) !important; width: 25%; }
+
+/* 합계 금액 영역 */
+.traditional-invoice .total-amount-row {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--ti-border);
+}
+.traditional-invoice .total-amount-row .label {
+    width: 15%;
+    text-align: center;
+    padding: 10px;
+    border-right: 1px solid var(--ti-border);
+    background-color: var(--ti-bg) !important;
+    box-sizing: border-box;
+}
+.traditional-invoice .total-amount-row .korean-amount {
+    width: 40%;
+    text-align: center;
+    font-weight: bold;
+    padding: 10px;
+    box-sizing: border-box;
+}
+.traditional-invoice .total-amount-row .number-amount {
+    width: 45%;
+    text-align: center;
+    font-weight: bold;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+/* 품목 리스트 영역 */
+.traditional-invoice .items-table th { background-color: var(--ti-bg) !important; }
+.traditional-invoice .items-table td { height: 30px; } /* 빈 칸의 높이 확보 */
+
+/* 품목 테이블 경계선 없음 처리 */
+.traditional-invoice .items-table {
+    border-left: none !important;
+    border-right: none !important;
+}
+.traditional-invoice .items-table th:first-child,
+.traditional-invoice .items-table td:first-child {
+    border-left: none !important;
+}
+.traditional-invoice .items-table th:last-child,
+.traditional-invoice .items-table td:last-child {
+    border-right: none !important;
+}
+.traditional-invoice .items-table tr:last-child td {
+    border-bottom: none !important;
+}
+
+/* 하단 계좌정보 영역 */
+.traditional-invoice .footer-info {
+    display: flex;
+}
+.traditional-invoice .footer-info div {
+    width: 50%;
+    padding: 10px;
+    text-align: left;
+    box-sizing: border-box;
+}
+.traditional-invoice .footer-info div:first-child {
+    border-right: 1px solid var(--ti-border);
 }
 
 /* Force Light Theme Colors and borders to override global Dark Mode */

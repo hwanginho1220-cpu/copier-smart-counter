@@ -13,15 +13,15 @@ const FIREBASE_CONFIG_KEY = 'smartcounter_firebase_config';
 const INVOICE_CONFIG_KEY = 'smartcounter_invoice_config';
 
 const defaultInvoiceConfig = {
-    regNo: '119-20-43750',
+    regNo: '210-01-60844',
     name: '하영통신',
-    ceo: '황인호',
+    ceo: '공종훈',
     stampText: '하영통신',
-    address: '서울 금천구 독산동 146-24 (2층)',
-    bizType: '도소매',
-    bizItem: '사무기기',
-    account: '국민은행 012345-01-678901',
-    accHolder: '하영통신',
+    address: '서울시 성북구 삼선교로16길 35',
+    bizType: '도소매, 서비스',
+    bizItem: '사무기기 임대, 수리',
+    account: '국민은행 023-24-0270-172',
+    accHolder: '공종훈(하영통신)',
     greeting: '위와 같이 계산하오니 청구하여 주시기 바랍니다.',
     theme: 'blue',
     templateHtml: '',
@@ -29,92 +29,82 @@ const defaultInvoiceConfig = {
 };
 
 const defaultInvoiceTemplateHTML = `
-<h1 class="ti-title" style="margin-top: 0;">거 래 명 세 표 <span style="font-size: 11px; font-weight: normal; letter-spacing: 0; vertical-align: middle; margin-left: 5px;">(공급받는자 보관용)</span></h1>
-
-<!-- 상단 통합 컨테이너 (좌우 분리형 구조로 찌그러짐 방지) -->
-<div class="ti-top-container" style="display: flex; justify-content: space-between; margin-bottom: 10px; gap: 10px;">
-    <!-- 좌측 공급받는자 영역 -->
-    <div class="ti-customer-box" style="width: 45%; border: 2px solid var(--ti-primary); padding: 15px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; min-height: 165px; background: #ffffff;">
-        <div style="font-size: 1.05rem; font-weight: 600; text-align: center; color: #000;">{{ISSUE_DATE}}</div>
-        <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 0 5px; margin: 15px 0;">
-            <span style="font-size: 1.3rem; font-weight: 800; border-bottom: 2px solid #000; padding-bottom: 2px; flex: 1; text-align: left; margin-right: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{CUSTOMER_NAME}}</span>
-            <span style="font-size: 1.05rem; font-weight: 600; white-space: nowrap;">귀하</span>
-        </div>
-        <div style="text-align: center; font-size: 0.95rem; color: #475569;">아래와 같이 계산합니다.</div>
+<div class="receipt-container">
+    <div class="receipt-title">
+        {{TITLE}} <span>(공급받는자 보관용)</span>
     </div>
 
-    <!-- 우측 공급자 영역 -->
-    <div class="ti-supplier-box" style="width: 53%; display: flex; border: 2px solid var(--ti-primary); box-sizing: border-box; min-height: 165px; background: #ffffff;">
-        <div class="ti-vertical-label" style="width: 35px; display: flex; align-items: center; justify-content: center; font-weight: bold; background: var(--ti-bg) !important; color: var(--ti-primary-dark) !important; padding: 10px 0; font-size: 0.9rem; border-right: 1px solid var(--ti-border); box-sizing: border-box; writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 5px;">
-            공급자
+    <div class="info-section">
+        <div class="buyer-info">
+            <div class="date">{{ISSUE_DATE}}</div>
+            <div class="name">{{CUSTOMER_NAME}} &nbsp;&nbsp;&nbsp;&nbsp; 귀하</div>
+            <div class="message">아래와 같이 계산합니다.</div>
         </div>
-        <table class="ti-supplier-table" style="flex: 1; border-collapse: collapse; width: 100%;">
-            <tr>
-                <td style="width: 22%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">등록번호</td>
-                <td colspan="3" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.95rem; letter-spacing: 1px; text-align: left;">{{SUPPLIER_REG_NO}}</td>
-            </tr>
-            <tr>
-                <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">상호</td>
-                <td style="width: 28%; border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.85rem; text-align: left;">{{SUPPLIER_NAME}}</td>
-                <td style="width: 15%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">성명</td>
-                <td style="border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.85rem; text-align: left; position: relative; padding-right: 35px;">
-                    <span>{{SUPPLIER_CEO}}</span>
-                    <div class="ti-stamp" style="position: absolute; right: 2px; top: 50%; transform: translateY(-50%); width: 35px; height: 35px; border: 1.5px solid #ef4444 !important; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                        <div class="ti-stamp-inner" style="font-family: 'Gungsuh', serif; color: #ef4444 !important; font-size: 0.65rem; font-weight: bold; text-align: center; line-height: 1.1; letter-spacing: -1px;">
-                            {{SUPPLIER_STAMP}}
+        
+        <div class="seller-info">
+            <table class="receipt-table seller-table" style="border: none; border-bottom: none; width: 100%;">
+                <tr>
+                    <th rowspan="4" style="border-top: none; border-left: none; width: 10%;">공<br><br>급<br><br>자</th>
+                    <th style="border-top: none; width: 22%;">등록번호</th>
+                    <td colspan="3" style="border-top: none; border-right: none; font-weight: bold; letter-spacing: 0.5px;">{{SUPPLIER_REG_NO}}</td>
+                </tr>
+                <tr>
+                    <th style="width: 22%;">상호</th>
+                    <td style="width: 28%; text-align: left; padding-left: 8px;">{{SUPPLIER_NAME}}</td>
+                    <th style="width: 15%;">성명</th>
+                    <td style="border-right: none; position: relative; padding-right: 40px; text-align: left; padding-left: 8px;">
+                        <span>{{SUPPLIER_CEO}}</span>
+                        <div class="ti-stamp" style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%); width: 35px; height: 35px; border: 1.5px solid #ef4444 !important; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-sizing: border-box; background: transparent; pointer-events: none;">
+                            <div class="ti-stamp-inner" style="font-family: 'Gungsuh', serif; color: #ef4444 !important; font-size: 0.65rem; font-weight: bold; text-align: center; line-height: 1.1; letter-spacing: -1px;">
+                                {{SUPPLIER_STAMP}}
+                            </div>
                         </div>
-                    </div>
-                </td>
-            </tr>
-            <tr>
-                <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">사업장주소</td>
-                <td colspan="3" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left; line-height: 1.3;">{{SUPPLIER_ADDRESS}}</td>
-            </tr>
-            <tr>
-                <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">업태</td>
-                <td style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left;">{{SUPPLIER_BIZ_TYPE}}</td>
-                <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">종목</td>
-                <td style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left;">{{SUPPLIER_BIZ_ITEM}}</td>
-            </tr>
-        </table>
+                    </td>
+                </tr>
+                <tr>
+                    <th>사업장<br>주소</th>
+                    <td colspan="3" style="border-right: none; text-align: left; padding-left: 8px;">{{SUPPLIER_ADDRESS}}</td>
+                </tr>
+                <tr>
+                    <th>업태</th>
+                    <td style="text-align: left; padding-left: 8px; font-size: 0.8rem; line-height: 1.2;">{{SUPPLIER_BIZ_TYPE}}</td>
+                    <th>종목</th>
+                    <td style="border-right: none; text-align: left; padding-left: 8px; font-size: 0.8rem; line-height: 1.2;">{{SUPPLIER_BIZ_ITEM}}</td>
+                </tr>
+            </table>
+        </div>
     </div>
-</div>
 
-<!-- 합계금액 단독 테이블 -->
-<table class="ti-amount-table" style="width: 100%; border-collapse: collapse; margin-bottom: 10px; border: 2px solid var(--ti-primary); text-align: center;">
-    <tr style="height: 38px;">
-        <td style="width: 15%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.85rem; padding: 5px;">합계금액</td>
-        <td style="width: 50%; border: 1px solid var(--ti-border); font-weight: bold; font-size: 1.05rem; padding: 5px; color: #000;">{{TOTAL_AMOUNT_TEXT}}</td>
-        <td style="width: 35%; border: 1px solid var(--ti-border); font-weight: bold; font-size: 1.1rem; padding: 5px; color: #000; text-align: right; padding-right: 15px;">
-            ( ₩ <span style="font-weight: 800; font-size: 1.15rem; color: #000;">{{TOTAL_AMOUNT_NUM}}</span> )
-        </td>
-    </tr>
-</table>
+    <div class="total-amount-row">
+        <div class="label">합 계 금 액</div>
+        <div class="korean-amount">{{TOTAL_AMOUNT_TEXT}}</div>
+        <div class="number-amount">( ₩ {{TOTAL_AMOUNT_NUM}} )</div>
+    </div>
 
-<table class="ti-item-table">
-    <thead>
-        <tr>
-            <th style="width: 45%;">품목</th>
-            <th style="width: 10%;">규격</th>
-            <th style="width: 8%;">수량</th>
-            <th style="width: 12%;">단가</th>
-            <th style="width: 15%;">공급가액</th>
-            <th style="width: 10%;">VAT</th>
-        </tr>
-    </thead>
-    <tbody>
-        {{ITEMS_BODY}}
-    </tbody>
-</table>
+    <table class="receipt-table items-table" style="border-left: none; border-right: none; width: 100%;">
+        <thead>
+            <tr>
+                <th style="width: 20%; border-left: none;">품 목</th>
+                <th style="width: 15%;">규 격</th>
+                <th style="width: 10%;">수 량</th>
+                <th style="width: 15%;">단 가</th>
+                <th style="width: 25%;">공 급 가 액</th>
+                <th style="width: 15%; border-right: none;">VAT</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ITEMS_BODY}}
+        </tbody>
+    </table>
 
-<div class="ti-counter-area">
-    {{COUNTER_AREA}}
-</div>
+    <div class="ti-counter-area">
+        {{COUNTER_AREA}}
+    </div>
 
-<!-- 하단 계좌 정보 라인 -->
-<div class="ti-footer-account-line" style="display: flex; justify-content: space-between; width: 100%; border: 1px solid var(--ti-border); font-size: 0.85rem; padding: 6px 12px; box-sizing: border-box; background: var(--ti-bg) !important; font-weight: bold; color: var(--ti-primary-dark) !important; margin-top: 10px;">
-    <span>입금계좌 : {{FOOTER_ACCOUNT}}</span>
-    <span>예금주 : {{FOOTER_ACC_HOLDER}}</span>
+    <div class="footer-info" style="border-top: 1px solid var(--ti-border);">
+        <div>&nbsp;&nbsp;입금계좌 : {{FOOTER_ACCOUNT}}</div>
+        <div>&nbsp;&nbsp;예금주 : {{FOOTER_ACC_HOLDER}}</div>
+    </div>
 </div>
 `;
 
