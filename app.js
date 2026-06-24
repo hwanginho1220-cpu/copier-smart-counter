@@ -2701,7 +2701,9 @@ function fillInvoiceConfigInputs() {
     if (theme) theme.value = invoiceConfig.theme || 'blue';
 
     const templateHtml = document.getElementById('invConfTemplateHtml');
-    if (templateHtml) templateHtml.value = invoiceConfig.templateHtml !== undefined ? invoiceConfig.templateHtml : '';
+    if (templateHtml) {
+        templateHtml.value = (invoiceConfig.templateHtml && invoiceConfig.templateHtml.trim() !== '') ? invoiceConfig.templateHtml : defaultInvoiceTemplateHTML.trim();
+    }
 
     const customCss = document.getElementById('invConfCustomCss');
     if (customCss) customCss.value = invoiceConfig.customCss !== undefined ? invoiceConfig.customCss : '';
