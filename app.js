@@ -243,10 +243,6 @@ function setupEventListeners() {
     // Sidebar view toggle
     document.querySelectorAll('.sidebar .nav-links li').forEach(li => {
         li.addEventListener('click', (e) => {
-            const a = li.querySelector('a');
-            if (a && a.getAttribute('href') && a.getAttribute('href') !== '#' && !a.getAttribute('href').startsWith('#')) {
-                return; // Let standard link navigation work
-            }
             e.preventDefault();
             const view = li.getAttribute('data-view');
             switchView(view);
