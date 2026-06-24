@@ -4096,52 +4096,54 @@ function generateInvoiceHtmlForCustomer(cust, month) {
         <div class="bulk-invoice-page traditional-invoice theme-${invoiceConfig.theme || 'blue'}">
             <h1 class="ti-title" style="margin-top: 0;">거 래 명 세 표 <span style="font-size: 11px; font-weight: normal; letter-spacing: 0; vertical-align: middle; margin-left: 5px;">(공급받는자 보관용)</span></h1>
             
-            <!-- 상단 통합 테이블 -->
-            <table class="ti-top-table" style="width: 100%; border-collapse: collapse; margin-bottom: 10px; border: 2px solid var(--ti-primary);">
-                <tr>
-                    <!-- 공급받는자 영역 (colspan=4, rowspan=4) -->
-                    <td colspan="4" rowspan="4" style="width: 45%; border: 1px solid var(--ti-border); padding: 10px; vertical-align: middle; background: #ffffff;">
-                        <div style="font-size: 1.05rem; font-weight: 600; margin-bottom: 20px; text-align: center;">${issueDateFormatted}</div>
-                        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; padding: 0 10px;">
-                            <span style="font-size: 1.3rem; font-weight: 800; border-bottom: 1px solid #000; padding-bottom: 2px; flex: 1; text-align: left; margin-right: 5px;">${cust.name}</span>
-                            <span style="font-size: 1.05rem; font-weight: 600;">귀하</span>
-                        </div>
-                        <div style="text-align: center; font-size: 0.95rem; color: #475569;">아래와 같이 계산합니다.</div>
-                    </td>
-                    
-                    <!-- 공급자 세로 라벨 (colspan=1, rowspan=4) -->
-                    <td colspan="1" rowspan="4" class="ti-vertical-label" style="width: 5%; border: 1px solid var(--ti-border); text-align: center; font-weight: bold; background: var(--ti-bg) !important; color: var(--ti-primary-dark) !important; padding: 5px; font-size: 0.9rem;">
-                        공<br><br>급<br><br>자
-                    </td>
-                    
-                    <!-- 공급자 정보 영역 (등록번호) -->
-                    <td colspan="1" style="width: 12%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">등록번호</td>
-                    <td colspan="3" style="width: 38%; border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.95rem; letter-spacing: 1px; text-align: left;">${invoiceConfig.regNo || ''}</td>
-                </tr>
-                <tr>
-                    <td colspan="1" style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">상호</td>
-                    <td colspan="1" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.85rem; text-align: left;">${invoiceConfig.name || ''}</td>
-                    <td colspan="1" style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">성명</td>
-                    <td colspan="1" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.85rem; text-align: left; position: relative; padding-right: 45px;">
-                        <span>${invoiceConfig.ceo || ''}</span>
-                        <div class="ti-stamp" style="right: 5px; width: 40px; height: 40px; margin-top: -20px;">
-                            <div class="ti-stamp-inner" style="font-size: 0.75rem;">
-                                ${stampHtml}
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                <tr>
-                    <td colspan="1" style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">사업장주소</td>
-                    <td colspan="3" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.85rem; text-align: left;">${invoiceConfig.address || ''}</td>
-                </tr>
-                <tr>
-                    <td colspan="1" style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">업태</td>
-                    <td colspan="1" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.85rem; text-align: left;">${invoiceConfig.bizType || ''}</td>
-                    <td colspan="1" style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">종목</td>
-                    <td colspan="1" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.85rem; text-align: left;">${invoiceConfig.bizItem || ''}</td>
-                </tr>
-            </table>
+            <!-- 상단 통합 컨테이너 (좌우 분리형 구조로 찌그러짐 방지) -->
+            <div class="ti-top-container" style="display: flex; justify-content: space-between; margin-bottom: 10px; gap: 10px;">
+                <!-- 좌측 공급받는자 영역 -->
+                <div class="ti-customer-box" style="width: 45%; border: 2px solid var(--ti-primary); padding: 15px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; min-height: 165px; background: #ffffff;">
+                    <div style="font-size: 1.05rem; font-weight: 600; text-align: center; color: #000;">${issueDateFormatted}</div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 0 5px; margin: 15px 0;">
+                        <span style="font-size: 1.3rem; font-weight: 800; border-bottom: 2px solid #000; padding-bottom: 2px; flex: 1; text-align: left; margin-right: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${cust.name}</span>
+                        <span style="font-size: 1.05rem; font-weight: 600; white-space: nowrap;">귀하</span>
+                    </div>
+                    <div style="text-align: center; font-size: 0.95rem; color: #475569;">아래와 같이 계산합니다.</div>
+                </div>
+
+                <!-- 우측 공급자 영역 -->
+                <div class="ti-supplier-box" style="width: 53%; display: flex; border: 2px solid var(--ti-primary); box-sizing: border-box; min-height: 165px; background: #ffffff;">
+                    <div class="ti-vertical-label" style="width: 35px; display: flex; align-items: center; justify-content: center; font-weight: bold; background: var(--ti-bg) !important; color: var(--ti-primary-dark) !important; padding: 10px 0; font-size: 0.9rem; border-right: 1px solid var(--ti-border); box-sizing: border-box; writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 5px;">
+                        공급자
+                    </div>
+                    <table class="ti-supplier-table" style="flex: 1; border-collapse: collapse; width: 100%;">
+                        <tr>
+                            <td style="width: 22%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">등록번호</td>
+                            <td colspan="3" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.95rem; letter-spacing: 1px; text-align: left;">${invoiceConfig.regNo || ''}</td>
+                        </tr>
+                        <tr>
+                            <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">상호</td>
+                            <td style="width: 28%; border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.85rem; text-align: left;">${invoiceConfig.name || ''}</td>
+                            <td style="width: 15%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">성명</td>
+                            <td style="border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.85rem; text-align: left; position: relative; padding-right: 35px;">
+                                <span>${invoiceConfig.ceo || ''}</span>
+                                <div class="ti-stamp" style="position: absolute; right: 2px; top: 50%; transform: translateY(-50%); width: 35px; height: 35px; border: 1.5px solid #ef4444 !important; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                    <div class="ti-stamp-inner" style="font-family: 'Gungsuh', serif; color: #ef4444 !important; font-size: 0.65rem; font-weight: bold; text-align: center; line-height: 1.1; letter-spacing: -1px;">
+                                        ${stampHtml}
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">사업장주소</td>
+                            <td colspan="3" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left; line-height: 1.3;">${invoiceConfig.address || ''}</td>
+                        </tr>
+                        <tr>
+                            <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">업태</td>
+                            <td style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left;">${invoiceConfig.bizType || ''}</td>
+                            <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">종목</td>
+                            <td style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left;">${invoiceConfig.bizItem || ''}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
 
             <!-- 합계금액 단독 테이블 -->
             <table class="ti-amount-table" style="width: 100%; border-collapse: collapse; margin-bottom: 10px; border: 2px solid var(--ti-primary); text-align: center;">
