@@ -23,8 +23,100 @@ const defaultInvoiceConfig = {
     account: '국민은행 012345-01-678901',
     accHolder: '하영통신',
     greeting: '위와 같이 계산하오니 청구하여 주시기 바랍니다.',
-    theme: 'blue'
+    theme: 'blue',
+    templateHtml: '',
+    customCss: ''
 };
+
+const defaultInvoiceTemplateHTML = `
+<h1 class="ti-title" style="margin-top: 0;">거 래 명 세 표 <span style="font-size: 11px; font-weight: normal; letter-spacing: 0; vertical-align: middle; margin-left: 5px;">(공급받는자 보관용)</span></h1>
+
+<!-- 상단 통합 컨테이너 (좌우 분리형 구조로 찌그러짐 방지) -->
+<div class="ti-top-container" style="display: flex; justify-content: space-between; margin-bottom: 10px; gap: 10px;">
+    <!-- 좌측 공급받는자 영역 -->
+    <div class="ti-customer-box" style="width: 45%; border: 2px solid var(--ti-primary); padding: 15px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; min-height: 165px; background: #ffffff;">
+        <div style="font-size: 1.05rem; font-weight: 600; text-align: center; color: #000;">{{ISSUE_DATE}}</div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 0 5px; margin: 15px 0;">
+            <span style="font-size: 1.3rem; font-weight: 800; border-bottom: 2px solid #000; padding-bottom: 2px; flex: 1; text-align: left; margin-right: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{CUSTOMER_NAME}}</span>
+            <span style="font-size: 1.05rem; font-weight: 600; white-space: nowrap;">귀하</span>
+        </div>
+        <div style="text-align: center; font-size: 0.95rem; color: #475569;">아래와 같이 계산합니다.</div>
+    </div>
+
+    <!-- 우측 공급자 영역 -->
+    <div class="ti-supplier-box" style="width: 53%; display: flex; border: 2px solid var(--ti-primary); box-sizing: border-box; min-height: 165px; background: #ffffff;">
+        <div class="ti-vertical-label" style="width: 35px; display: flex; align-items: center; justify-content: center; font-weight: bold; background: var(--ti-bg) !important; color: var(--ti-primary-dark) !important; padding: 10px 0; font-size: 0.9rem; border-right: 1px solid var(--ti-border); box-sizing: border-box; writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 5px;">
+            공급자
+        </div>
+        <table class="ti-supplier-table" style="flex: 1; border-collapse: collapse; width: 100%;">
+            <tr>
+                <td style="width: 22%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">등록번호</td>
+                <td colspan="3" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.95rem; letter-spacing: 1px; text-align: left;">{{SUPPLIER_REG_NO}}</td>
+            </tr>
+            <tr>
+                <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">상호</td>
+                <td style="width: 28%; border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.85rem; text-align: left;">{{SUPPLIER_NAME}}</td>
+                <td style="width: 15%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">성명</td>
+                <td style="border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.85rem; text-align: left; position: relative; padding-right: 35px;">
+                    <span>{{SUPPLIER_CEO}}</span>
+                    <div class="ti-stamp" style="position: absolute; right: 2px; top: 50%; transform: translateY(-50%); width: 35px; height: 35px; border: 1.5px solid #ef4444 !important; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                        <div class="ti-stamp-inner" style="font-family: 'Gungsuh', serif; color: #ef4444 !important; font-size: 0.65rem; font-weight: bold; text-align: center; line-height: 1.1; letter-spacing: -1px;">
+                            {{SUPPLIER_STAMP}}
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">사업장주소</td>
+                <td colspan="3" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left; line-height: 1.3;">{{SUPPLIER_ADDRESS}}</td>
+            </tr>
+            <tr>
+                <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">업태</td>
+                <td style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left;">{{SUPPLIER_BIZ_TYPE}}</td>
+                <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">종목</td>
+                <td style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left;">{{SUPPLIER_BIZ_ITEM}}</td>
+            </tr>
+        </table>
+    </div>
+</div>
+
+<!-- 합계금액 단독 테이블 -->
+<table class="ti-amount-table" style="width: 100%; border-collapse: collapse; margin-bottom: 10px; border: 2px solid var(--ti-primary); text-align: center;">
+    <tr style="height: 38px;">
+        <td style="width: 15%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.85rem; padding: 5px;">합계금액</td>
+        <td style="width: 50%; border: 1px solid var(--ti-border); font-weight: bold; font-size: 1.05rem; padding: 5px; color: #000;">{{TOTAL_AMOUNT_TEXT}}</td>
+        <td style="width: 35%; border: 1px solid var(--ti-border); font-weight: bold; font-size: 1.1rem; padding: 5px; color: #000; text-align: right; padding-right: 15px;">
+            ( ₩ <span style="font-weight: 800; font-size: 1.15rem; color: #000;">{{TOTAL_AMOUNT_NUM}}</span> )
+        </td>
+    </tr>
+</table>
+
+<table class="ti-item-table">
+    <thead>
+        <tr>
+            <th style="width: 45%;">품목</th>
+            <th style="width: 10%;">규격</th>
+            <th style="width: 8%;">수량</th>
+            <th style="width: 12%;">단가</th>
+            <th style="width: 15%;">공급가액</th>
+            <th style="width: 10%;">VAT</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ITEMS_BODY}}
+    </tbody>
+</table>
+
+<div class="ti-counter-area">
+    {{COUNTER_AREA}}
+</div>
+
+<!-- 하단 계좌 정보 라인 -->
+<div class="ti-footer-account-line" style="display: flex; justify-content: space-between; width: 100%; border: 1px solid var(--ti-border); font-size: 0.85rem; padding: 6px 12px; box-sizing: border-box; background: var(--ti-bg) !important; font-weight: bold; color: var(--ti-primary-dark) !important; margin-top: 10px;">
+    <span>입금계좌 : {{FOOTER_ACCOUNT}}</span>
+    <span>예금주 : {{FOOTER_ACC_HOLDER}}</span>
+</div>
+\`;
 
 let invoiceConfig = {...defaultInvoiceConfig};
 
@@ -90,6 +182,16 @@ function showToast(message, type = 'info') {
     setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = '0.3s'; setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
+function applyCustomCss() {
+    let styleTag = document.getElementById('invoiceCustomCssTag');
+    if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'invoiceCustomCssTag';
+        document.head.appendChild(styleTag);
+    }
+    styleTag.textContent = invoiceConfig.customCss || '';
+}
+
 // Load Invoice Configuration from localStorage
 function loadInvoiceConfig() {
     const saved = localStorage.getItem(INVOICE_CONFIG_KEY);
@@ -103,6 +205,7 @@ function loadInvoiceConfig() {
     } else {
         invoiceConfig = {...defaultInvoiceConfig};
     }
+    applyCustomCss();
 }
 
 // --- Initialization ---
@@ -2509,9 +2612,10 @@ function setupFirebaseListeners() {
             invoiceConfig = doc.data();
             localStorage.setItem(INVOICE_CONFIG_KEY, JSON.stringify(invoiceConfig));
             fillInvoiceConfigInputs();
+            applyCustomCss();
             const invoiceModal = document.getElementById('invoiceModalBackdrop');
-            if (invoiceModal && invoiceModal.classList.contains('active')) {
-                applyInvoiceConfigToElement(document.getElementById('invoicePrintArea'));
+            if (invoiceModal && invoiceModal.classList.contains('active') && currentInvoiceData && !currentInvoiceData.isManual) {
+                openInvoiceModal(currentInvoiceData.cust.id, currentInvoiceData.month);
             }
         }
     }, error => {
@@ -2579,6 +2683,12 @@ function fillInvoiceConfigInputs() {
 
     const theme = document.getElementById('invConfTheme');
     if (theme) theme.value = invoiceConfig.theme || 'blue';
+
+    const templateHtml = document.getElementById('invConfTemplateHtml');
+    if (templateHtml) templateHtml.value = invoiceConfig.templateHtml !== undefined ? invoiceConfig.templateHtml : '';
+
+    const customCss = document.getElementById('invConfCustomCss');
+    if (customCss) customCss.value = invoiceConfig.customCss !== undefined ? invoiceConfig.customCss : '';
 }
 
 window.handleInvoiceConfigSubmit = async function(e) {
@@ -2594,11 +2704,14 @@ window.handleInvoiceConfigSubmit = async function(e) {
         account: document.getElementById('invConfAccount').value.trim(),
         accHolder: document.getElementById('invConfAccHolder').value.trim(),
         greeting: document.getElementById('invConfGreeting').value.trim(),
-        theme: document.getElementById('invConfTheme') ? document.getElementById('invConfTheme').value : 'blue'
+        theme: document.getElementById('invConfTheme') ? document.getElementById('invConfTheme').value : 'blue',
+        templateHtml: document.getElementById('invConfTemplateHtml') ? document.getElementById('invConfTemplateHtml').value : '',
+        customCss: document.getElementById('invConfCustomCss') ? document.getElementById('invConfCustomCss').value : ''
     };
 
     invoiceConfig = config;
     localStorage.setItem(INVOICE_CONFIG_KEY, JSON.stringify(config));
+    applyCustomCss();
 
     if (isCloudMode && db) {
         try {
@@ -2613,8 +2726,17 @@ window.handleInvoiceConfigSubmit = async function(e) {
     closeFirebaseModal();
     
     const invoiceModal = document.getElementById('invoiceModalBackdrop');
-    if (invoiceModal && invoiceModal.classList.contains('active')) {
-        applyInvoiceConfigToElement(document.getElementById('invoicePrintArea'));
+    if (invoiceModal && invoiceModal.classList.contains('active') && currentInvoiceData && !currentInvoiceData.isManual) {
+        openInvoiceModal(currentInvoiceData.cust.id, currentInvoiceData.month);
+    }
+};
+
+window.resetInvoiceTemplate = function() {
+    if (confirm('거래명세서 HTML 템플릿을 기본 양식으로 복원하시겠습니까? (작성 중인 내용은 삭제됩니다.)')) {
+        const textarea = document.getElementById('invConfTemplateHtml');
+        if (textarea) {
+            textarea.value = defaultInvoiceTemplateHTML.trim();
+        }
     }
 };
 
@@ -3398,11 +3520,6 @@ function openInvoiceModal(customerId, month) {
     const cust = state.customers.find(c => c.id === customerId);
     if (!cust) return;
 
-    applyInvoiceConfigToElement(document.getElementById('invoicePrintArea'));
-
-    const counterArea = document.getElementById('invCounterArea');
-    if (counterArea) counterArea.style.display = 'block';
-
     // Default to today if month isn't fully given or is just for current context
     const insps = state.inspections.filter(i => i.customerId === customerId && i.date && typeof i.date === 'string' && i.date.startsWith(month));
     if (insps.length === 0) return;
@@ -3411,8 +3528,7 @@ function openInvoiceModal(customerId, month) {
 
     const issueDateStr = new Date().toISOString().split('T')[0];
     const issueDateArr = issueDateStr.split('-');
-    document.getElementById('invIssueDate').textContent = `${issueDateArr[0]}년 ${issueDateArr[1]}월 ${issueDateArr[2]}일`;
-    document.getElementById('invCustomerName').textContent = cust.name;
+    const issueDateFormatted = `${issueDateArr[0]}년 ${issueDateArr[1]}월 ${issueDateArr[2]}일`;
 
     const vatEnabled = cust.vatEnabled !== false;
 
@@ -3540,14 +3656,9 @@ function openInvoiceModal(customerId, month) {
         html += `<tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
     }
 
-    document.getElementById('invItemBody').innerHTML = html;
-
     const vat = vatEnabled ? Math.floor(subTotal * 0.1) : 0;
     let total = subTotal + vat;
     total = Math.floor(total / 100) * 100;
-
-    document.getElementById('invTotalAmountNum').textContent = `${total.toLocaleString()}`;
-    document.getElementById('invTotalAmountText').textContent = `${numToKoreanStr(total)}원`;
 
     // Counter table at the bottom
     let counterHtml = `
@@ -3578,7 +3689,15 @@ function openInvoiceModal(customerId, month) {
     });
     counterHtml += `</table>`;
     
-    document.getElementById('invCounterArea').innerHTML = counterHtml;
+    const data = {
+        issueDate: issueDateFormatted,
+        customerName: cust.name,
+        itemsBody: html,
+        totalAmountText: `${numToKoreanStr(total)}원`,
+        totalAmountNum: `${total.toLocaleString()}`,
+        counterArea: counterHtml
+    };
+    renderInvoiceTemplate(document.getElementById('invoicePrintArea'), data);
 
     // Setup events
     document.getElementById('invPrintBtn').onclick = () => {
@@ -3785,68 +3904,91 @@ async function handleManualInvoiceFormSubmit(e) {
     openManualInvoice(custId, month, vatEnabled, items);
 }
 
-function applyInvoiceConfigToElement(container) {
+function renderInvoiceTemplate(container, data) {
     if (!container) return;
     
+    let template = invoiceConfig.templateHtml || defaultInvoiceTemplateHTML;
+    
+    const stampText = invoiceConfig.stampText || '하영통신';
+    let stampHtml = '';
+    if (stampText.length === 4) {
+        stampHtml = `${stampText.substring(0, 2)}<br>${stampText.substring(2, 4)}<br>인`;
+    } else {
+        stampHtml = stampText.split('').join('<br>');
+    }
+    
+    let html = template
+        .replace(/{{TITLE}}/g, invoiceConfig.title || '거 래 명 세 표')
+        .replace(/{{ISSUE_DATE}}/g, data.issueDate || '')
+        .replace(/{{CUSTOMER_NAME}}/g, data.customerName || '')
+        .replace(/{{ITEMS_BODY}}/g, data.itemsBody || '')
+        .replace(/{{TOTAL_AMOUNT_TEXT}}/g, data.totalAmountText || '영원')
+        .replace(/{{TOTAL_AMOUNT_NUM}}/g, data.totalAmountNum || '0')
+        .replace(/{{COUNTER_AREA}}/g, data.counterArea || '')
+        .replace(/{{SUPPLIER_REG_NO}}/g, invoiceConfig.regNo || '')
+        .replace(/{{SUPPLIER_NAME}}/g, invoiceConfig.name || '')
+        .replace(/{{SUPPLIER_CEO}}/g, invoiceConfig.ceo || '')
+        .replace(/{{SUPPLIER_STAMP}}/g, stampHtml)
+        .replace(/{{SUPPLIER_ADDRESS}}/g, invoiceConfig.address || '')
+        .replace(/{{SUPPLIER_BIZ_TYPE}}/g, invoiceConfig.bizType || '')
+        .replace(/{{SUPPLIER_BIZ_ITEM}}/g, invoiceConfig.bizItem || '')
+        .replace(/{{FOOTER_GREETING}}/g, invoiceConfig.greeting || '')
+        .replace(/{{FOOTER_ACCOUNT}}/g, invoiceConfig.account || '')
+        .replace(/{{FOOTER_ACC_HOLDER}}/g, invoiceConfig.accHolder || '');
+        
+    container.innerHTML = html;
+    
     // Apply color theme class
-    const invoiceEl = container.classList.contains('traditional-invoice') 
-        ? container 
-        : container.querySelector('.traditional-invoice');
+    container.classList.remove('theme-blue', 'theme-slate', 'theme-green');
+    const theme = invoiceConfig.theme || 'blue';
+    container.classList.add('theme-' + theme);
+}
+
+function renderInvoiceTemplateToString(data) {
+    let template = invoiceConfig.templateHtml || defaultInvoiceTemplateHTML;
     
-    if (invoiceEl) {
-        invoiceEl.classList.remove('theme-blue', 'theme-slate', 'theme-green');
-        const theme = invoiceConfig.theme || 'blue';
-        invoiceEl.classList.add('theme-' + theme);
+    const stampText = invoiceConfig.stampText || '하영통신';
+    let stampHtml = '';
+    if (stampText.length === 4) {
+        stampHtml = `${stampText.substring(0, 2)}<br>${stampText.substring(2, 4)}<br>인`;
+    } else {
+        stampHtml = stampText.split('').join('<br>');
     }
     
-    const regNo = container.querySelector('#invSupplierRegNo');
-    if (regNo) regNo.textContent = invoiceConfig.regNo || '';
-    
-    const name = container.querySelector('#invSupplierName');
-    if (name) name.textContent = invoiceConfig.name || '';
-    
-    const ceo = container.querySelector('#invSupplierCeo');
-    if (ceo) ceo.textContent = invoiceConfig.ceo || '';
-    
-    const stamp = container.querySelector('#invSupplierStamp');
-    if (stamp) {
-        const text = invoiceConfig.stampText || '하영통신';
-        if (text.length === 4) {
-            stamp.innerHTML = `${text.substring(0, 2)}<br>${text.substring(2, 4)}<br>인`;
-        } else {
-            stamp.innerHTML = text.split('').join('<br>');
-        }
-    }
-    
-    const address = container.querySelector('#invSupplierAddress');
-    if (address) address.textContent = invoiceConfig.address || '';
-    
-    const bizType = container.querySelector('#invSupplierBizType');
-    if (bizType) bizType.textContent = invoiceConfig.bizType || '';
-    
-    const bizItem = container.querySelector('#invSupplierBizItem');
-    if (bizItem) bizItem.textContent = invoiceConfig.bizItem || '';
-    
-    const greeting = container.querySelector('#invFooterGreeting');
-    if (greeting) greeting.textContent = invoiceConfig.greeting || '';
-    
-    const account = container.querySelector('#invFooterAccount');
-    if (account) account.textContent = `입금계좌 : ${invoiceConfig.account || ''}`;
-    
-    const accHolder = container.querySelector('#invFooterAccHolder');
-    if (accHolder) accHolder.textContent = `예금주 : ${invoiceConfig.accHolder || ''}`;
+    let html = template
+        .replace(/{{TITLE}}/g, invoiceConfig.title || '거 래 명 세 표')
+        .replace(/{{ISSUE_DATE}}/g, data.issueDate || '')
+        .replace(/{{CUSTOMER_NAME}}/g, data.customerName || '')
+        .replace(/{{ITEMS_BODY}}/g, data.itemsBody || '')
+        .replace(/{{TOTAL_AMOUNT_TEXT}}/g, data.totalAmountText || '영원')
+        .replace(/{{TOTAL_AMOUNT_NUM}}/g, data.totalAmountNum || '0')
+        .replace(/{{COUNTER_AREA}}/g, data.counterArea || '')
+        .replace(/{{SUPPLIER_REG_NO}}/g, invoiceConfig.regNo || '')
+        .replace(/{{SUPPLIER_NAME}}/g, invoiceConfig.name || '')
+        .replace(/{{SUPPLIER_CEO}}/g, invoiceConfig.ceo || '')
+        .replace(/{{SUPPLIER_STAMP}}/g, stampHtml)
+        .replace(/{{SUPPLIER_ADDRESS}}/g, invoiceConfig.address || '')
+        .replace(/{{SUPPLIER_BIZ_TYPE}}/g, invoiceConfig.bizType || '')
+        .replace(/{{SUPPLIER_BIZ_ITEM}}/g, invoiceConfig.bizItem || '')
+        .replace(/{{FOOTER_GREETING}}/g, invoiceConfig.greeting || '')
+        .replace(/{{FOOTER_ACCOUNT}}/g, invoiceConfig.account || '')
+        .replace(/{{FOOTER_ACC_HOLDER}}/g, invoiceConfig.accHolder || '');
+        
+    const theme = invoiceConfig.theme || 'blue';
+    return `
+        <div class="bulk-invoice-page traditional-invoice theme-${theme}">
+            ${html}
+        </div>
+    `;
 }
 
 function openManualInvoice(customerId, month, vatEnabled, items) {
     const cust = state.customers.find(c => c.id === customerId);
     if (!cust) return;
 
-    applyInvoiceConfigToElement(document.getElementById('invoicePrintArea'));
-
     const issueDateStr = new Date().toISOString().split('T')[0];
     const issueDateArr = issueDateStr.split('-');
-    document.getElementById('invIssueDate').textContent = `${issueDateArr[0]}년 ${issueDateArr[1]}월 ${issueDateArr[2]}일`;
-    document.getElementById('invCustomerName').textContent = cust.name;
+    const issueDateFormatted = `${issueDateArr[0]}년 ${issueDateArr[1]}월 ${issueDateArr[2]}일`;
 
     let html = '';
     let subTotal = 0;
@@ -3873,17 +4015,18 @@ function openManualInvoice(customerId, month, vatEnabled, items) {
         html += `<tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
     }
 
-    document.getElementById('invItemBody').innerHTML = html;
-
     const vat = vatEnabled ? Math.floor(subTotal * 0.1) : 0;
     const total = subTotal + vat;
 
-    document.getElementById('invTotalAmountNum').textContent = `${total.toLocaleString()}`;
-    document.getElementById('invTotalAmountText').textContent = `${numToKoreanStr(total)}원`;
-
-    // Hide counter table as it is a manual invoice
-    const counterArea = document.getElementById('invCounterArea');
-    if (counterArea) counterArea.style.display = 'none';
+    const data = {
+        issueDate: issueDateFormatted,
+        customerName: cust.name,
+        itemsBody: html,
+        totalAmountText: `${numToKoreanStr(total)}원`,
+        totalAmountNum: `${total.toLocaleString()}`,
+        counterArea: ''
+    };
+    renderInvoiceTemplate(document.getElementById('invoicePrintArea'), data);
 
     // Set currentInvoiceData mock so that download / email sends can read name and month
     currentInvoiceData = {
@@ -4084,105 +4227,16 @@ function generateInvoiceHtmlForCustomer(cust, month) {
     });
     counterHtml += `</table>`;
 
-    const stampText = invoiceConfig.stampText || '하영통신';
-    let stampHtml = '';
-    if (stampText.length === 4) {
-        stampHtml = `${stampText.substring(0, 2)}<br>${stampText.substring(2, 4)}<br>인`;
-    } else {
-        stampHtml = stampText.split('').join('<br>');
-    }
+    const data = {
+        issueDate: issueDateFormatted,
+        customerName: cust.name,
+        itemsBody: htmlItems,
+        totalAmountText: totalAmountText,
+        totalAmountNum: totalAmountNum,
+        counterArea: counterHtml
+    };
 
-    return `
-        <div class="bulk-invoice-page traditional-invoice theme-${invoiceConfig.theme || 'blue'}">
-            <h1 class="ti-title" style="margin-top: 0;">거 래 명 세 표 <span style="font-size: 11px; font-weight: normal; letter-spacing: 0; vertical-align: middle; margin-left: 5px;">(공급받는자 보관용)</span></h1>
-            
-            <!-- 상단 통합 컨테이너 (좌우 분리형 구조로 찌그러짐 방지) -->
-            <div class="ti-top-container" style="display: flex; justify-content: space-between; margin-bottom: 10px; gap: 10px;">
-                <!-- 좌측 공급받는자 영역 -->
-                <div class="ti-customer-box" style="width: 45%; border: 2px solid var(--ti-primary); padding: 15px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; min-height: 165px; background: #ffffff;">
-                    <div style="font-size: 1.05rem; font-weight: 600; text-align: center; color: #000;">${issueDateFormatted}</div>
-                    <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 0 5px; margin: 15px 0;">
-                        <span style="font-size: 1.3rem; font-weight: 800; border-bottom: 2px solid #000; padding-bottom: 2px; flex: 1; text-align: left; margin-right: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${cust.name}</span>
-                        <span style="font-size: 1.05rem; font-weight: 600; white-space: nowrap;">귀하</span>
-                    </div>
-                    <div style="text-align: center; font-size: 0.95rem; color: #475569;">아래와 같이 계산합니다.</div>
-                </div>
-
-                <!-- 우측 공급자 영역 -->
-                <div class="ti-supplier-box" style="width: 53%; display: flex; border: 2px solid var(--ti-primary); box-sizing: border-box; min-height: 165px; background: #ffffff;">
-                    <div class="ti-vertical-label" style="width: 35px; display: flex; align-items: center; justify-content: center; font-weight: bold; background: var(--ti-bg) !important; color: var(--ti-primary-dark) !important; padding: 10px 0; font-size: 0.9rem; border-right: 1px solid var(--ti-border); box-sizing: border-box; writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 5px;">
-                        공급자
-                    </div>
-                    <table class="ti-supplier-table" style="flex: 1; border-collapse: collapse; width: 100%;">
-                        <tr>
-                            <td style="width: 22%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">등록번호</td>
-                            <td colspan="3" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.95rem; letter-spacing: 1px; text-align: left;">${invoiceConfig.regNo || ''}</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">상호</td>
-                            <td style="width: 28%; border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.85rem; text-align: left;">${invoiceConfig.name || ''}</td>
-                            <td style="width: 15%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">성명</td>
-                            <td style="border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.85rem; text-align: left; position: relative; padding-right: 35px;">
-                                <span>${invoiceConfig.ceo || ''}</span>
-                                <div class="ti-stamp" style="position: absolute; right: 2px; top: 50%; transform: translateY(-50%); width: 35px; height: 35px; border: 1.5px solid #ef4444 !important; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                                    <div class="ti-stamp-inner" style="font-family: 'Gungsuh', serif; color: #ef4444 !important; font-size: 0.65rem; font-weight: bold; text-align: center; line-height: 1.1; letter-spacing: -1px;">
-                                        ${stampHtml}
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">사업장주소</td>
-                            <td colspan="3" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left; line-height: 1.3;">${invoiceConfig.address || ''}</td>
-                        </tr>
-                        <tr>
-                            <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">업태</td>
-                            <td style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left;">${invoiceConfig.bizType || ''}</td>
-                            <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">종목</td>
-                            <td style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left;">${invoiceConfig.bizItem || ''}</td>
-                        </tr>
-                    </table>
-                </div>
-            </div>
-
-            <!-- 합계금액 단독 테이블 -->
-            <table class="ti-amount-table" style="width: 100%; border-collapse: collapse; margin-bottom: 10px; border: 2px solid var(--ti-primary); text-align: center;">
-                <tr style="height: 38px;">
-                    <td style="width: 15%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.85rem; padding: 5px;">합계금액</td>
-                    <td style="width: 50%; border: 1px solid var(--ti-border); font-weight: bold; font-size: 1.05rem; padding: 5px; color: #000;">${totalAmountText}</td>
-                    <td style="width: 35%; border: 1px solid var(--ti-border); font-weight: bold; font-size: 1.1rem; padding: 5px; color: #000; text-align: right; padding-right: 15px;">
-                        ( ₩ <span style="font-weight: 800; font-size: 1.15rem; color: #000;">${totalAmountNum}</span> )
-                    </td>
-                </tr>
-            </table>
-
-            <table class="ti-item-table">
-                <thead>
-                    <tr>
-                        <th style="width: 45%;">품목</th>
-                        <th style="width: 10%;">규격</th>
-                        <th style="width: 8%;">수량</th>
-                        <th style="width: 12%;">단가</th>
-                        <th style="width: 15%;">공급가액</th>
-                        <th style="width: 10%;">VAT</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${htmlItems}
-                </tbody>
-            </table>
-            
-            <div class="ti-counter-area">
-                ${counterHtml}
-            </div>
-
-            <!-- 하단 계좌 정보 라인 -->
-            <div class="ti-footer-account-line" style="display: flex; justify-content: space-between; width: 100%; border: 1px solid var(--ti-border); font-size: 0.85rem; padding: 6px 12px; box-sizing: border-box; background: var(--ti-bg) !important; font-weight: bold; color: var(--ti-primary-dark) !important; margin-top: 10px;">
-                <span>입금계좌 : ${invoiceConfig.account || ''}</span>
-                <span>예금주 : ${invoiceConfig.accHolder || ''}</span>
-            </div>
-        </div>
-    `;
+    return renderInvoiceTemplateToString(data);
 }
 
 // Print All Invoices

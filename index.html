@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartCounter - 복사기 점검 & 카운터 관리</title>
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="style.css?v=1.0.34">
+    <link rel="stylesheet" href="style.css?v=1.0.35">
+    <style id="invoiceCustomCssTag"></style>
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Chart.js for visualization -->
@@ -645,6 +646,33 @@
                             </select>
                         </div>
                         
+                        <div style="border-top: 1px solid var(--border-color); margin-top: 1.5rem; padding-top: 1.5rem;">
+                            <h3 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text-primary);"><i class="fa-solid fa-code"></i> [고급] 거래명세서 폼 직접 편집</h3>
+                            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.5;">
+                                명세서의 HTML 레이아웃과 CSS 스타일을 직접 수정하여 디자인을 제어할 수 있습니다.
+                            </p>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                                    <label for="invConfTemplateHtml" style="margin-bottom: 0;">HTML 템플릿</label>
+                                    <button type="button" class="btn btn-secondary" onclick="resetInvoiceTemplate()" style="font-size: 0.72rem; padding: 0.2rem 0.5rem; min-height: auto; height: auto; line-height: 1;">기본 템플릿으로 초기화</button>
+                                </div>
+                                <textarea id="invConfTemplateHtml" class="form-control" rows="8" style="font-family: monospace; font-size: 0.8rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); white-space: pre; overflow-x: auto; tab-size: 4;" placeholder="여기에 거래명세서 HTML 코드를 입력하세요."></textarea>
+                                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.4rem; line-height: 1.4; background: rgba(255,255,255,0.02); padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color);">
+                                    <strong>사용 가능한 치환 기호:</strong><br>
+                                    <code>{{TITLE}}</code>(제목), <code>{{ISSUE_DATE}}</code>(발행일), <code>{{CUSTOMER_NAME}}</code>(고객사명)<br>
+                                    <code>{{TOTAL_AMOUNT_TEXT}}</code>(합계 한글), <code>{{TOTAL_AMOUNT_NUM}}</code>(합계 숫자)<br>
+                                    <code>{{ITEMS_BODY}}</code>(품목 행들), <code>{{COUNTER_AREA}}</code>(카운터 내역 영역)<br>
+                                    <code>{{SUPPLIER_REG_NO}}</code>(등록번호), <code>{{SUPPLIER_NAME}}</code>(상호), <code>{{SUPPLIER_CEO}}</code>(성명), <code>{{SUPPLIER_STAMP}}</code>(도장)<br>
+                                    <code>{{SUPPLIER_ADDRESS}}</code>(주소), <code>{{SUPPLIER_BIZ_TYPE}}</code>(업태), <code>{{SUPPLIER_BIZ_ITEM}}</code>(종목)<br>
+                                    <code>{{FOOTER_GREETING}}</code>(인사말), <code>{{FOOTER_ACCOUNT}}</code>(계좌번호), <code>{{FOOTER_ACC_HOLDER}}</code>(예금주)
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label for="invConfCustomCss">사용자 정의 CSS 스타일 (선택사항)</label>
+                                <textarea id="invConfCustomCss" class="form-control" rows="4" style="font-family: monospace; font-size: 0.8rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color);" placeholder="예: .ti-title { font-size: 2.5rem; }"></textarea>
+                            </div>
+                        </div>
+                        
                         <div class="modal-footer" style="padding: 1.25rem 0 0 0; border-top: none; justify-content: flex-end;">
                             <button type="button" class="btn btn-secondary" onclick="closeFirebaseModal()" style="margin-right: 0.5rem;">취소</button>
                             <button type="submit" class="btn btn-primary">설정 저장</button>
@@ -667,93 +695,7 @@
                 <!-- A4 Paper Container -->
                 <div class="invoice-paper-container">
                     <div id="invoicePrintArea" class="traditional-invoice">
-                        <h1 class="ti-title" style="margin-top: 0;">거 래 명 세 표 <span style="font-size: 11px; font-weight: normal; letter-spacing: 0; vertical-align: middle; margin-left: 5px;">(공급받는자 보관용)</span></h1>
-                        
-                        <!-- 상단 통합 컨테이너 (좌우 분리형 구조로 찌그러짐 방지) -->
-                        <div class="ti-top-container" style="display: flex; justify-content: space-between; margin-bottom: 10px; gap: 10px;">
-                            <!-- 좌측 공급받는자 영역 -->
-                            <div class="ti-customer-box" style="width: 45%; border: 2px solid var(--ti-primary); padding: 15px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; min-height: 165px; background: #ffffff;">
-                                <div id="invIssueDate" style="font-size: 1.05rem; font-weight: 600; text-align: center; color: #000;">-</div>
-                                <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 0 5px; margin: 15px 0;">
-                                    <span id="invCustomerName" style="font-size: 1.3rem; font-weight: 800; border-bottom: 2px solid #000; padding-bottom: 2px; flex: 1; text-align: left; margin-right: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">-</span>
-                                    <span style="font-size: 1.05rem; font-weight: 600; white-space: nowrap;">귀하</span>
-                                </div>
-                                <div style="text-align: center; font-size: 0.95rem; color: #475569;">아래와 같이 계산합니다.</div>
-                            </div>
-
-                            <!-- 우측 공급자 영역 -->
-                            <div class="ti-supplier-box" style="width: 53%; display: flex; border: 2px solid var(--ti-primary); box-sizing: border-box; min-height: 165px; background: #ffffff;">
-                                <div class="ti-vertical-label" style="width: 35px; display: flex; align-items: center; justify-content: center; font-weight: bold; background: var(--ti-bg) !important; color: var(--ti-primary-dark) !important; padding: 10px 0; font-size: 0.9rem; border-right: 1px solid var(--ti-border); box-sizing: border-box; writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 5px;">
-                                    공급자
-                                </div>
-                                <table class="ti-supplier-table" style="flex: 1; border-collapse: collapse; width: 100%;">
-                                    <tr>
-                                        <td style="width: 22%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">등록번호</td>
-                                        <td colspan="3" id="invSupplierRegNo" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.95rem; letter-spacing: 1px; text-align: left;">-</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">상호</td>
-                                        <td id="invSupplierName" style="width: 28%; border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.85rem; text-align: left;">-</td>
-                                        <td style="width: 15%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">성명</td>
-                                        <td style="border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.85rem; text-align: left; position: relative; padding-right: 35px;">
-                                            <span id="invSupplierCeo">-</span>
-                                            <div class="ti-stamp" style="position: absolute; right: 2px; top: 50%; transform: translateY(-50%); width: 35px; height: 35px; border: 1.5px solid #ef4444 !important; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                                                <div id="invSupplierStamp" class="ti-stamp-inner" style="font-family: 'Gungsuh', serif; color: #ef4444 !important; font-size: 0.65rem; font-weight: bold; text-align: center; line-height: 1.1; letter-spacing: -1px;">
-                                                    -
-                                                </div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">사업장주소</td>
-                                        <td colspan="3" id="invSupplierAddress" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left; line-height: 1.3;">-</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">업태</td>
-                                        <td id="invSupplierBizType" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left;">-</td>
-                                        <td style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">종목</td>
-                                        <td id="invSupplierBizItem" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.82rem; text-align: left;">-</td>
-                                    </tr>
-                                </table>
-                            </div>
-                        </div>
-
-                        <!-- 합계금액 단독 테이블 -->
-                        <table class="ti-amount-table" style="width: 100%; border-collapse: collapse; margin-bottom: 10px; border: 2px solid var(--ti-primary); text-align: center;">
-                            <tr style="height: 38px;">
-                                <td style="width: 15%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.85rem; padding: 5px;">합계금액</td>
-                                <td id="invTotalAmountText" style="width: 50%; border: 1px solid var(--ti-border); font-weight: bold; font-size: 1.05rem; padding: 5px; color: #000;">영원</td>
-                                <td style="width: 35%; border: 1px solid var(--ti-border); font-weight: bold; font-size: 1.1rem; padding: 5px; color: #000; text-align: right; padding-right: 15px;">
-                                    ( ₩ <span id="invTotalAmountNum" style="font-weight: 800; font-size: 1.15rem; color: #000;">0</span> )
-                                </td>
-                            </tr>
-                        </table>
-
-                        <table class="ti-item-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 45%;">품목</th>
-                                    <th style="width: 10%;">규격</th>
-                                    <th style="width: 8%;">수량</th>
-                                    <th style="width: 12%;">단가</th>
-                                    <th style="width: 15%;">공급가액</th>
-                                    <th style="width: 10%;">VAT</th>
-                                </tr>
-                            </thead>
-                            <tbody id="invItemBody">
-                                <!-- Items injected here -->
-                            </tbody>
-                        </table>
-                        
-                        <div class="ti-counter-area" id="invCounterArea">
-                            <!-- Counter details injected here -->
-                        </div>
-
-                        <!-- 하단 계좌 정보 라인 -->
-                        <div class="ti-footer-account-line" style="display: flex; justify-content: space-between; width: 100%; border: 1px solid var(--ti-border); font-size: 0.85rem; padding: 6px 12px; box-sizing: border-box; background: var(--ti-bg) !important; font-weight: bold; color: var(--ti-primary-dark) !important; margin-top: 10px;">
-                            <span id="invFooterAccount">입금계좌 : -</span>
-                            <span id="invFooterAccHolder">예금주 : -</span>
-                        </div>
+                        <!-- Dynamically rendered via HTML template -->
                     </div>
                 </div>
             </div>
@@ -909,6 +851,6 @@
 
 
     <!-- Application Logic Script -->
-    <script src="app.js?v=1.0.34"></script>
+    <script src="app.js?v=1.0.35"></script>
 </body>
 </html>
