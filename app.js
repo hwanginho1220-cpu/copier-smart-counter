@@ -35,10 +35,21 @@ const defaultInvoiceTemplateHTML = `
     </div>
 
     <div class="info-section">
-        <div class="buyer-info">
-            <div class="date">{{ISSUE_DATE}}</div>
-            <div class="name">{{CUSTOMER_NAME}} &nbsp;&nbsp;&nbsp;&nbsp; 귀하</div>
-            <div class="message">아래와 같이 계산합니다.</div>
+        <div class="buyer-info-table">
+            <div class="buyer-date-row">
+                {{ISSUE_DATE}}
+            </div>
+            <div class="buyer-name-row">
+                <div class="buyer-name-cell">
+                    {{CUSTOMER_NAME}}
+                </div>
+                <div class="buyer-suffix-cell">
+                    귀하
+                </div>
+            </div>
+            <div class="buyer-msg-row">
+                아래와 같이 계산합니다.
+            </div>
         </div>
         
         <div class="seller-info">
@@ -52,9 +63,10 @@ const defaultInvoiceTemplateHTML = `
                     <th style="width: 22%;">상호</th>
                     <td style="width: 28%; text-align: left; padding-left: 8px;">{{SUPPLIER_NAME}}</td>
                     <th style="width: 15%;">성명</th>
-                    <td style="border-right: none; position: relative; padding-right: 40px; text-align: left; padding-left: 8px;">
-                        <span>{{SUPPLIER_CEO}}</span>
-                        <div class="ti-stamp" style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%); width: 35px; height: 35px; border: 1.5px solid #ef4444 !important; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-sizing: border-box; background: transparent; pointer-events: none;">
+                    <td style="text-align: center;">{{SUPPLIER_CEO}}</td>
+                    <td style="border-right: none; position: relative; width: 45px; text-align: center; font-size: 0.8rem; color: #475569;">
+                        (인)
+                        <div class="ti-stamp" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 35px; height: 35px; border: 1.5px solid #ef4444 !important; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-sizing: border-box; background: transparent; pointer-events: none;">
                             <div class="ti-stamp-inner" style="font-family: 'Gungsuh', serif; color: #ef4444 !important; font-size: 0.65rem; font-weight: bold; text-align: center; line-height: 1.1; letter-spacing: -1px;">
                                 {{SUPPLIER_STAMP}}
                             </div>
@@ -78,7 +90,9 @@ const defaultInvoiceTemplateHTML = `
     <div class="total-amount-row">
         <div class="label">합 계 금 액</div>
         <div class="korean-amount">{{TOTAL_AMOUNT_TEXT}}</div>
-        <div class="number-amount">( ₩ {{TOTAL_AMOUNT_NUM}} )</div>
+        <div class="currency-symbol">(₩</div>
+        <div class="number-amount">{{TOTAL_AMOUNT_NUM}}</div>
+        <div class="close-bracket">)</div>
     </div>
 
     <table class="receipt-table items-table" style="border-left: none; border-right: none; width: 100%;">
@@ -101,9 +115,9 @@ const defaultInvoiceTemplateHTML = `
         {{COUNTER_AREA}}
     </div>
 
-    <div class="footer-info" style="border-top: 1px solid var(--ti-border);">
-        <div>&nbsp;&nbsp;입금계좌 : {{FOOTER_ACCOUNT}}</div>
-        <div>&nbsp;&nbsp;예금주 : {{FOOTER_ACC_HOLDER}}</div>
+    <div class="footer-info">
+        <div class="footer-account">&nbsp;&nbsp;입금계좌 : {{FOOTER_ACCOUNT}}</div>
+        <div class="footer-holder">&nbsp;&nbsp;예금주 : {{FOOTER_ACC_HOLDER}}</div>
     </div>
 </div>
 `;

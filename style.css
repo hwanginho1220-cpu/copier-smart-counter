@@ -1541,6 +1541,19 @@ select.form-control option {
         max-width: 100% !important;
         margin: 0 !important;
         border: 2px solid var(--ti-primary) !important;
+        box-sizing: border-box !important;
+    }
+
+    body.print-invoice .buyer-info-table,
+    body.print-bulk-invoice .buyer-info-table {
+        width: 35% !important;
+        min-height: 165px !important;
+    }
+
+    body.print-invoice .seller-info,
+    body.print-bulk-invoice .seller-info {
+        width: 65% !important;
+        min-height: 165px !important;
     }
 
     /* Bulk Invoice Printing */
@@ -1792,21 +1805,57 @@ select.form-control option {
     width: 100%;
 }
 
-/* 좌측 공급받는자 영역 */
-.traditional-invoice .buyer-info {
+/* 좌측 공급받는자 영역 (테이블형 구조) */
+.traditional-invoice .buyer-info-table {
     width: 35%;
-    min-height: 165px; /* 높이 고정으로 찌그러짐 방지 */
+    min-height: 165px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    padding: 15px;
     border-right: 1px solid var(--ti-border);
     box-sizing: border-box;
 }
-.traditional-invoice .buyer-info .date { text-align: center; margin-bottom: 20px; }
-.traditional-invoice .buyer-info .name { text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 30px; }
-.traditional-invoice .buyer-info .message { text-align: center; }
+.traditional-invoice .buyer-date-row {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-bottom: 1px solid var(--ti-border);
+    font-size: 0.9rem;
+}
+.traditional-invoice .buyer-name-row {
+    flex: 1.2;
+    display: flex;
+    border-bottom: 1px solid var(--ti-border);
+}
+.traditional-invoice .buyer-name-cell {
+    flex: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 1.05rem;
+    padding: 0 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.traditional-invoice .buyer-suffix-cell {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-left: 1px solid var(--ti-border);
+    font-size: 0.95rem;
+}
+.traditional-invoice .buyer-msg-row {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: #334155;
+}
 
 /* 우측 공급자 영역 */
 .traditional-invoice .seller-info {
@@ -1829,7 +1878,7 @@ select.form-control option {
     width: 100%;
 }
 .traditional-invoice .total-amount-row .label {
-    width: 15%;
+    width: 20%;
     flex-shrink: 0;
     text-align: center;
     padding: 10px 4px;
@@ -1839,20 +1888,46 @@ select.form-control option {
     display: flex;
     align-items: center;
     justify-content: center;
+    font-weight: bold;
 }
 .traditional-invoice .total-amount-row .korean-amount {
-    width: 40%;
+    width: 25%;
     flex-shrink: 0;
     text-align: center;
     font-weight: bold;
     padding: 10px 4px;
+    border-right: 1px solid var(--ti-border);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.traditional-invoice .total-amount-row .currency-symbol {
+    width: 15%;
+    flex-shrink: 0;
+    text-align: center;
+    font-weight: bold;
+    padding: 10px 4px;
+    border-right: 1px solid var(--ti-border);
     box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 .traditional-invoice .total-amount-row .number-amount {
-    width: 45%;
+    width: 25%;
+    flex-shrink: 0;
+    text-align: right;
+    padding: 10px 15px 10px 4px;
+    border-right: 1px solid var(--ti-border);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    font-weight: bold;
+}
+.traditional-invoice .total-amount-row .close-bracket {
+    width: 15%;
     flex-shrink: 0;
     text-align: center;
     font-weight: bold;
@@ -1889,18 +1964,23 @@ select.form-control option {
     display: flex;
     align-items: stretch;
     width: 100%;
+    border-top: 1px solid var(--ti-border);
 }
 .traditional-invoice .footer-info div {
-    width: 50%;
-    flex-shrink: 0;
     padding: 10px;
     text-align: left;
     box-sizing: border-box;
     display: flex;
     align-items: center;
 }
-.traditional-invoice .footer-info div:first-child {
+.traditional-invoice .footer-account {
+    width: 60%;
+    flex-shrink: 0;
     border-right: 1px solid var(--ti-border);
+}
+.traditional-invoice .footer-holder {
+    width: 40%;
+    flex-shrink: 0;
 }
 
 /* Force Light Theme Colors and borders to override global Dark Mode */
