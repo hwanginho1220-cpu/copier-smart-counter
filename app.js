@@ -3422,7 +3422,6 @@ function openInvoiceModal(customerId, month) {
 
     let html = '';
     let subTotal = 0;
-    let itemDate = month.split('-')[1] + '/-';
 
     // Group inspections by device
     const deviceUsages = {};
@@ -3442,15 +3441,15 @@ function openInvoiceModal(customerId, month) {
             // 1. Base rent
             const price = dev.price || 0;
             if (price > 0) {
+                const vatAmt = vatEnabled ? Math.floor(price * 0.1) : 0;
                 html += `
                     <tr>
-                        <td>${itemDate}</td>
                         <td class="text-left">${dev.name} 임대료</td>
                         <td>식</td>
                         <td>1</td>
                         <td class="text-right">${price.toLocaleString()}</td>
                         <td class="text-right">${price.toLocaleString()}</td>
-                        <td></td>
+                        <td class="text-right">${vatAmt.toLocaleString()}</td>
                     </tr>
                 `;
                 subTotal += price;
@@ -3465,15 +3464,15 @@ function openInvoiceModal(customerId, month) {
 
             if (bwOver > 0 && overBwPrice > 0) {
                 const amt = bwOver * overBwPrice;
+                const vatAmt = vatEnabled ? Math.floor(amt * 0.1) : 0;
                 html += `
                     <tr>
-                        <td>${itemDate}</td>
                         <td class="text-left">${dev.name} 흑백 초과</td>
                         <td>매</td>
                         <td>${bwOver.toLocaleString()}</td>
                         <td class="text-right">${overBwPrice.toLocaleString()}</td>
                         <td class="text-right">${amt.toLocaleString()}</td>
-                        <td></td>
+                        <td class="text-right">${vatAmt.toLocaleString()}</td>
                     </tr>
                 `;
                 subTotal += amt;
@@ -3481,15 +3480,15 @@ function openInvoiceModal(customerId, month) {
 
             if (colorOver > 0 && overColorPrice > 0) {
                 const amt = colorOver * overColorPrice;
+                const vatAmt = vatEnabled ? Math.floor(amt * 0.1) : 0;
                 html += `
                     <tr>
-                        <td>${itemDate}</td>
                         <td class="text-left">${dev.name} 컬러 초과</td>
                         <td>매</td>
                         <td>${colorOver.toLocaleString()}</td>
                         <td class="text-right">${overColorPrice.toLocaleString()}</td>
                         <td class="text-right">${amt.toLocaleString()}</td>
-                        <td></td>
+                        <td class="text-right">${vatAmt.toLocaleString()}</td>
                     </tr>
                 `;
                 subTotal += amt;
@@ -3502,15 +3501,15 @@ function openInvoiceModal(customerId, month) {
         if (insp.parts && Array.isArray(insp.parts) && insp.parts.length > 0) {
             insp.parts.forEach(p => {
                 const amt = p.price * p.quantity;
+                const vatAmt = vatEnabled ? Math.floor(amt * 0.1) : 0;
                 html += `
                     <tr>
-                        <td>${insp.date.split('-')[1]}/${insp.date.split('-')[2]}</td>
                         <td class="text-left">${p.name}</td>
                         <td>개</td>
                         <td>${p.quantity.toLocaleString()}</td>
                         <td class="text-right">${p.price.toLocaleString()}</td>
                         <td class="text-right">${amt.toLocaleString()}</td>
-                        <td></td>
+                        <td class="text-right">${vatAmt.toLocaleString()}</td>
                     </tr>
                 `;
                 subTotal += amt;
@@ -3523,15 +3522,15 @@ function openInvoiceModal(customerId, month) {
     insps.forEach(insp => {
         const disc = Number(insp.discountAmount || 0);
         if (disc > 0) {
+            const vatAmt = vatEnabled ? Math.floor(disc * 0.1) : 0;
             html += `
                 <tr style="color: #dc2626; font-weight: 500;">
-                    <td>${insp.date.split('-')[1]}/${insp.date.split('-')[2]}</td>
                     <td class="text-left">[할인] 추가요금 D/C</td>
                     <td>식</td>
                     <td>1</td>
                     <td class="text-right">-${disc.toLocaleString()}</td>
                     <td class="text-right">-${disc.toLocaleString()}</td>
-                    <td></td>
+                    <td class="text-right">-${vatAmt.toLocaleString()}</td>
                 </tr>
             `;
             totalDiscount += disc;
@@ -3539,10 +3538,10 @@ function openInvoiceModal(customerId, month) {
     });
     subTotal = Math.max(0, subTotal - totalDiscount);
 
-    // Fill empty rows to make it look like a standard receipt
+    // Fill empty rows to make it look like a standard receipt (15 rows)
     const rowCount = (html.match(/<tr/g) || []).length;
-    for (let i = rowCount; i < 7; i++) {
-        html += `<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
+    for (let i = rowCount; i < 15; i++) {
+        html += `<tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
     }
 
     document.getElementById('invItemBody').innerHTML = html;
@@ -3551,21 +3550,8 @@ function openInvoiceModal(customerId, month) {
     let total = subTotal + vat;
     total = Math.floor(total / 100) * 100;
 
-    document.getElementById('invTotalAmountNum').textContent = `₩${total.toLocaleString()}`;
-    document.getElementById('invTotalAmountText').textContent = `일금 ${numToKoreanStr(total)} 원정`;
-
-    document.getElementById('invItemFoot').innerHTML = `
-        <tr>
-            <th colspan="5">소계</th>
-            <td class="text-right">${subTotal.toLocaleString()}</td>
-            <td></td>
-        </tr>
-        <tr>
-            <th colspan="5">부가가치세 (VAT)</th>
-            <td class="text-right">${vat.toLocaleString()}</td>
-            <td>${vatEnabled ? '' : '면세'}</td>
-        </tr>
-    `;
+    document.getElementById('invTotalAmountNum').textContent = `${total.toLocaleString()}`;
+    document.getElementById('invTotalAmountText').textContent = `${numToKoreanStr(total)}원`;
 
     // Counter table at the bottom
     let counterHtml = `
@@ -3849,7 +3835,10 @@ function applyInvoiceConfigToElement(container) {
     if (greeting) greeting.textContent = invoiceConfig.greeting || '';
     
     const account = container.querySelector('#invFooterAccount');
-    if (account) account.textContent = `${invoiceConfig.account || ''} (예금주: ${invoiceConfig.accHolder || ''})`;
+    if (account) account.textContent = `입금계좌 : ${invoiceConfig.account || ''}`;
+    
+    const accHolder = container.querySelector('#invFooterAccHolder');
+    if (accHolder) accHolder.textContent = `예금주 : ${invoiceConfig.accHolder || ''}`;
 }
 
 function openManualInvoice(customerId, month, vatEnabled, items) {
@@ -3868,24 +3857,24 @@ function openManualInvoice(customerId, month, vatEnabled, items) {
 
     items.forEach(item => {
         const amt = item.price * item.quantity;
+        const vatAmt = vatEnabled ? Math.floor(amt * 0.1) : 0;
         html += `
             <tr>
-                <td>${item.date}</td>
                 <td class="text-left">${item.name}</td>
                 <td>${item.unit}</td>
                 <td>${item.quantity.toLocaleString()}</td>
                 <td class="text-right">${item.price.toLocaleString()}</td>
                 <td class="text-right">${amt.toLocaleString()}</td>
-                <td>${item.note || ''}</td>
+                <td class="text-right">${vatAmt.toLocaleString()}</td>
             </tr>
         `;
         subTotal += amt;
     });
 
-    // Fill empty rows to make it look like a standard receipt (7 rows)
+    // Fill empty rows to make it look like a standard receipt (15 rows)
     const rowCount = items.length;
-    for (let i = rowCount; i < 7; i++) {
-        html += `<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
+    for (let i = rowCount; i < 15; i++) {
+        html += `<tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
     }
 
     document.getElementById('invItemBody').innerHTML = html;
@@ -3893,21 +3882,8 @@ function openManualInvoice(customerId, month, vatEnabled, items) {
     const vat = vatEnabled ? Math.floor(subTotal * 0.1) : 0;
     const total = subTotal + vat;
 
-    document.getElementById('invTotalAmountNum').textContent = `₩${total.toLocaleString()}`;
-    document.getElementById('invTotalAmountText').textContent = `일금 ${numToKoreanStr(total)} 원정`;
-
-    document.getElementById('invItemFoot').innerHTML = `
-        <tr>
-            <th colspan="5">소계</th>
-            <td class="text-right">${subTotal.toLocaleString()}</td>
-            <td></td>
-        </tr>
-        <tr>
-            <th colspan="5">부가가치세 (VAT)</th>
-            <td class="text-right">${vat.toLocaleString()}</td>
-            <td>${vatEnabled ? '' : '면세'}</td>
-        </tr>
-    `;
+    document.getElementById('invTotalAmountNum').textContent = `${total.toLocaleString()}`;
+    document.getElementById('invTotalAmountText').textContent = `${numToKoreanStr(total)}원`;
 
     // Hide counter table as it is a manual invoice
     const counterArea = document.getElementById('invCounterArea');
@@ -3954,7 +3930,6 @@ function generateInvoiceHtmlForCustomer(cust, month) {
     const vatEnabled = cust.vatEnabled !== false;
     let htmlItems = '';
     let subTotal = 0;
-    let itemDate = month.split('-')[1] + '/-';
 
     // Group inspections by device
     const deviceUsages = {};
@@ -3974,15 +3949,15 @@ function generateInvoiceHtmlForCustomer(cust, month) {
             // 1. Base rent
             const price = dev.price || 0;
             if (price > 0) {
+                const vatAmt = vatEnabled ? Math.floor(price * 0.1) : 0;
                 htmlItems += `
                     <tr>
-                        <td>${itemDate}</td>
                         <td class="text-left">${dev.name} 임대료</td>
                         <td>식</td>
                         <td>1</td>
                         <td class="text-right">${price.toLocaleString()}</td>
                         <td class="text-right">${price.toLocaleString()}</td>
-                        <td></td>
+                        <td class="text-right">${vatAmt.toLocaleString()}</td>
                     </tr>
                 `;
                 subTotal += price;
@@ -3997,15 +3972,15 @@ function generateInvoiceHtmlForCustomer(cust, month) {
 
             if (bwOver > 0 && overBwPrice > 0) {
                 const amt = bwOver * overBwPrice;
+                const vatAmt = vatEnabled ? Math.floor(amt * 0.1) : 0;
                 htmlItems += `
                     <tr>
-                        <td>${itemDate}</td>
                         <td class="text-left">${dev.name} 흑백 초과</td>
                         <td>매</td>
                         <td>${bwOver.toLocaleString()}</td>
                         <td class="text-right">${overBwPrice.toLocaleString()}</td>
                         <td class="text-right">${amt.toLocaleString()}</td>
-                        <td></td>
+                        <td class="text-right">${vatAmt.toLocaleString()}</td>
                     </tr>
                 `;
                 subTotal += amt;
@@ -4013,15 +3988,15 @@ function generateInvoiceHtmlForCustomer(cust, month) {
 
             if (colorOver > 0 && overColorPrice > 0) {
                 const amt = colorOver * overColorPrice;
+                const vatAmt = vatEnabled ? Math.floor(amt * 0.1) : 0;
                 htmlItems += `
                     <tr>
-                        <td>${itemDate}</td>
                         <td class="text-left">${dev.name} 컬러 초과</td>
                         <td>매</td>
                         <td>${colorOver.toLocaleString()}</td>
                         <td class="text-right">${overColorPrice.toLocaleString()}</td>
                         <td class="text-right">${amt.toLocaleString()}</td>
-                        <td></td>
+                        <td class="text-right">${vatAmt.toLocaleString()}</td>
                     </tr>
                 `;
                 subTotal += amt;
@@ -4034,15 +4009,15 @@ function generateInvoiceHtmlForCustomer(cust, month) {
         if (insp.parts && Array.isArray(insp.parts) && insp.parts.length > 0) {
             insp.parts.forEach(p => {
                 const amt = p.price * p.quantity;
+                const vatAmt = vatEnabled ? Math.floor(amt * 0.1) : 0;
                 htmlItems += `
                     <tr>
-                        <td>${insp.date.split('-')[1]}/${insp.date.split('-')[2]}</td>
                         <td class="text-left">${p.name}</td>
                         <td>개</td>
                         <td>${p.quantity.toLocaleString()}</td>
                         <td class="text-right">${p.price.toLocaleString()}</td>
                         <td class="text-right">${amt.toLocaleString()}</td>
-                        <td></td>
+                        <td class="text-right">${vatAmt.toLocaleString()}</td>
                     </tr>
                 `;
                 subTotal += amt;
@@ -4055,15 +4030,15 @@ function generateInvoiceHtmlForCustomer(cust, month) {
     insps.forEach(insp => {
         const disc = Number(insp.discountAmount || 0);
         if (disc > 0) {
+            const vatAmt = vatEnabled ? Math.floor(disc * 0.1) : 0;
             htmlItems += `
                 <tr style="color: #dc2626; font-weight: 500;">
-                    <td>${insp.date.split('-')[1]}/${insp.date.split('-')[2]}</td>
                     <td class="text-left">[할인] 추가요금 D/C</td>
                     <td>식</td>
                     <td>1</td>
                     <td class="text-right">-${disc.toLocaleString()}</td>
                     <td class="text-right">-${disc.toLocaleString()}</td>
-                    <td></td>
+                    <td class="text-right">-${vatAmt.toLocaleString()}</td>
                 </tr>
             `;
             totalDiscount += disc;
@@ -4071,31 +4046,18 @@ function generateInvoiceHtmlForCustomer(cust, month) {
     });
     subTotal = Math.max(0, subTotal - totalDiscount);
 
-    // Fill empty rows to make it look like a standard receipt (7 rows)
+    // Fill empty rows to make it look like a standard receipt (15 rows)
     const rowCount = (htmlItems.match(/<tr/g) || []).length;
-    for (let i = rowCount; i < 7; i++) {
-        htmlItems += `<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
+    for (let i = rowCount; i < 15; i++) {
+        htmlItems += `<tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
     }
 
     const vat = vatEnabled ? Math.floor(subTotal * 0.1) : 0;
     let total = subTotal + vat;
     total = Math.floor(total / 100) * 100;
 
-    const totalAmountNum = `₩${total.toLocaleString()}`;
-    const totalAmountText = `일금 ${numToKoreanStr(total)} 원정`;
-
-    const htmlFoot = `
-        <tr>
-            <th colspan="5">소계</th>
-            <td class="text-right">${subTotal.toLocaleString()}</td>
-            <td></td>
-        </tr>
-        <tr>
-            <th colspan="5">부가가치세 (VAT)</th>
-            <td class="text-right">${vat.toLocaleString()}</td>
-            <td>${vatEnabled ? '' : '면세'}</td>
-        </tr>
-    `;
+    const totalAmountNum = `${total.toLocaleString()}`;
+    const totalAmountText = `${numToKoreanStr(total)}원`;
 
     // Counter table
     let counterHtml = `
@@ -4136,81 +4098,90 @@ function generateInvoiceHtmlForCustomer(cust, month) {
 
     return `
         <div class="bulk-invoice-page traditional-invoice theme-${invoiceConfig.theme || 'blue'}">
-            <div class="ti-header">
-                <h1 class="ti-title">거 래 명 세 표</h1>
-                <div class="ti-supplier-area">
-                    <div class="ti-vertical-label">공급자</div>
-                    <table class="ti-supplier-table">
-                        <tr>
-                            <th>등록번호</th>
-                            <td colspan="3" style="font-weight: bold; font-size: 1.1em; letter-spacing: 2px;">${invoiceConfig.regNo || ''}</td>
-                        </tr>
-                        <tr>
-                            <th>상호<br>(법인명)</th>
-                            <td style="font-weight: bold;">${invoiceConfig.name || ''}</td>
-                            <th>성명<br>(대표자)</th>
-                            <td style="position: relative; padding-right: 40px;">
-                                <span style="font-weight: bold;">${invoiceConfig.ceo || ''}</span>
-                                <div class="ti-stamp">
-                                    <div class="ti-stamp-inner">
-                                        ${stampHtml}
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>사업장<br>소재지</th>
-                            <td colspan="3">${invoiceConfig.address || ''}</td>
-                        </tr>
-                        <tr>
-                            <th>업태</th>
-                            <td>${invoiceConfig.bizType || ''}</td>
-                            <th>종목</th>
-                            <td>${invoiceConfig.bizItem || ''}</td>
-                        </tr>
-                    </table>
-                </div>
-            </div>
+            <h1 class="ti-title" style="margin-top: 0;">거 래 명 세 표 <span style="font-size: 11px; font-weight: normal; letter-spacing: 0; vertical-align: middle; margin-left: 5px;">(공급받는자 보관용)</span></h1>
+            
+            <!-- 상단 통합 테이블 -->
+            <table class="ti-top-table" style="width: 100%; border-collapse: collapse; margin-bottom: 10px; border: 2px solid var(--ti-primary);">
+                <tr>
+                    <!-- 공급받는자 영역 (colspan=4, rowspan=4) -->
+                    <td colspan="4" rowspan="4" style="width: 45%; border: 1px solid var(--ti-border); padding: 10px; vertical-align: middle; background: #ffffff;">
+                        <div style="font-size: 1.05rem; font-weight: 600; margin-bottom: 20px; text-align: center;">${issueDateFormatted}</div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; padding: 0 10px;">
+                            <span style="font-size: 1.3rem; font-weight: 800; border-bottom: 1px solid #000; padding-bottom: 2px; flex: 1; text-align: left; margin-right: 5px;">${cust.name}</span>
+                            <span style="font-size: 1.05rem; font-weight: 600;">귀하</span>
+                        </div>
+                        <div style="text-align: center; font-size: 0.95rem; color: #475569;">아래와 같이 계산합니다.</div>
+                    </td>
+                    
+                    <!-- 공급자 세로 라벨 (colspan=1, rowspan=4) -->
+                    <td colspan="1" rowspan="4" class="ti-vertical-label" style="width: 5%; border: 1px solid var(--ti-border); text-align: center; font-weight: bold; background: var(--ti-bg) !important; color: var(--ti-primary-dark) !important; padding: 5px; font-size: 0.9rem;">
+                        공<br><br>급<br><br>자
+                    </td>
+                    
+                    <!-- 공급자 정보 영역 (등록번호) -->
+                    <td colspan="1" style="width: 12%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">등록번호</td>
+                    <td colspan="3" style="width: 38%; border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.95rem; letter-spacing: 1px; text-align: left;">${invoiceConfig.regNo || ''}</td>
+                </tr>
+                <tr>
+                    <td colspan="1" style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">상호</td>
+                    <td colspan="1" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.85rem; text-align: left;">${invoiceConfig.name || ''}</td>
+                    <td colspan="1" style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">성명</td>
+                    <td colspan="1" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-weight: bold; font-size: 0.85rem; text-align: left; position: relative; padding-right: 45px;">
+                        <span>${invoiceConfig.ceo || ''}</span>
+                        <div class="ti-stamp" style="right: 5px; width: 40px; height: 40px; margin-top: -20px;">
+                            <div class="ti-stamp-inner" style="font-size: 0.75rem;">
+                                ${stampHtml}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="1" style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">사업장주소</td>
+                    <td colspan="3" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.85rem; text-align: left;">${invoiceConfig.address || ''}</td>
+                </tr>
+                <tr>
+                    <td colspan="1" style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">업태</td>
+                    <td colspan="1" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.85rem; text-align: left;">${invoiceConfig.bizType || ''}</td>
+                    <td colspan="1" style="border: 1px solid var(--ti-border); background: var(--ti-bg) !important; text-align: center; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.8rem; padding: 5px;">종목</td>
+                    <td colspan="1" style="border: 1px solid var(--ti-border); padding: 5px 8px; font-size: 0.85rem; text-align: left;">${invoiceConfig.bizItem || ''}</td>
+                </tr>
+            </table>
 
-            <div class="ti-customer-area">
-                <div class="ti-date">${issueDateFormatted}</div>
-                <div class="ti-customer">
-                    <span class="ti-customer-name">${cust.name}</span> <span class="ti-customer-suffix">귀하</span>
-                </div>
-                <div class="ti-total-amount">
-                    <span class="ti-amount-label">합계금액(공급가액+세액)</span>
-                    <span class="ti-amount-text">${totalAmountText}</span>
-                    <span class="ti-amount-num">${totalAmountNum}</span>
-                </div>
-            </div>
+            <!-- 합계금액 단독 테이블 -->
+            <table class="ti-amount-table" style="width: 100%; border-collapse: collapse; margin-bottom: 10px; border: 2px solid var(--ti-primary); text-align: center;">
+                <tr style="height: 38px;">
+                    <td style="width: 15%; border: 1px solid var(--ti-border); background: var(--ti-bg) !important; font-weight: bold; color: var(--ti-primary-dark) !important; font-size: 0.85rem; padding: 5px;">합계금액</td>
+                    <td style="width: 50%; border: 1px solid var(--ti-border); font-weight: bold; font-size: 1.05rem; padding: 5px; color: #000;">${totalAmountText}</td>
+                    <td style="width: 35%; border: 1px solid var(--ti-border); font-weight: bold; font-size: 1.1rem; padding: 5px; color: #000; text-align: right; padding-right: 15px;">
+                        ( ₩ <span style="font-weight: 800; font-size: 1.15rem; color: #000;">${totalAmountNum}</span> )
+                    </td>
+                </tr>
+            </table>
 
             <table class="ti-item-table">
                 <thead>
                     <tr>
-                        <th style="width: 5%;">월/일</th>
-                        <th style="width: 35%;">품목</th>
+                        <th style="width: 45%;">품목</th>
                         <th style="width: 10%;">규격</th>
                         <th style="width: 8%;">수량</th>
                         <th style="width: 12%;">단가</th>
                         <th style="width: 15%;">공급가액</th>
-                        <th style="width: 15%;">비고</th>
+                        <th style="width: 10%;">VAT</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${htmlItems}
                 </tbody>
-                <tfoot>
-                    ${htmlFoot}
-                </tfoot>
             </table>
             
             <div class="ti-counter-area">
                 ${counterHtml}
             </div>
 
-            <div class="ti-footer">
-                <p>${invoiceConfig.greeting || ''}</p>
-                <p class="ti-account"><strong>${invoiceConfig.account || ''} (예금주: ${invoiceConfig.accHolder || ''})</strong></p>
+            <!-- 하단 계좌 정보 라인 -->
+            <div class="ti-footer-account-line" style="display: flex; justify-content: space-between; width: 100%; border: 1px solid var(--ti-border); font-size: 0.85rem; padding: 6px 12px; box-sizing: border-box; background: var(--ti-bg) !important; font-weight: bold; color: var(--ti-primary-dark) !important; margin-top: 10px;">
+                <span>입금계좌 : ${invoiceConfig.account || ''}</span>
+                <span>예금주 : ${invoiceConfig.accHolder || ''}</span>
             </div>
         </div>
     `;

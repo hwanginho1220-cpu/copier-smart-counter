@@ -1913,12 +1913,15 @@ select.form-control option {
 
 .ti-item-table td {
     text-align: right;
+    height: 24px;
 }
 
-.ti-item-table td:nth-child(1),
+.ti-item-table td:nth-child(1) {
+    text-align: left;
+}
+
 .ti-item-table td:nth-child(2),
-.ti-item-table td:nth-child(3),
-.ti-item-table td:nth-child(7) {
+.ti-item-table td:nth-child(3) {
     text-align: center;
 }
 
@@ -1988,4 +1991,42 @@ select.form-control option {
     padding: 8px 20px;
     border-radius: 20px;
     border: 1px solid var(--ti-border) !important;
+}
+
+.ti-top-table, .ti-amount-table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    margin-bottom: 10px !important;
+}
+
+.ti-top-table td {
+    border: 1px solid var(--ti-border) !important;
+    padding: 6px 8px !important;
+    font-size: 0.82rem !important;
+    color: #0f172a !important;
+    line-height: 1.4 !important;
+}
+
+.ti-amount-table td {
+    border: 1px solid var(--ti-border) !important;
+    padding: 8px !important;
+    font-size: 0.95rem !important;
+    color: #0f172a !important;
+}
+
+.ti-vertical-label {
+    writing-mode: vertical-rl !important;
+    text-orientation: upright !important;
+    letter-spacing: 5px !important;
+    font-weight: bold !important;
+    text-align: center !important;
+    background: var(--ti-bg) !important;
+    color: var(--ti-primary-dark) !important;
+}
+
+.ti-footer-account-line {
+    background: var(--ti-bg) !important;
+    border: 1px solid var(--ti-border) !important;
+    color: var(--ti-primary-dark) !important;
+    font-weight: bold !important;
 }
