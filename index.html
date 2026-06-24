@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartCounter - 복사기 점검 & 카운터 관리</title>
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="style.css?v=1.0.38">
+    <link rel="stylesheet" href="style.css?v=1.0.40">
     <style id="invoiceCustomCssTag"></style>
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -685,16 +685,16 @@
 
     <!-- MODAL: INVOICE VIEWER -->
     <div class="modal-backdrop" id="invoiceModalBackdrop">
-        <div class="modal" style="max-width: 900px; background: transparent; box-shadow: none;">
+        <div class="modal" style="width: 850px; max-width: 95%; background: transparent; box-shadow: none;">
             <div class="modal-header" style="background: var(--bg-card); border-radius: var(--radius-md) var(--radius-md) 0 0; padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color);">
                 <h2 id="invoiceModalTitle">거래명세서 발급</h2>
                 <button class="close-btn" onclick="closeInvoiceModal()"><i class="fa-solid fa-xmark"></i></button>
             </div>
             
-            <div style="background: var(--bg-body); padding: 2rem; overflow-y: auto; max-height: 70vh; display: flex; justify-content: center;">
+            <div style="background: var(--bg-body); padding: 1.5rem; overflow: auto; max-height: 70vh;">
                 <!-- A4 Paper Container -->
-                <div class="invoice-paper-container">
-                    <div id="invoicePrintArea" class="traditional-invoice">
+                <div class="invoice-paper-container" style="display: flex; justify-content: center; min-width: 800px;">
+                    <div id="invoicePrintArea" class="traditional-invoice" style="min-width: 800px; box-sizing: border-box;">
                         <!-- Dynamically rendered via HTML template -->
                     </div>
                 </div>
@@ -711,6 +711,28 @@
                 <button type="button" class="btn btn-primary" id="invEmailBtn" style="background: #f59e0b; color: #0f172a; border-color: #f59e0b; font-weight: 600;">
                     <i class="fa-solid fa-envelope"></i> 이메일 보내기
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: MOBILE IMAGE DOWNLOAD OVERLAY (FOR LONG-TOUCH SAVE) -->
+    <div class="modal-backdrop" id="mobileImageModalBackdrop" style="z-index: 1100;">
+        <div class="modal" style="width: 500px; max-width: 90%; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color-active); box-shadow: var(--shadow-lg);">
+            <div class="modal-header" style="padding: 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="font-family: var(--font-heading); font-size: 1.25rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;"><i class="fa-solid fa-mobile-screen-button" style="color: var(--primary);"></i> 이미지 저장 안내</h2>
+                <button class="close-btn" onclick="closeMobileImageModal()" style="background: transparent; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-muted);"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem; text-align: center; max-height: 65vh; overflow-y: auto;">
+                <div class="alert alert-info" style="margin-bottom: 1rem; font-size: 0.9rem; line-height: 1.4; text-align: left; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); padding: 0.75rem 1rem; border-radius: var(--radius-sm); color: #60a5fa;">
+                    <i class="fa-solid fa-circle-info"></i> 모바일(인앱 브라우저) 환경에서는 파일 직접 다운로드가 제한될 수 있습니다.<br>
+                    아래 이미지를 <strong>길게 누르시면(롱터치)</strong> 기기에 저장하실 수 있습니다.
+                </div>
+                <div style="border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.5rem; background: #fff; max-height: 50vh; overflow-y: auto;">
+                    <img id="mobileInvoiceImg" src="" alt="거래명세서 이미지" style="width: 100%; height: auto; display: block;">
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeMobileImageModal()">닫기</button>
             </div>
         </div>
     </div>
@@ -851,6 +873,6 @@
 
 
     <!-- Application Logic Script -->
-    <script src="app.js?v=1.0.39"></script>
+    <script src="app.js?v=1.0.40"></script>
 </body>
 </html>

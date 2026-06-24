@@ -3723,9 +3723,18 @@ function openInvoiceModal(customerId, month) {
 
     // Setup events
     document.getElementById('invPrintBtn').onclick = () => {
+        if (isInAppBrowser()) {
+            alert('카카오톡/네이버 등 모바일 인앱 브라우저에서는 PDF 인쇄 기능이 제한될 수 있습니다.\n외부 브라우저(Safari, Chrome 등)를 통해 접속하시거나 "이미지 다운로드" 기능을 이용해 주세요.');
+        }
         document.body.classList.add('print-invoice');
+        const cleanupPrint = () => {
+            document.body.classList.remove('print-invoice');
+            window.removeEventListener('afterprint', cleanupPrint);
+        };
+        window.addEventListener('afterprint', cleanupPrint);
         setTimeout(() => {
             window.print();
+            setTimeout(cleanupPrint, 3000); // afterprint 미발생 브라우저 백업
         }, 50);
     };
 
@@ -3734,7 +3743,7 @@ function openInvoiceModal(customerId, month) {
     };
 
     document.getElementById('invEmailBtn').onclick = () => {
-        sendInvoiceEmail(cust.name, month.split('-')[1], total);
+        sendInvoiceEmail(cust.name, month, total);
     };
 
     document.getElementById('invoiceModalBackdrop').classList.add('active');
@@ -3744,15 +3753,34 @@ function closeInvoiceModal() {
     document.getElementById('invoiceModalBackdrop').classList.remove('active');
 }
 
+// 모바일 기기 판단 유틸
+function isMobileDevice() {
+    return /Mobi|Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent);
+}
+
+// 인앱 브라우저 판단 유틸
+function isInAppBrowser() {
+    const ua = navigator.userAgent.toLowerCase();
+    return (ua.indexOf('kakao') > -1 || ua.indexOf('naver') > -1 || ua.indexOf('line') > -1 || ua.indexOf('fb') > -1 || ua.indexOf('instagram') > -1);
+}
+
+window.closeMobileImageModal = function() {
+    const modal = document.getElementById('mobileImageModalBackdrop');
+    if (modal) modal.classList.remove('active');
+};
+
 function downloadInvoiceImage() {
     const element = document.getElementById('invoicePrintArea');
     if (!element) return;
 
+    // 모바일 렌더링 시 너비를 800px로 일치시켜 html2canvas가 찌그러진 뷰포트 크기로 렌더링하는 것을 방지
     const opt = {
         scale: 2,
         useCORS: true,
         letterRendering: true,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        width: 800,
+        windowWidth: 800
     };
 
     // Show loading overlay
@@ -3771,13 +3799,44 @@ function downloadInvoiceImage() {
 
 function execDownloadInvoice(element, opt, overlay) {
     html2canvas(element, opt).then(canvas => {
-        const link = document.createElement('a');
-        const custName = currentInvoiceData ? currentInvoiceData.cust.name : '고객사';
-        const month = currentInvoiceData ? currentInvoiceData.insp.date.split('-')[1] : '00';
-        link.download = `거래명세서_${custName}_${month}월.jpg`;
-        link.href = canvas.toDataURL('image/jpeg', 0.98);
-        link.click();
         if (overlay) overlay.style.display = 'none';
+
+        const custName = currentInvoiceData ? currentInvoiceData.cust.name : '고객사';
+        let monthStr = '00';
+        if (currentInvoiceData) {
+            if (currentInvoiceData.month) {
+                const parts = currentInvoiceData.month.split('-');
+                monthStr = parts[1] || parts[0];
+            } else if (currentInvoiceData.insp && currentInvoiceData.insp.date) {
+                const parts = currentInvoiceData.insp.date.split('-');
+                monthStr = parts[1] || '00';
+            }
+        }
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+
+        // 모바일 기기이거나 인앱 브라우저인 경우 다운로드(a tag click) 대신 저장 안내 모달 띄우기
+        if (isMobileDevice() || isInAppBrowser()) {
+            const mobileModal = document.getElementById('mobileImageModalBackdrop');
+            const mobileImg = document.getElementById('mobileInvoiceImg');
+            if (mobileModal && mobileImg) {
+                mobileImg.src = dataUrl;
+                mobileModal.classList.add('active');
+            } else {
+                // 모달이 없을 경우 새 창으로 대체
+                const newWindow = window.open();
+                if (newWindow) {
+                    newWindow.document.write(`<img src="${dataUrl}" style="width:100%; height:auto;" alt="거래명세서 이미지"><p style="text-align:center; font-size:1.2rem; font-weight:bold; margin-top:20px;">이미지를 길게 누르면 기기에 저장하실 수 있습니다.</p>`);
+                } else {
+                    alert('새 창 차단을 해제해 주시거나 PC 환경에서 다운로드 해주세요.');
+                }
+            }
+        } else {
+            const link = document.createElement('a');
+            link.download = `거래명세서_${custName}_${monthStr}월.jpg`;
+            link.href = dataUrl;
+            link.click();
+        }
     }).catch(err => {
         console.error("명세서 이미지 다운로드 에러:", err);
         alert("이미지 생성을 실패했습니다. 인쇄 기능을 사용해주세요.");
@@ -3786,8 +3845,18 @@ function execDownloadInvoice(element, opt, overlay) {
 }
 
 function sendInvoiceEmail(customerName, month, totalAmt) {
-    const subject = encodeURIComponent(`[SmartCounter] ${customerName} ${month}월분 복사기 유지보수 및 청구 내역`);
-    const body = encodeURIComponent(`안녕하세요, ${customerName} 담당자님.\n\n${month}월분 복사기 정기점검 및 유지보수 청구 내역(거래명세서)을 안내해 드립니다.\n청구 금액: ${totalAmt.toLocaleString()}원\n\n상세 내역은 첨부해 드린 거래명세서 파일을 참고해 주시기 바랍니다.\n\n감사합니다.\nSmartCounter 관리부 드림.`);
+    // month가 YYYY-MM 형태일 수도 있으므로 split 가드
+    let monthVal = month || '00';
+    if (monthVal && typeof monthVal === 'string' && monthVal.includes('-')) {
+        monthVal = monthVal.split('-')[1];
+    }
+    
+    if (isInAppBrowser()) {
+        alert('카카오톡/네이버 등 모바일 인앱 브라우저에서는 이메일 앱 호출(mailto)이 보안상 차단될 수 있습니다.\n화면 우측 상단의 메뉴를 눌러 "다른 브라우저(Chrome, Safari 등)로 열기"를 하신 후 재시도하시거나, 이미지를 저장하여 직접 전송해주세요.');
+    }
+
+    const subject = encodeURIComponent(`[SmartCounter] ${customerName} ${monthVal}월분 복사기 유지보수 및 청구 내역`);
+    const body = encodeURIComponent(`안녕하세요, ${customerName} 담당자님.\n\n${monthVal}월분 복사기 정기점검 및 유지보수 청구 내역(거래명세서)을 안내해 드립니다.\n청구 금액: ${totalAmt.toLocaleString()}원\n\n상세 내역은 첨부해 드린 거래명세서 파일을 참고해 주시기 바랍니다.\n\n감사합니다.\nSmartCounter 관리부 드림.`);
     
     // 이메일 클라이언트 열기
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
@@ -4062,9 +4131,18 @@ function openManualInvoice(customerId, month, vatEnabled, items) {
 
     // Bind event handlers for manual invoice print/download/email buttons
     document.getElementById('invPrintBtn').onclick = () => {
+        if (isInAppBrowser()) {
+            alert('카카오톡/네이버 등 모바일 인앱 브라우저에서는 PDF 인쇄 기능이 제한될 수 있습니다.\n외부 브라우저(Safari, Chrome 등)를 통해 접속하시거나 "이미지 다운로드" 기능을 이용해 주세요.');
+        }
         document.body.classList.add('print-invoice');
+        const cleanupPrint = () => {
+            document.body.classList.remove('print-invoice');
+            window.removeEventListener('afterprint', cleanupPrint);
+        };
+        window.addEventListener('afterprint', cleanupPrint);
         setTimeout(() => {
             window.print();
+            setTimeout(cleanupPrint, 3000); // afterprint 미발생 브라우저 백업
         }, 50);
     };
 
@@ -4073,7 +4151,7 @@ function openManualInvoice(customerId, month, vatEnabled, items) {
     };
 
     document.getElementById('invEmailBtn').onclick = () => {
-        sendInvoiceEmail(cust.name, month.split('-')[1], total);
+        sendInvoiceEmail(cust.name, month, total);
     };
 
     document.getElementById('invoiceModalBackdrop').classList.add('active');

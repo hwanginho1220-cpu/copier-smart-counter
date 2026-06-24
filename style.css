@@ -1529,6 +1529,7 @@ select.form-control option {
         display: block !important;
         visibility: visible !important;
         width: 100% !important;
+        min-width: none !important;
         margin: 0 !important;
         padding: 0 !important;
         box-shadow: none !important;
@@ -1730,6 +1731,7 @@ select.form-control option {
 
     width: 100%;
     max-width: 800px;
+    min-width: 800px;
     margin: 0 auto;
     font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
     color: #0f172a !important;
