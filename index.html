@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartCounter - 복사기 점검 & 카운터 관리</title>
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="style.css?v=1.0.40">
+    <link rel="stylesheet" href="style.css?v=1.0.41">
     <style id="invoiceCustomCssTag"></style>
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -691,7 +691,7 @@
                 <button class="close-btn" onclick="closeInvoiceModal()"><i class="fa-solid fa-xmark"></i></button>
             </div>
             
-            <div style="background: var(--bg-body); padding: 1.5rem; overflow: auto; max-height: 70vh;">
+            <div class="modal-body" style="background: var(--bg-body); padding: 1.5rem; overflow: auto; max-height: 70vh;">
                 <!-- A4 Paper Container -->
                 <div class="invoice-paper-container" style="display: flex; justify-content: center; min-width: 800px;">
                     <div id="invoicePrintArea" class="traditional-invoice" style="min-width: 800px; box-sizing: border-box;">
@@ -873,6 +873,6 @@
 
 
     <!-- Application Logic Script -->
-    <script src="app.js?v=1.0.40"></script>
+    <script src="app.js?v=1.0.41"></script>
 </body>
 </html>

@@ -3852,15 +3852,17 @@ function sendInvoiceEmail(customerName, month, totalAmt) {
     }
     
     if (isInAppBrowser()) {
-        alert('카카오톡/네이버 등 모바일 인앱 브라우저에서는 이메일 앱 호출(mailto)이 보안상 차단될 수 있습니다.\n화면 우측 상단의 메뉴를 눌러 "다른 브라우저(Chrome, Safari 등)로 열기"를 하신 후 재시도하시거나, 이미지를 저장하여 직접 전송해주세요.');
+        alert('카카오톡/네이버 등 모바일 인앱 브라우저에서는 이메일 연동이 보안상 차단될 수 있습니다.\n화면 우측 상단의 메뉴를 눌러 "다른 브라우저(Chrome, Safari 등)로 열기"를 하신 후 재시도하시거나, 이미지를 저장하여 직접 전송해주세요.');
     }
 
     const subject = encodeURIComponent(`[SmartCounter] ${customerName} ${monthVal}월분 복사기 유지보수 및 청구 내역`);
     const body = encodeURIComponent(`안녕하세요, ${customerName} 담당자님.\n\n${monthVal}월분 복사기 정기점검 및 유지보수 청구 내역(거래명세서)을 안내해 드립니다.\n청구 금액: ${totalAmt.toLocaleString()}원\n\n상세 내역은 첨부해 드린 거래명세서 파일을 참고해 주시기 바랍니다.\n\n감사합니다.\nSmartCounter 관리부 드림.`);
     
-    // 이메일 클라이언트 열기
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
-    alert('기본 이메일 앱이 열립니다. 방금 다운로드 받으신 [거래명세서 이미지]를 첨부하여 발송해주세요!');
+    // Gmail 웹 작성 페이지 열기 (새 탭)
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}`;
+    window.open(gmailUrl, '_blank');
+    
+    alert('Gmail 작성 창이 새 탭(창)으로 열립니다. 방금 다운로드 받으신 [거래명세서 이미지]를 첨부하여 발송해주세요!');
 }
 
 // --- Manual Invoice Logic ---
