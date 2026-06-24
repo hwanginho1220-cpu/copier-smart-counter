@@ -3658,9 +3658,9 @@ function openInvoiceModal(customerId, month) {
     });
     subTotal = Math.max(0, subTotal - totalDiscount);
 
-    // Fill empty rows to make it look like a standard receipt (15 rows)
+    // Fill empty rows to make it look like a standard receipt (8 rows)
     const rowCount = (html.match(/<tr/g) || []).length;
-    for (let i = rowCount; i < 15; i++) {
+    for (let i = rowCount; i < 8; i++) {
         html += `<tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
     }
 
@@ -4017,9 +4017,9 @@ function openManualInvoice(customerId, month, vatEnabled, items) {
         subTotal += amt;
     });
 
-    // Fill empty rows to make it look like a standard receipt (15 rows)
+    // Fill empty rows to make it look like a standard receipt (8 rows)
     const rowCount = items.length;
-    for (let i = rowCount; i < 15; i++) {
+    for (let i = rowCount; i < 8; i++) {
         html += `<tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
     }
 
@@ -4193,9 +4193,9 @@ function generateInvoiceHtmlForCustomer(cust, month) {
     });
     subTotal = Math.max(0, subTotal - totalDiscount);
 
-    // Fill empty rows to make it look like a standard receipt (15 rows)
+    // Fill empty rows to make it look like a standard receipt (8 rows)
     const rowCount = (htmlItems.match(/<tr/g) || []).length;
-    for (let i = rowCount; i < 15; i++) {
+    for (let i = rowCount; i < 8; i++) {
         htmlItems += `<tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
     }
 
