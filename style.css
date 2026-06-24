@@ -973,23 +973,23 @@ select.form-control option {
         margin-bottom: 1rem;
     }
 
-    /* 모바일용 테이블 반응형 카드 뷰 변환 (리포트 테이블은 제외) */
-    table:not(.report-table), 
-    table:not(.report-table) thead, 
-    table:not(.report-table) tbody, 
-    table:not(.report-table) th, 
-    table:not(.report-table) td, 
-    table:not(.report-table) tr {
+    /* 모바일용 테이블 반응형 카드 뷰 변환 (리포트 테이블 및 영수증 테이블은 제외) */
+    table:not(.report-table):not(.receipt-table), 
+    table:not(.report-table):not(.receipt-table) thead, 
+    table:not(.report-table):not(.receipt-table) tbody, 
+    table:not(.report-table):not(.receipt-table) th, 
+    table:not(.report-table):not(.receipt-table) td, 
+    table:not(.report-table):not(.receipt-table) tr {
         display: block;
     }
     
-    table:not(.report-table) thead tr {
+    table:not(.report-table):not(.receipt-table) thead tr {
         position: absolute;
         top: -9999px;
         left: -9999px;
     }
     
-    table:not(.report-table) tr {
+    table:not(.report-table):not(.receipt-table) tr {
         margin-bottom: 1.25rem;
         border: 1px solid var(--border-color);
         border-radius: var(--radius-md);
@@ -998,7 +998,7 @@ select.form-control option {
         box-shadow: var(--shadow-sm);
     }
     
-    table:not(.report-table) td {
+    table:not(.report-table):not(.receipt-table) td {
         border: none;
         border-bottom: 1px solid rgba(255, 255, 255, 0.04);
         position: relative;
@@ -1013,11 +1013,11 @@ select.form-control option {
         text-align: right;
     }
     
-    table:not(.report-table) td:last-child {
+    table:not(.report-table):not(.receipt-table) td:last-child {
         border-bottom: 0;
     }
     
-    table:not(.report-table) td::before {
+    table:not(.report-table):not(.receipt-table) td::before {
         content: attr(data-label);
         position: static;
         width: auto;
@@ -1559,6 +1559,7 @@ select.form-control option {
     body.print-invoice .receipt-container,
     body.print-bulk-invoice .receipt-container {
         width: 100% !important;
+        min-width: 0 !important;
         max-width: 100% !important;
         margin: 0 !important;
         border: 2px solid var(--ti-primary) !important;

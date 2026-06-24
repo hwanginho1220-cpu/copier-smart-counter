@@ -3745,7 +3745,10 @@ function openInvoiceModal(customerId, month) {
     };
 
     document.getElementById('invEmailBtn').onclick = () => {
-        sendInvoiceEmail(cust.name, month, total);
+        downloadInvoiceImage();
+        setTimeout(() => {
+            sendInvoiceEmail(cust.name, month, total);
+        }, 800);
     };
 
     document.getElementById('invoiceModalBackdrop').classList.add('active');
@@ -3864,7 +3867,7 @@ function sendInvoiceEmail(customerName, month, totalAmt) {
     const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}`;
     window.open(gmailUrl, '_blank');
     
-    alert('Gmail 작성 창이 새 탭(창)으로 열립니다. 방금 다운로드 받으신 [거래명세서 이미지]를 첨부하여 발송해주세요!');
+    alert('구글 Gmail 작성 창이 새 탭(창)으로 열립니다.\n\n[파일 첨부 안내]\n보안 정책상 메일에 파일이 자동으로 첨부되지는 않으므로, 방금 자동 다운로드(저장)된 거래명세서 이미지 파일을 새로 열린 Gmail 창에 마우스로 끌어다 놓거나(드래그) 첨부 버튼을 눌러 직접 첨부해 주세요!');
 }
 
 // --- Manual Invoice Logic ---
@@ -4155,7 +4158,10 @@ function openManualInvoice(customerId, month, vatEnabled, items) {
     };
 
     document.getElementById('invEmailBtn').onclick = () => {
-        sendInvoiceEmail(cust.name, month, total);
+        downloadInvoiceImage();
+        setTimeout(() => {
+            sendInvoiceEmail(cust.name, month, total);
+        }, 800);
     };
 
     document.getElementById('invoiceModalBackdrop').classList.add('active');
