@@ -116,7 +116,7 @@ const defaultInvoiceTemplateHTML = `
     <span>입금계좌 : {{FOOTER_ACCOUNT}}</span>
     <span>예금주 : {{FOOTER_ACC_HOLDER}}</span>
 </div>
-\`;
+`;
 
 let invoiceConfig = {...defaultInvoiceConfig};
 
@@ -189,7 +189,7 @@ function applyCustomCss() {
         styleTag.id = 'invoiceCustomCssTag';
         document.head.appendChild(styleTag);
     }
-    styleTag.textContent = invoiceConfig.customCss || '';
+    styleTag.textContent = (invoiceConfig && invoiceConfig.customCss) ? invoiceConfig.customCss : '';
 }
 
 // Load Invoice Configuration from localStorage
@@ -197,14 +197,20 @@ function loadInvoiceConfig() {
     const saved = localStorage.getItem(INVOICE_CONFIG_KEY);
     if (saved) {
         try {
-            invoiceConfig = JSON.parse(saved);
+            const parsed = JSON.parse(saved);
+            if (parsed && typeof parsed === 'object') {
+                invoiceConfig = { ...defaultInvoiceConfig, ...parsed };
+            } else {
+                invoiceConfig = { ...defaultInvoiceConfig };
+            }
         } catch (e) {
             console.error('명세서 설정 파싱 실패:', e);
-            invoiceConfig = {...defaultInvoiceConfig};
+            invoiceConfig = { ...defaultInvoiceConfig };
         }
     } else {
-        invoiceConfig = {...defaultInvoiceConfig};
+        invoiceConfig = { ...defaultInvoiceConfig };
     }
+    invoiceConfig = { ...defaultInvoiceConfig, ...invoiceConfig };
     applyCustomCss();
 }
 
@@ -2609,13 +2615,16 @@ function setupFirebaseListeners() {
 
     settingsUnsubscribe = db.collection('settings').doc('invoiceConfig').onSnapshot(doc => {
         if (doc.exists) {
-            invoiceConfig = doc.data();
-            localStorage.setItem(INVOICE_CONFIG_KEY, JSON.stringify(invoiceConfig));
-            fillInvoiceConfigInputs();
-            applyCustomCss();
-            const invoiceModal = document.getElementById('invoiceModalBackdrop');
-            if (invoiceModal && invoiceModal.classList.contains('active') && currentInvoiceData && !currentInvoiceData.isManual) {
-                openInvoiceModal(currentInvoiceData.cust.id, currentInvoiceData.month);
+            const data = doc.data();
+            if (data && typeof data === 'object') {
+                invoiceConfig = { ...defaultInvoiceConfig, ...data };
+                localStorage.setItem(INVOICE_CONFIG_KEY, JSON.stringify(invoiceConfig));
+                fillInvoiceConfigInputs();
+                applyCustomCss();
+                const invoiceModal = document.getElementById('invoiceModalBackdrop');
+                if (invoiceModal && invoiceModal.classList.contains('active') && currentInvoiceData && !currentInvoiceData.isManual) {
+                    openInvoiceModal(currentInvoiceData.cust.id, currentInvoiceData.month);
+                }
             }
         }
     }, error => {
@@ -2651,6 +2660,9 @@ function updateSyncStatusUI(error = null) {
 }
 
 function fillInvoiceConfigInputs() {
+    if (!invoiceConfig) {
+        invoiceConfig = { ...defaultInvoiceConfig };
+    }
     const regNo = document.getElementById('invConfRegNo');
     if (regNo) regNo.value = invoiceConfig.regNo || '';
     
@@ -2693,29 +2705,35 @@ function fillInvoiceConfigInputs() {
 
 window.handleInvoiceConfigSubmit = async function(e) {
     e.preventDefault();
+    
+    const getValue = (id, fallback = '') => {
+        const el = document.getElementById(id);
+        return el ? el.value.trim() : fallback;
+    };
+
     const config = {
-        regNo: document.getElementById('invConfRegNo').value.trim(),
-        name: document.getElementById('invConfName').value.trim(),
-        ceo: document.getElementById('invConfCeo').value.trim(),
-        stampText: document.getElementById('invConfStampText').value.trim(),
-        address: document.getElementById('invConfAddress').value.trim(),
-        bizType: document.getElementById('invConfBizType').value.trim(),
-        bizItem: document.getElementById('invConfBizItem').value.trim(),
-        account: document.getElementById('invConfAccount').value.trim(),
-        accHolder: document.getElementById('invConfAccHolder').value.trim(),
-        greeting: document.getElementById('invConfGreeting').value.trim(),
+        regNo: getValue('invConfRegNo'),
+        name: getValue('invConfName'),
+        ceo: getValue('invConfCeo'),
+        stampText: getValue('invConfStampText'),
+        address: getValue('invConfAddress'),
+        bizType: getValue('invConfBizType'),
+        bizItem: getValue('invConfBizItem'),
+        account: getValue('invConfAccount'),
+        accHolder: getValue('invConfAccHolder'),
+        greeting: getValue('invConfGreeting'),
         theme: document.getElementById('invConfTheme') ? document.getElementById('invConfTheme').value : 'blue',
         templateHtml: document.getElementById('invConfTemplateHtml') ? document.getElementById('invConfTemplateHtml').value : '',
         customCss: document.getElementById('invConfCustomCss') ? document.getElementById('invConfCustomCss').value : ''
     };
 
-    invoiceConfig = config;
-    localStorage.setItem(INVOICE_CONFIG_KEY, JSON.stringify(config));
+    invoiceConfig = { ...defaultInvoiceConfig, ...config };
+    localStorage.setItem(INVOICE_CONFIG_KEY, JSON.stringify(invoiceConfig));
     applyCustomCss();
 
     if (isCloudMode && db) {
         try {
-            await db.collection('settings').doc('invoiceConfig').set(config);
+            await db.collection('settings').doc('invoiceConfig').set(invoiceConfig);
         } catch (err) {
             console.error("명세서 설정 클라우드 저장 실패:", err);
             alert("클라우드 저장에 실패했습니다. 로컬 브라우저에는 저장되었습니다.");
