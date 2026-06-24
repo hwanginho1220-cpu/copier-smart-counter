@@ -3278,9 +3278,9 @@ function generateMonthlyReport() {
                 </div>
             </div>
             <div class="report-summary-card">
-                <h4>총 부품 교체 비용</h4>
-                <div class="value" style="color:#2563eb; font-size:1.1rem;">₩${totalPartCost.toLocaleString()}</div>
-                <div class="sub-value">교체 부품 정산 금액 합계</div>
+                <h4>월간 청구 금액</h4>
+                <div class="value" style="color:#2563eb; font-size:1.1rem;">₩${grandTotalBilling.toLocaleString()}</div>
+                <div class="sub-value">당월 청구 금액 합계</div>
             </div>
         </div>
 
