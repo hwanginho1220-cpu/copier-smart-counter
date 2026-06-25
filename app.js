@@ -3376,7 +3376,7 @@ function generateMonthlyReport() {
                     ${discountBadge}
                 </td>
                 <td class="center">
-                    <button class="btn-icon btn-secondary" onclick="openInvoiceModal('${customerId}', '${selectedMonth}', '${insp.deviceId}')" title="거래명세서 발급" style="padding: 0.3rem 0.5rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-weight:600;">
+                    <button class="btn-icon btn-secondary" onclick="openInvoiceModal('${customerId}', '${selectedMonth}')" title="거래명세서 발급" style="padding: 0.3rem 0.5rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-weight:600;">
                         <i class="fa-solid fa-file-invoice-dollar" style="color:#10b981;"></i> 발급
                     </button>
                 </td>
@@ -4399,12 +4399,7 @@ window.printAllInvoices = function() {
 
     let bulkHtml = '';
     activeCustomers.forEach(cust => {
-        const customerInsps = filteredInsps.filter(i => i.customerId === cust.id);
-        const deviceIds = [...new Set(customerInsps.map(i => i.deviceId))];
-        
-        deviceIds.forEach(deviceId => {
-            bulkHtml += generateInvoiceHtmlForCustomer(cust, selectedMonth, deviceId);
-        });
+        bulkHtml += generateInvoiceHtmlForCustomer(cust, selectedMonth);
     });
 
     const bulkPrintArea = document.getElementById('bulkInvoicePrintArea');
