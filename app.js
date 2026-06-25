@@ -3376,7 +3376,7 @@ function generateMonthlyReport() {
                     ${discountBadge}
                 </td>
                 <td class="center">
-                    <button class="btn-icon btn-secondary" onclick="openInvoiceModal('${customerId}', '${selectedMonth}')" title="거래명세서 발급" style="padding: 0.3rem 0.5rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-weight:600;">
+                    <button class="btn-icon btn-secondary" onclick="openInvoiceModal('${customerId}', '${selectedMonth}', '${insp.deviceId}')" title="거래명세서 발급" style="padding: 0.3rem 0.5rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; color: #334155; font-weight:600;">
                         <i class="fa-solid fa-file-invoice-dollar" style="color:#10b981;"></i> 발급
                     </button>
                 </td>
@@ -3540,15 +3540,20 @@ function numToKoreanStr(num) {
     return result || "영";
 }
 
-function openInvoiceModal(customerId, month) {
+function openInvoiceModal(customerId, month, deviceId = null) {
     const cust = state.customers.find(c => c.id === customerId);
     if (!cust) return;
 
     // Default to today if month isn't fully given or is just for current context
-    const insps = state.inspections.filter(i => i.customerId === customerId && i.date && typeof i.date === 'string' && i.date.startsWith(month));
+    const insps = state.inspections.filter(i => {
+        const matchesCustomer = i.customerId === customerId;
+        const matchesMonth = i.date && typeof i.date === 'string' && i.date.startsWith(month);
+        const matchesDevice = deviceId ? String(i.deviceId) === String(deviceId) : true;
+        return matchesCustomer && matchesMonth && matchesDevice;
+    });
     if (insps.length === 0) return;
 
-    currentInvoiceData = { insps, cust, month };
+    currentInvoiceData = { insps, cust, month, deviceId };
 
     const issueDateStr = new Date().toISOString().split('T')[0];
     const issueDateArr = issueDateStr.split('-');
@@ -3574,6 +3579,8 @@ function openInvoiceModal(customerId, month) {
 
     if (cust.devices && cust.devices.length > 0) {
         cust.devices.forEach(dev => {
+            // 특정 기기만 청구할 때 다른 기기는 스킵
+            if (deviceId && String(dev.id) !== String(deviceId)) return;
             // 1. Base rent
             const price = dev.price || 0;
             if (price > 0) {
@@ -3818,6 +3825,14 @@ function execDownloadInvoice(element, opt, overlay) {
             }
         }
 
+        let deviceSuffix = '';
+        if (currentInvoiceData && currentInvoiceData.deviceId) {
+            const dev = currentInvoiceData.cust.devices ? currentInvoiceData.cust.devices.find(d => String(d.id) === String(currentInvoiceData.deviceId)) : null;
+            if (dev) {
+                deviceSuffix = `_${dev.name}`;
+            }
+        }
+
         const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
 
         // 모바일 기기이거나 인앱 브라우저인 경우 다운로드(a tag click) 대신 저장 안내 모달 띄우기
@@ -3838,7 +3853,7 @@ function execDownloadInvoice(element, opt, overlay) {
             }
         } else {
             const link = document.createElement('a');
-            link.download = `거래명세서_${custName}_${monthStr}월.jpg`;
+            link.download = `거래명세서_${custName}${deviceSuffix}_${monthStr}월.jpg`;
             link.href = dataUrl;
             link.click();
         }
@@ -3860,7 +3875,15 @@ function sendInvoiceEmail(customerName, month, totalAmt) {
         alert('카카오톡/네이버 등 모바일 인앱 브라우저에서는 이메일 연동이 보안상 차단될 수 있습니다.\n화면 우측 상단의 메뉴를 눌러 "다른 브라우저(Chrome, Safari 등)로 열기"를 하신 후 재시도하시거나, 이미지를 저장하여 직접 전송해주세요.');
     }
 
-    const subject = encodeURIComponent(`[SmartCounter] ${customerName} ${monthVal}월분 복사기 유지보수 및 청구 내역`);
+    let deviceSuffix = '';
+    if (currentInvoiceData && currentInvoiceData.deviceId) {
+        const dev = currentInvoiceData.cust.devices ? currentInvoiceData.cust.devices.find(d => String(d.id) === String(currentInvoiceData.deviceId)) : null;
+        if (dev) {
+            deviceSuffix = ` (${dev.name})`;
+        }
+    }
+
+    const subject = encodeURIComponent(`[SmartCounter] ${customerName}${deviceSuffix} ${monthVal}월분 복사기 유지보수 및 청구 내역`);
     const body = encodeURIComponent(`안녕하세요, ${customerName} 담당자님.\n\n${monthVal}월분 복사기 정기점검 및 유지보수 청구 내역(거래명세서)을 안내해 드립니다.\n청구 금액: ${totalAmt.toLocaleString()}원\n\n상세 내역은 첨부해 드린 거래명세서 파일을 참고해 주시기 바랍니다.\n\n감사합니다.\nSmartCounter 관리부 드림.`);
     
     // Gmail 웹 작성 페이지 열기 (새 탭)
@@ -4168,8 +4191,13 @@ function openManualInvoice(customerId, month, vatEnabled, items) {
 }
 
 // Helper to generate Invoice HTML for Bulk Print
-function generateInvoiceHtmlForCustomer(cust, month) {
-    const insps = state.inspections.filter(i => i.customerId === cust.id && i.date && typeof i.date === 'string' && i.date.startsWith(month));
+function generateInvoiceHtmlForCustomer(cust, month, deviceId = null) {
+    const insps = state.inspections.filter(i => {
+        const matchesCustomer = i.customerId === cust.id;
+        const matchesMonth = i.date && typeof i.date === 'string' && i.date.startsWith(month);
+        const matchesDevice = deviceId ? String(i.deviceId) === String(deviceId) : true;
+        return matchesCustomer && matchesMonth && matchesDevice;
+    });
     if (insps.length === 0) return '';
 
     const issueDateStr = new Date().toISOString().split('T')[0];
@@ -4195,6 +4223,8 @@ function generateInvoiceHtmlForCustomer(cust, month) {
 
     if (cust.devices && cust.devices.length > 0) {
         cust.devices.forEach(dev => {
+            // 특정 기기만 청구할 때 다른 기기는 스킵
+            if (deviceId && String(dev.id) !== String(deviceId)) return;
             // 1. Base rent
             const price = dev.price || 0;
             if (price > 0) {
@@ -4369,7 +4399,12 @@ window.printAllInvoices = function() {
 
     let bulkHtml = '';
     activeCustomers.forEach(cust => {
-        bulkHtml += generateInvoiceHtmlForCustomer(cust, selectedMonth);
+        const customerInsps = filteredInsps.filter(i => i.customerId === cust.id);
+        const deviceIds = [...new Set(customerInsps.map(i => i.deviceId))];
+        
+        deviceIds.forEach(deviceId => {
+            bulkHtml += generateInvoiceHtmlForCustomer(cust, selectedMonth, deviceId);
+        });
     });
 
     const bulkPrintArea = document.getElementById('bulkInvoicePrintArea');
