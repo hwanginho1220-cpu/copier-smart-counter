@@ -3261,64 +3261,7 @@ function generateMonthlyReport() {
     // Build Report Content HTML
     let tableRowsHtml = '';
     
-    // Calculate customer billing info in advance
-    const customerBillingMap = {};
-    const uniqueCustomerIds = [...new Set(filteredInsps.map(i => i.customerId))];
-    uniqueCustomerIds.forEach(customerId => {
-        const cust = state.customers.find(c => String(c.id) === String(customerId));
-        const custInsps = filteredInsps.filter(i => String(i.customerId) === String(customerId));
-        const vatEnabled = cust ? cust.vatEnabled !== false : true;
-        
-        let totalBwOver = 0;
-        let totalColorOver = 0;
-        let partsTotal = 0;
-        let billingSubtotal = 0;
-        let totalDiscount = 0;
-        
-        // Base rents
-        if (cust && cust.devices) {
-            cust.devices.forEach(d => billingSubtotal += Number(d.price || 0));
-        }
-        
-        custInsps.forEach(insp => {
-            const dev = cust && cust.devices ? cust.devices.find(d => String(d.id) === String(insp.deviceId)) : null;
-            if (dev) {
-                const bwOver = Math.max(0, Number(insp.bwUsage || 0) - Number(dev.contractBw || 0));
-                const colorOver = Math.max(0, Number(insp.colorUsage || 0) - Number(dev.contractColor || 0));
-                
-                totalBwOver += bwOver;
-                totalColorOver += colorOver;
-                
-                billingSubtotal += (bwOver * Number(dev.overBwPrice || 0));
-                billingSubtotal += (colorOver * Number(dev.overColorPrice || 0));
-            }
-            
-            if (insp.parts && Array.isArray(insp.parts)) {
-                partsTotal += insp.parts.reduce((sum, p) => sum + (Number(p.price || 0) * Number(p.quantity || 0)), 0);
-            }
-            
-            totalDiscount += Number(insp.discountAmount || 0);
-        });
-        
-        billingSubtotal += partsTotal;
-        billingSubtotal = Math.max(0, billingSubtotal - totalDiscount);
-        const billingVat = vatEnabled ? Math.floor(billingSubtotal * 0.1) : 0;
-        let billingTotal = billingSubtotal + billingVat;
-        billingTotal = Math.floor(billingTotal / 100) * 100;
-        
-        customerBillingMap[customerId] = {
-            totalBwOver,
-            totalColorOver,
-            billingTotal,
-            vatEnabled
-        };
-    });
-
     let grandTotalBilling = 0;
-    Object.values(customerBillingMap).forEach(info => {
-        grandTotalBilling += Number(info.billingTotal || 0);
-    });
-
     let totalDiscountSum = 0;
     filteredInsps.forEach(insp => {
         totalDiscountSum += Number(insp.discountAmount || 0);
@@ -3329,7 +3272,6 @@ function generateMonthlyReport() {
         const customerId = insp.customerId;
         const cust = state.customers.find(c => String(c.id) === String(customerId));
         const customerName = cust ? cust.name : '알 수 없음';
-        const billingInfo = customerBillingMap[customerId] || { billingTotal: 0, vatEnabled: true, totalBwOver: 0, totalColorOver: 0 };
         
         const dev = cust && cust.devices ? cust.devices.find(d => String(d.id) === String(insp.deviceId)) : null;
         const model = dev ? `${dev.name} (${dev.model})` : '-';
@@ -3344,8 +3286,29 @@ function generateMonthlyReport() {
         const colorCounterVal = Number(insp.colorCounter) || 0;
         const colorUsageVal = Number(insp.colorUsage) || 0;
         
-        const bwOverBadge = billingInfo.totalBwOver > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${billingInfo.totalBwOver.toLocaleString()}(흑백)</span></div>` : '';
-        const colorOverBadge = billingInfo.totalColorOver > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${billingInfo.totalColorOver.toLocaleString()}(컬러)</span></div>` : '';
+        // Calculate device-specific billing
+        const vatEnabled = cust ? cust.vatEnabled !== false : true;
+        const baseRent = dev ? Number(dev.price || 0) : 0;
+        
+        const devBwOver = dev ? Math.max(0, bwUsageVal - Number(dev.contractBw || 0)) : 0;
+        const devColorOver = dev ? Math.max(0, colorUsageVal - Number(dev.contractColor || 0)) : 0;
+        
+        const devBwOverFee = dev ? devBwOver * Number(dev.overBwPrice || 0) : 0;
+        const devColorOverFee = dev ? devColorOver * Number(dev.overColorPrice || 0) : 0;
+        
+        const devPartsCost = insp.parts && Array.isArray(insp.parts) ? insp.parts.reduce((sum, p) => sum + (Number(p.price || 0) * Number(p.quantity || 0)), 0) : 0;
+        const devDiscount = Number(insp.discountAmount || 0);
+        
+        let devSubtotal = baseRent + devBwOverFee + devColorOverFee + devPartsCost - devDiscount;
+        devSubtotal = Math.max(0, devSubtotal);
+        const devVat = vatEnabled ? Math.floor(devSubtotal * 0.1) : 0;
+        let devTotal = devSubtotal + devVat;
+        devTotal = Math.floor(devTotal / 100) * 100;
+        
+        grandTotalBilling += devTotal;
+        
+        const bwOverBadge = devBwOver > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${devBwOver.toLocaleString()}(흑백)</span></div>` : '';
+        const colorOverBadge = devColorOver > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge paper-badge-danger">+${devColorOver.toLocaleString()}(컬러)</span></div>` : '';
         const discountVal = Number(insp.discountAmount) || 0;
         const discountBadge = discountVal > 0 ? `<div style="margin-top:0.25rem;"><span class="paper-badge" style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; font-size:0.6rem; padding: 0.1rem 0.25rem; font-weight:600; border-radius:3px; display:inline-block;">D/C -₩${discountVal.toLocaleString()}</span></div>` : '';
 
@@ -3369,8 +3332,8 @@ function generateMonthlyReport() {
                 </td>
                 <td style="font-size:0.65rem; line-height:1.2; word-break:break-all;">${partsText}</td>
                 <td class="right">
-                    <div style="font-weight:600; color:#0f172a;">₩${billingInfo.billingTotal.toLocaleString()}</div>
-                    <div style="font-size:0.65rem; color:var(--text-secondary); margin-top:0.1rem;">${billingInfo.vatEnabled ? '(VAT포함)' : '(VAT면세)'}</div>
+                    <div style="font-weight:600; color:#0f172a;">₩${devTotal.toLocaleString()}</div>
+                    <div style="font-size:0.65rem; color:var(--text-secondary); margin-top:0.1rem;">${vatEnabled ? '(VAT포함)' : '(VAT면세)'}</div>
                     ${bwOverBadge}
                     ${colorOverBadge}
                     ${discountBadge}
