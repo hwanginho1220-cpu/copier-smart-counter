@@ -984,10 +984,23 @@ function renderTopUsageCustomers(currentMonthStr) {
     // Convert to list & sort
     const list = Object.keys(usageMap).map(id => {
         const customer = state.customers.find(c => String(c.id) === String(id));
+        
+        let modelStr = '-';
+        if (customer) {
+            if (customer.devices && customer.devices.length > 0) {
+                modelStr = customer.devices[0].model || '미지정';
+                if (customer.devices.length > 1) {
+                    modelStr += ` 외 ${customer.devices.length - 1}대`;
+                }
+            } else if (customer.copierModel) {
+                modelStr = customer.copierModel;
+            }
+        }
+
         return {
             id,
             name: customer ? customer.name : '알 수 없음',
-            model: customer ? customer.copierModel : '-',
+            model: modelStr,
             bw: usageMap[id].bw,
             color: usageMap[id].color,
             total: usageMap[id].total
