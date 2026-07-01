@@ -1746,6 +1746,14 @@ async function handleInspectionFormSubmit(e) {
         try {
             const oldCustomerId = id ? (state.inspections.find(i => String(i.id) === String(id))?.customerId) : null;
             
+            // 1. Write the full initial inspection data to Firestore FIRST to prevent race condition rollbacks
+            const cleanedInitData = JSON.parse(JSON.stringify(inspectionData));
+            lastSavedInspections[targetId] = {
+                data: cleanedInitData,
+                timestamp: Date.now()
+            };
+            await db.collection('inspections').doc(targetId).set(cleanedInitData);
+
             // Temporary local sync for recalculation
             const exists = state.inspections.find(i => String(i.id) === String(targetId));
             if (exists) {
@@ -1754,13 +1762,13 @@ async function handleInspectionFormSubmit(e) {
                 state.inspections.push(inspectionData);
             }
 
-            // Recalculate
+            // Recalculate usage (updates Firestore with bwUsage/colorUsage)
             await recalculateUsageForCustomer(customerId);
             if (oldCustomerId && oldCustomerId !== customerId) {
                 await recalculateUsageForCustomer(oldCustomerId);
             }
 
-            // Sync the recalculated result back to Firestore
+            // Sync the final recalculated result back to Firestore
             const calculatedInsp = state.inspections.find(i => String(i.id) === String(targetId));
             if (calculatedInsp) {
                 const cleanedData = JSON.parse(JSON.stringify(calculatedInsp));
