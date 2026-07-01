@@ -2226,18 +2226,49 @@ function handleInspectionCustomerChange() {
     }
 
     const customer = state.customers.find(c => String(c.id) === String(customerId));
-    if (customer && customer.devices && customer.devices.length > 0) {
-        customer.devices.forEach(dev => {
-            const option = document.createElement('option');
-            option.value = dev.id;
-            option.textContent = `${dev.name} (${dev.model})`;
-            deviceSelect.appendChild(option);
+    if (customer) {
+        // Safe check and conversion for devices
+        let devices = customer.devices;
+        if (devices && typeof devices === 'object' && !Array.isArray(devices)) {
+            try {
+                devices = Object.keys(devices)
+                    .sort((a, b) => Number(a) - Number(b))
+                    .map(key => devices[key]);
+            } catch (e) {
+                console.error("Failed to parse devices map in customer change", e);
+                devices = [];
+            }
+        }
+        
+        if (!devices || !Array.isArray(devices) || devices.length === 0) {
+            devices = [{
+                id: (customer.id || customerId) + '-dev1',
+                type: '복사기',
+                name: '복사기 기본',
+                model: '미지정',
+                serial: '',
+                price: 0,
+                contractBw: 0,
+                contractColor: 0,
+                overBwPrice: 0,
+                overColorPrice: 0
+            }];
+        }
+
+        devices.forEach(dev => {
+            if (dev) {
+                const option = document.createElement('option');
+                option.value = dev.id || ((customer.id || customerId) + '-dev1');
+                option.textContent = `${dev.name || '복사기 기본'} (${dev.model || '미지정'})`;
+                deviceSelect.appendChild(option);
+            }
         });
+        
         deviceGroup.style.display = 'block';
         
         // Auto-select if only 1 device
-        if (customer.devices.length === 1) {
-            deviceSelect.value = customer.devices[0].id;
+        if (devices.length === 1) {
+            deviceSelect.value = devices[0].id || ((customer.id || customerId) + '-dev1');
             updatePreviousCountersInfo();
         }
     } else {
@@ -2594,7 +2625,11 @@ function setupFirebaseListeners() {
     customersUnsubscribe = db.collection('customers').onSnapshot(snapshot => {
         const customersList = [];
         snapshot.forEach(doc => {
-            customersList.push(doc.data());
+            const data = doc.data();
+            if (data) {
+                if (!data.id) data.id = doc.id;
+                customersList.push(data);
+            }
         });
         state.customers = customersList;
         migrateState();
@@ -2608,7 +2643,11 @@ function setupFirebaseListeners() {
     inspectionsUnsubscribe = db.collection('inspections').onSnapshot(snapshot => {
         const inspectionsList = [];
         snapshot.forEach(doc => {
-            inspectionsList.push(doc.data());
+            const data = doc.data();
+            if (data) {
+                if (!data.id) data.id = doc.id;
+                inspectionsList.push(data);
+            }
         });
 
         // Merge recently saved inspections that haven't synced to server yet to prevent race condition rollbacks
@@ -2640,7 +2679,11 @@ function setupFirebaseListeners() {
     partsUnsubscribe = db.collection('parts').onSnapshot(snapshot => {
         const partsList = [];
         snapshot.forEach(doc => {
-            partsList.push(doc.data());
+            const data = doc.data();
+            if (data) {
+                if (!data.id) data.id = doc.id;
+                partsList.push(data);
+            }
         });
         state.parts = partsList;
         saveToStorage();
