@@ -517,33 +517,42 @@ function setupEventListeners() {
     }
 
     // Serial Image Upload Trigger
-    document.getElementById('serialImageInput').addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    const serialImageInput = document.getElementById('serialImageInput');
+    if (serialImageInput) {
+        serialImageInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
 
-        try {
+            try {
+                const previewContainer = document.getElementById('serialImagePreviewContainer');
+                const previewImg = document.getElementById('serialImagePreview');
+
+                // Set loading spinner SVG
+                previewImg.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="%230ea5e9" d="M12,4V2A10,10,0,0,0,2,12H4A8,8,0,0,1,12,4Z"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></path></svg>';
+                previewContainer.style.display = 'block';
+
+                const compressedBase64 = await compressSerialImage(file);
+                currentSerialImageBase64 = compressedBase64;
+                previewImg.src = compressedBase64;
+            } catch (err) {
+                console.error("사진 압축 가공 에러:", err);
+                alert("사진을 첨부하는 중 오류가 발생했습니다.");
+            }
+        });
+    }
+
+    const deleteSerialImageBtn = document.getElementById('deleteSerialImageBtn');
+    if (deleteSerialImageBtn) {
+        deleteSerialImageBtn.addEventListener('click', () => {
+            currentSerialImageBase64 = null;
+            const serialImageInputEl = document.getElementById('serialImageInput');
+            if (serialImageInputEl) serialImageInputEl.value = '';
             const previewContainer = document.getElementById('serialImagePreviewContainer');
+            if (previewContainer) previewContainer.style.display = 'none';
             const previewImg = document.getElementById('serialImagePreview');
-
-            // Set loading spinner SVG
-            previewImg.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="%230ea5e9" d="M12,4V2A10,10,0,0,0,2,12H4A8,8,0,0,1,12,4Z"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></path></svg>';
-            previewContainer.style.display = 'block';
-
-            const compressedBase64 = await compressSerialImage(file);
-            currentSerialImageBase64 = compressedBase64;
-            previewImg.src = compressedBase64;
-        } catch (err) {
-            console.error("사진 압축 가공 에러:", err);
-            alert("사진을 첨부하는 중 오류가 발생했습니다.");
-        }
-    });
-
-    document.getElementById('deleteSerialImageBtn').addEventListener('click', () => {
-        currentSerialImageBase64 = null;
-        document.getElementById('serialImageInput').value = '';
-        document.getElementById('serialImagePreviewContainer').style.display = 'none';
-        document.getElementById('serialImagePreview').src = '';
-    });
+            if (previewImg) previewImg.src = '';
+        });
+    }
 
     // Report Event Listeners
     const generateReportBtn = document.getElementById('generateReportBtn');
@@ -722,10 +731,10 @@ async function recalculateUsageForCustomer(customerId) {
             changedInspections.forEach(insp => {
                 if (insp && insp.id) {
                     const docRef = db.collection('inspections').doc(insp.id);
-                    batch.update(docRef, {
+                    batch.set(docRef, {
                         bwUsage: insp.bwUsage || 0,
                         colorUsage: insp.colorUsage || 0
-                    });
+                    }, { merge: true });
                 }
             });
             await batch.commit();
