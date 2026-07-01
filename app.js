@@ -124,6 +124,13 @@ const defaultInvoiceTemplateHTML = `
 
 let invoiceConfig = {...defaultInvoiceConfig};
 
+function getLocalDateString(date = new Date()) {
+    if (!(date instanceof Date) || isNaN(date.getTime())) return 'Invalid Date';
+    const offset = date.getTimezoneOffset();
+    const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+    return localDate.toISOString().split('T')[0];
+}
+
 // Navigation & Active View
 let currentView = 'dashboard';
 
@@ -303,22 +310,22 @@ function migrateState() {
 
         // Ensure date is a valid string
         if (!i.date) {
-            i.date = new Date().toISOString().split('T')[0];
+            i.date = getLocalDateString();
             localMigrated = true;
             migrated = true;
         } else if (typeof i.date !== 'string') {
             if (i.date.toDate && typeof i.date.toDate === 'function') {
-                i.date = i.date.toDate().toISOString().split('T')[0];
+                i.date = getLocalDateString(i.date.toDate());
             } else {
                 try {
-                    const parsedDate = new Date(i.date).toISOString().split('T')[0];
+                    const parsedDate = getLocalDateString(new Date(i.date));
                     if (parsedDate === 'Invalid Date') {
-                        i.date = new Date().toISOString().split('T')[0];
+                        i.date = getLocalDateString();
                     } else {
                         i.date = parsedDate;
                     }
                 } catch (e) {
-                    i.date = new Date().toISOString().split('T')[0];
+                    i.date = getLocalDateString();
                 }
             }
             localMigrated = true;
@@ -529,7 +536,7 @@ function setupEventListeners() {
 }
 
 function initDateInputs() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
     document.getElementById('inspectionDate').value = today;
     
     // Set default month filter to current year/month
@@ -591,7 +598,7 @@ function switchView(viewName) {
         headerActionBtn.innerHTML = '<i class="fa-solid fa-file-signature"></i><span>점검 기록 등록</span>';
         const inspectionMonthFilter = document.getElementById('inspectionMonthFilter');
         if (inspectionMonthFilter && !inspectionMonthFilter.value) {
-            const today = new Date().toISOString().split('T')[0];
+            const today = getLocalDateString();
             const currentYearMonth = today.substring(0, 7);
             inspectionMonthFilter.value = currentYearMonth;
         }
@@ -608,7 +615,7 @@ function switchView(viewName) {
         
         const reportMonthFilter = document.getElementById('reportMonthFilter');
         if (reportMonthFilter && !reportMonthFilter.value) {
-            const today = new Date().toISOString().split('T')[0];
+            const today = getLocalDateString();
             const currentYearMonth = today.substring(0, 7); // "YYYY-MM"
             reportMonthFilter.value = currentYearMonth;
         }
@@ -1123,7 +1130,7 @@ function renderCustomersTable() {
         return;
     }
 
-    const todayStr = new Date().toISOString().substring(0, 7); // "YYYY-MM"
+    const todayStr = getLocalDateString().substring(0, 7); // "YYYY-MM"
 
     filtered.forEach(cust => {
         // Find inspections for this customer
@@ -1441,7 +1448,7 @@ async function handleCustomerFormSubmit(e) {
     }
 
     let targetId = id || 'cust-' + Date.now();
-    let createdAt = new Date().toISOString().split('T')[0];
+    let createdAt = getLocalDateString();
 
     const customerData = {
         id: targetId,
@@ -2155,7 +2162,7 @@ function openInspectionModal(id = null, customerId = null) {
     } else {
         title.textContent = '복사기 점검 기록 등록';
         // Set default date to today
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalDateString();
         document.getElementById('inspectionDate').value = today;
         document.getElementById('previousCountersInfo').style.display = 'none';
         
@@ -2227,7 +2234,7 @@ function updatePreviousCountersInfo(overrideDeviceId = null, excludeId = null) {
     const dateVal = document.getElementById('inspectionDate').value;
     
     // Find the closest previous inspection
-    const prev = getPreviousInspection(deviceId, dateVal || new Date().toISOString().split('T')[0], excludeId);
+    const prev = getPreviousInspection(deviceId, dateVal || getLocalDateString(), excludeId);
 
     if (prev) {
         infoBox.style.display = 'block';
@@ -2411,7 +2418,7 @@ function exportData() {
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     
-    const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const today = getLocalDateString().replace(/-/g, '');
     const filename = `smartcounter_backup_${today}.json`;
     
     const a = document.createElement('a');
@@ -3077,8 +3084,7 @@ window.openUninspectedModal = function() {
     container.innerHTML = '';
     
     // Get current year and month
-    const today = new Date();
-    const currentMonthStr = today.toISOString().substring(0, 7); // "YYYY-MM"
+    const currentMonthStr = getLocalDateString().substring(0, 7); // "YYYY-MM"
     
     // Filter target customers (isMonthlyInspection !== false)
     const targetCustomers = state.customers.filter(c => c.isMonthlyInspection !== false);
@@ -3256,7 +3262,7 @@ function generateMonthlyReport() {
     // Formatting date strings
     const reportYear = selectedMonth.split('-')[0];
     const reportMonth = selectedMonth.split('-')[1];
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
 
     // Build Report Content HTML
     let tableRowsHtml = '';
@@ -3518,7 +3524,7 @@ function openInvoiceModal(customerId, month, deviceId = null) {
 
     currentInvoiceData = { insps, cust, month, deviceId };
 
-    const issueDateStr = new Date().toISOString().split('T')[0];
+    const issueDateStr = getLocalDateString();
     const issueDateArr = issueDateStr.split('-');
     const issueDateFormatted = `${issueDateArr[0]}년 ${issueDateArr[1]}월 ${issueDateArr[2]}일`;
 
@@ -3919,7 +3925,7 @@ window.openManualInvoiceModal = function() {
     });
     
     // Default month to current month
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateString();
     document.getElementById('manualInvoiceDate').value = todayStr.substring(0, 7);
     
     // Clear item table body & add one empty row
@@ -4070,7 +4076,7 @@ function openManualInvoice(customerId, month, vatEnabled, items) {
     const cust = state.customers.find(c => c.id === customerId);
     if (!cust) return;
 
-    const issueDateStr = new Date().toISOString().split('T')[0];
+    const issueDateStr = getLocalDateString();
     const issueDateArr = issueDateStr.split('-');
     const issueDateFormatted = `${issueDateArr[0]}년 ${issueDateArr[1]}월 ${issueDateArr[2]}일`;
 
@@ -4163,7 +4169,7 @@ function generateInvoiceHtmlForCustomer(cust, month, deviceId = null) {
     });
     if (insps.length === 0) return '';
 
-    const issueDateStr = new Date().toISOString().split('T')[0];
+    const issueDateStr = getLocalDateString();
     const issueDateArr = issueDateStr.split('-');
     const issueDateFormatted = `${issueDateArr[0]}년 ${issueDateArr[1]}월 ${issueDateArr[2]}일`;
 
