@@ -259,7 +259,28 @@ function migrateState() {
     
     // Migrate customers
     state.customers.forEach(c => {
-        if (!c.devices || c.devices.length === 0) {
+        let customerMigrated = false;
+
+        // 1. If devices is an object (Map) instead of an array, convert it to array
+        if (c.devices && typeof c.devices === 'object' && !Array.isArray(c.devices)) {
+            try {
+                c.devices = Object.keys(c.devices)
+                    .sort((a, b) => {
+                        const numA = parseInt(a, 10);
+                        const numB = parseInt(b, 10);
+                        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                        return a.localeCompare(b);
+                    })
+                    .map(key => c.devices[key]);
+                customerMigrated = true;
+            } catch (err) {
+                console.error("devices Map to Array conversion failed for customer", c.name, err);
+                c.devices = [];
+            }
+        }
+
+        // 2. If devices is missing or empty, assign default device
+        if (!c.devices || !Array.isArray(c.devices) || c.devices.length === 0) {
             c.devices = [{
                 id: c.id + '-dev1',
                 type: '복사기',
@@ -278,10 +299,10 @@ function migrateState() {
             delete c.serialNumber;
             delete c.serialImage;
             
-            migrated = true;
+            customerMigrated = true;
         }
 
-        // Migrate global billing to first device if exists
+        // 3. Migrate global billing to first device if exists
         if (c.contractAmount !== undefined || c.contractBw !== undefined || c.overBwPrice !== undefined) {
             if (c.devices && c.devices.length > 0) {
                 if (c.devices[0].price === undefined || c.devices[0].price === 0) c.devices[0].price = c.contractAmount || 0;
@@ -297,6 +318,11 @@ function migrateState() {
             delete c.overBwPrice;
             delete c.overColorPrice;
 
+            customerMigrated = true;
+        }
+
+        // If this customer was migrated, save it back to Firestore and mark global migrated flag
+        if (customerMigrated) {
             migrated = true;
             if (isCloudMode && db) {
                 db.collection('customers').doc(c.id).set(c, {merge: true});
