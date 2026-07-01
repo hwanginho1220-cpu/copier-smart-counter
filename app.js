@@ -983,7 +983,7 @@ function renderTopUsageCustomers(currentMonthStr) {
 
     // Convert to list & sort
     const list = Object.keys(usageMap).map(id => {
-        const customer = state.customers.find(c => c.id === id);
+        const customer = state.customers.find(c => String(c.id) === String(id));
         return {
             id,
             name: customer ? customer.name : '알 수 없음',
@@ -1496,7 +1496,7 @@ async function handleCustomerFormSubmit(e) {
     };
 
     if (id) {
-        const existing = state.customers.find(c => c.id === id);
+        const existing = state.customers.find(c => String(c.id) === String(id));
         if (existing) {
             customerData.createdAt = existing.createdAt || createdAt;
         } else {
@@ -1537,7 +1537,7 @@ async function handleCustomerFormSubmit(e) {
 }
 
 async function deleteCustomer(id) {
-    const customer = state.customers.find(c => c.id === id);
+    const customer = state.customers.find(c => String(c.id) === String(id));
     if (!customer) return;
 
     if (confirm(`고객사 "${customer.name}"을(를) 삭제하시겠습니까?\n삭제 시 해당 고객의 모든 월간 점검 기록도 영구적으로 삭제됩니다.`)) {
@@ -1891,7 +1891,7 @@ function openCustomerModal(id = null) {
     if (id) {
         title.textContent = '고객사 정보 수정';
         saveBtn.textContent = '수정 완료';
-        const customer = state.customers.find(c => c.id === id);
+        const customer = state.customers.find(c => String(c.id) === String(id));
         if (customer) {
             document.getElementById('customerId').value = customer.id;
             document.getElementById('customerName').value = customer.name;
@@ -2331,7 +2331,7 @@ function updatePreviousCountersInfo(overrideDeviceId = null, excludeId = null) {
 // Customer Detail & History Modal
 function openDetailModal(customerId) {
     const modal = document.getElementById('detailModalBackdrop');
-    const customer = state.customers.find(c => c.id === customerId);
+    const customer = state.customers.find(c => String(c.id) === String(customerId));
     if (!customer) return;
 
     // Fill customer info
@@ -3588,12 +3588,12 @@ function numToKoreanStr(num) {
 }
 
 function openInvoiceModal(customerId, month, deviceId = null) {
-    const cust = state.customers.find(c => c.id === customerId);
+    const cust = state.customers.find(c => String(c.id) === String(customerId));
     if (!cust) return;
 
     // Default to today if month isn't fully given or is just for current context
     const insps = state.inspections.filter(i => {
-        const matchesCustomer = i.customerId === customerId;
+        const matchesCustomer = String(i.customerId) === String(customerId);
         const matchesMonth = i.date && typeof i.date === 'string' && i.date.startsWith(month);
         const matchesDevice = deviceId ? String(i.deviceId) === String(deviceId) : true;
         return matchesCustomer && matchesMonth && matchesDevice;
@@ -4021,7 +4021,7 @@ window.closeManualInvoiceModal = function() {
 
 window.handleManualInvoiceCustomerChange = function() {
     const custId = document.getElementById('manualInvoiceCustomerSelect').value;
-    const cust = state.customers.find(c => c.id === custId);
+    const cust = state.customers.find(c => String(c.id) === String(custId));
     const vatCheckbox = document.getElementById('manualInvoiceVatEnabled');
     if (cust && vatCheckbox) {
         vatCheckbox.checked = cust.vatEnabled !== false;
@@ -4035,7 +4035,7 @@ async function handleManualInvoiceFormSubmit(e) {
     const month = document.getElementById('manualInvoiceDate').value; // YYYY-MM
     const vatEnabled = document.getElementById('manualInvoiceVatEnabled').checked;
     
-    const cust = state.customers.find(c => c.id === custId);
+    const cust = state.customers.find(c => String(c.id) === String(custId));
     if (!cust) return;
     
     const tbody = document.getElementById('manualInvoiceItemsTbody');
@@ -4151,7 +4151,7 @@ function renderInvoiceTemplateToString(data) {
 }
 
 function openManualInvoice(customerId, month, vatEnabled, items) {
-    const cust = state.customers.find(c => c.id === customerId);
+    const cust = state.customers.find(c => String(c.id) === String(customerId));
     if (!cust) return;
 
     const issueDateStr = getLocalDateString();
