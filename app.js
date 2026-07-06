@@ -3195,15 +3195,47 @@ window.openUninspectedModal = function() {
     // Filter uninspected customers
     const uninspected = targetCustomers.filter(c => !inspectedIds.has(c.id));
     
-    // Sort alphabetically
-    uninspected.sort((a, b) => a.name.localeCompare(b.name));
+    // Sort by last inspection date ascending (oldest/never inspected first)
+    const uninspectedWithDates = uninspected.map(cust => {
+        const custInsps = state.inspections.filter(i => String(i.customerId) === String(cust.id));
+        let lastInspectionDateStr = '기록 없음';
+        let lastInspectionTime = 0; // Default to 0 for never inspected
+        
+        if (custInsps.length > 0) {
+            const sortedInsps = [...custInsps].sort((a, b) => {
+                const parsedA = a.date ? new Date(a.date).getTime() : 0;
+                const parsedB = b.date ? new Date(b.date).getTime() : 0;
+                const timeA = isNaN(parsedA) ? 0 : parsedA;
+                const timeB = isNaN(parsedB) ? 0 : parsedB;
+                return timeB - timeA;
+            });
+            if (sortedInsps[0] && sortedInsps[0].date) {
+                lastInspectionDateStr = sortedInsps[0].date;
+                const parsedTime = new Date(sortedInsps[0].date).getTime();
+                lastInspectionTime = isNaN(parsedTime) ? 0 : parsedTime;
+            }
+        }
+        
+        return {
+            cust,
+            lastInspectionDateStr,
+            lastInspectionTime
+        };
+    });
+
+    uninspectedWithDates.sort((a, b) => {
+        if (a.lastInspectionTime !== b.lastInspectionTime) {
+            return a.lastInspectionTime - b.lastInspectionTime;
+        }
+        return a.cust.name.localeCompare(b.cust.name);
+    });
     
-    countSpan.textContent = uninspected.length;
+    countSpan.textContent = uninspectedWithDates.length;
     
-    if (uninspected.length === 0) {
+    if (uninspectedWithDates.length === 0) {
         container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; margin-top: 2rem;">이번 달 점검 대상 업체의 점검이 모두 완료되었습니다! 🎉</p>';
     } else {
-        uninspected.forEach(cust => {
+        uninspectedWithDates.forEach(({ cust, lastInspectionDateStr }) => {
             let copierModelStr = '-';
             if (cust.devices && cust.devices.length > 0) {
                 const firstDev = cust.devices[0];
@@ -3213,22 +3245,6 @@ window.openUninspectedModal = function() {
                 }
             } else if (cust.copierModel) {
                 copierModelStr = cust.copierModel;
-            }
-
-            // Find last inspection date for this customer
-            const custInsps = state.inspections.filter(i => String(i.customerId) === String(cust.id));
-            let lastInspectionDateStr = '기록 없음';
-            if (custInsps.length > 0) {
-                const sortedInsps = [...custInsps].sort((a, b) => {
-                    const parsedA = a.date ? new Date(a.date).getTime() : 0;
-                    const parsedB = b.date ? new Date(b.date).getTime() : 0;
-                    const timeA = isNaN(parsedA) ? 0 : parsedA;
-                    const timeB = isNaN(parsedB) ? 0 : parsedB;
-                    return timeB - timeA;
-                });
-                if (sortedInsps[0] && sortedInsps[0].date) {
-                    lastInspectionDateStr = sortedInsps[0].date;
-                }
             }
 
             const card = document.createElement('div');
