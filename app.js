@@ -3215,6 +3215,22 @@ window.openUninspectedModal = function() {
                 copierModelStr = cust.copierModel;
             }
 
+            // Find last inspection date for this customer
+            const custInsps = state.inspections.filter(i => String(i.customerId) === String(cust.id));
+            let lastInspectionDateStr = '기록 없음';
+            if (custInsps.length > 0) {
+                const sortedInsps = [...custInsps].sort((a, b) => {
+                    const parsedA = a.date ? new Date(a.date).getTime() : 0;
+                    const parsedB = b.date ? new Date(b.date).getTime() : 0;
+                    const timeA = isNaN(parsedA) ? 0 : parsedA;
+                    const timeB = isNaN(parsedB) ? 0 : parsedB;
+                    return timeB - timeA;
+                });
+                if (sortedInsps[0] && sortedInsps[0].date) {
+                    lastInspectionDateStr = sortedInsps[0].date;
+                }
+            }
+
             const card = document.createElement('div');
             card.style.display = 'flex';
             card.style.justifyContent = 'space-between';
@@ -3227,7 +3243,12 @@ window.openUninspectedModal = function() {
             
             card.innerHTML = `
                 <div style="display:flex; flex-direction:column; gap:0.25rem;">
-                    <span style="font-weight:600; font-size:0.95rem; color:var(--text-primary);">${cust.name}</span>
+                    <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                        <span style="font-weight:600; font-size:0.95rem; color:var(--text-primary);">${cust.name}</span>
+                        <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal; background:rgba(255,255,255,0.06); padding:0.1rem 0.35rem; border-radius:4px; border:1px solid rgba(255,255,255,0.1);">
+                            지난 점검일: ${lastInspectionDateStr}
+                        </span>
+                    </div>
                     <span style="font-size:0.8rem; color:var(--text-secondary);">${copierModelStr} | ${cust.location || '위치 미지정'}</span>
                     ${cust.contact ? `<span style="font-size:0.75rem; color:var(--text-muted);"><i class="fa-solid fa-phone" style="margin-right:0.25rem;"></i>${cust.contact}</span>` : ''}
                 </div>
