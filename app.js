@@ -358,7 +358,14 @@ function migrateState() {
             migrated = true;
         }
 
-        if (!i.deviceId) {
+        const cust = state.customers.find(c => String(c.id) === String(i.customerId));
+        if (cust && cust.devices && cust.devices.length === 1) {
+            if (String(i.deviceId) !== String(cust.devices[0].id)) {
+                i.deviceId = cust.devices[0].id;
+                localMigrated = true;
+                migrated = true;
+            }
+        } else if (!i.deviceId) {
             i.deviceId = i.customerId + '-dev1';
             localMigrated = true;
             migrated = true;
@@ -366,6 +373,18 @@ function migrateState() {
 
         if (localMigrated && isCloudMode && db) {
             db.collection('inspections').doc(i.id).set(i, {merge: true});
+        }
+    });
+
+    // Auto-recalculate usages for customers if zero usage detected on subsequent inspections
+    const uniqueCustomerIds = [...new Set(state.inspections.map(i => String(i.customerId)))];
+    uniqueCustomerIds.forEach(cId => {
+        const custInsps = state.inspections.filter(i => String(i.customerId) === String(cId));
+        if (custInsps.length > 1) {
+            const needsRecalc = custInsps.some((i, idx) => idx > 0 && Number(i.bwCounter) > 0 && Number(i.bwUsage) === 0);
+            if (needsRecalc) {
+                recalculateUsageForCustomer(cId);
+            }
         }
     });
 
@@ -667,6 +686,7 @@ function switchView(viewName) {
  * Sorts all inspections for that customer chronologically and calculates the usage difference.
  */
 async function recalculateUsageForCustomer(customerId) {
+    const cust = state.customers.find(c => String(c.id) === String(customerId));
     // Get all inspections for this customer
     const custInspections = state.inspections.filter(i => String(i.customerId) === String(customerId));
     
@@ -680,13 +700,30 @@ async function recalculateUsageForCustomer(customerId) {
         return (a.id || '').localeCompare(b.id || '');
     });
 
+    // If customer only has 1 device, ensure all inspections use that device ID
+    if (cust && cust.devices && cust.devices.length === 1) {
+        const singleDevId = cust.devices[0].id;
+        custInspections.forEach(i => {
+            if (String(i.deviceId) !== String(singleDevId)) {
+                i.deviceId = singleDevId;
+            }
+        });
+    } else if (cust && cust.devices && cust.devices.length > 1) {
+        const validDevIds = new Set(cust.devices.map(d => String(d.id)));
+        custInspections.forEach(i => {
+            if (!i.deviceId || !validDevIds.has(String(i.deviceId))) {
+                i.deviceId = cust.devices[0].id;
+            }
+        });
+    }
+
     const changedInspections = [];
 
     // Group by deviceId
-    const deviceIds = [...new Set(custInspections.map(i => i.deviceId))];
+    const deviceIds = [...new Set(custInspections.map(i => String(i.deviceId)))];
 
     deviceIds.forEach(devId => {
-        const devInspections = custInspections.filter(i => i.deviceId === devId);
+        const devInspections = custInspections.filter(i => String(i.deviceId) === String(devId));
         
         devInspections.forEach((insp, index) => {
             let newBwUsage = 0;
@@ -732,6 +769,7 @@ async function recalculateUsageForCustomer(customerId) {
                 if (insp && insp.id) {
                     const docRef = db.collection('inspections').doc(insp.id);
                     batch.set(docRef, {
+                        deviceId: insp.deviceId,
                         bwUsage: insp.bwUsage || 0,
                         colorUsage: insp.colorUsage || 0
                     }, { merge: true });
@@ -747,14 +785,23 @@ async function recalculateUsageForCustomer(customerId) {
 /**
  * Gets the latest inspection prior to a given date for a customer.
  */
-function getPreviousInspection(deviceId, beforeDateStr, excludeId = null) {
+function getPreviousInspection(deviceId, beforeDateStr, excludeId = null, customerId = null) {
     const beforeDate = new Date(beforeDateStr);
     
-    const candidates = state.inspections.filter(i => {
+    let candidates = state.inspections.filter(i => {
         if (String(i.deviceId) !== String(deviceId)) return false;
         if (excludeId && String(i.id) === String(excludeId)) return false;
         return new Date(i.date) < beforeDate;
     });
+
+    // Fallback if deviceId didn't match: search by customerId
+    if (candidates.length === 0 && customerId) {
+        candidates = state.inspections.filter(i => {
+            if (String(i.customerId) !== String(customerId)) return false;
+            if (excludeId && String(i.id) === String(excludeId)) return false;
+            return new Date(i.date) < beforeDate;
+        });
+    }
 
     if (candidates.length === 0) return null;
 
@@ -888,55 +935,76 @@ function renderRecentInspections() {
         
         const bwCounterVal = Number(insp.bwCounter) || 0;
         const colorCounterVal = Number(insp.colorCounter) || 0;
-        const bwUsageVal = Number(insp.bwUsage) || 0;
-        const colorUsageVal = Number(insp.colorUsage) || 0;
+        let bwUsageVal = Number(insp.bwUsage) || 0;
+        let colorUsageVal = Number(insp.colorUsage) || 0;
 
-        let bwBadge = '';
+        // Fallback: If usage is 0, check if there is an earlier inspection to calculate true usage
+        if (bwUsageVal === 0 && insp.bwCounter) {
+            const prev = getPreviousInspection(insp.deviceId, insp.date, insp.id, insp.customerId);
+            if (prev && Number(prev.bwCounter) > 0) {
+                const calcBw = Math.max(0, Number(insp.bwCounter) - Number(prev.bwCounter));
+                const calcColor = Math.max(0, Number(insp.colorCounter) - Number(prev.colorCounter));
+                if (calcBw > 0) {
+                    bwUsageVal = calcBw;
+                    insp.bwUsage = calcBw;
+                }
+                if (calcColor > 0) {
+                    colorUsageVal = calcColor;
+                    insp.colorUsage = calcColor;
+                }
+            }
+        }
+
+        let bwUsageDisplay = '';
         if (bwUsageVal > 0) {
-            bwBadge = `<span class="badge badge-success">+${bwUsageVal.toLocaleString()}</span>`;
+            let overBadge = '';
             if (customer) {
                 const dev = customer.devices ? customer.devices.find(d => String(d.id) === String(insp.deviceId)) : null;
                 const limit = dev ? Number(dev.contractBw) : (Number(customer.contractBw) || 0);
                 if (limit > 0 && bwUsageVal > limit) {
                     const over = bwUsageVal - limit;
-                    bwBadge += `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
+                    overBadge = `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
                 }
             }
+            bwUsageDisplay = `<span style="font-weight:600; color:var(--success);">+${bwUsageVal.toLocaleString()}</span>${overBadge}`;
+        } else if (bwUsageVal < 0) {
+            bwUsageDisplay = `<span class="badge badge-danger">${bwUsageVal.toLocaleString()} (감소)</span>`;
         } else {
-            bwBadge = '<span class="badge badge-info">기준</span>';
+            bwUsageDisplay = '<span class="badge badge-info">기준</span>';
         }
 
-        let colorBadge = '';
+        let colorUsageDisplay = '';
         if (colorUsageVal > 0) {
-            colorBadge = `<span class="badge badge-success" style="background:rgba(217,70,239,0.15); color:#f472b6;">+${colorUsageVal.toLocaleString()}</span>`;
+            let overBadge = '';
             if (customer) {
                 const dev = customer.devices ? customer.devices.find(d => String(d.id) === String(insp.deviceId)) : null;
                 const limit = dev ? Number(dev.contractColor) : (Number(customer.contractColor) || 0);
                 if (limit > 0 && colorUsageVal > limit) {
                     const over = colorUsageVal - limit;
-                    colorBadge += `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
+                    overBadge = `<span class="badge badge-danger" style="margin-left:0.25rem;">초과 (+${over.toLocaleString()})</span>`;
                 }
             }
+            colorUsageDisplay = `<span style="font-weight:600; color:#f472b6;">+${colorUsageVal.toLocaleString()}</span>${overBadge}`;
+        } else if (colorUsageVal < 0) {
+            colorUsageDisplay = `<span class="badge badge-danger">${colorUsageVal.toLocaleString()} (감소)</span>`;
         } else {
-            colorBadge = '<span class="badge badge-info">기준</span>';
+            colorUsageDisplay = '<span class="badge badge-info">기준</span>';
         }
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td data-label="점검일" style="font-weight:600;">${insp.date || '-'}</td>
-            <td data-label="고객사명"><span style="font-weight: 500;">${customerName}</span></td>
+            <td data-label="고객사명"><span style="font-weight: 600; cursor:pointer; color:var(--primary);" onclick="openDetailModal('${insp.customerId}')" title="클릭하여 점검 이력 보기">${customerName}</span></td>
             <td data-label="흑백 카운터">${bwCounterVal.toLocaleString()}</td>
             <td data-label="컬러 카운터" style="color:#d8b4fe;">${colorCounterVal.toLocaleString()}</td>
             <td data-label="흑백 사용량">
                 <div style="display: flex; align-items: center; gap: 0.35rem; justify-content: flex-end;">
-                    <span style="font-weight:600;">${bwUsageVal.toLocaleString()}</span>
-                    ${bwBadge}
+                    ${bwUsageDisplay}
                 </div>
             </td>
             <td data-label="컬러 사용량">
                 <div style="display: flex; align-items: center; gap: 0.35rem; justify-content: flex-end;">
-                    <span style="font-weight:600;">${colorUsageVal.toLocaleString()}</span>
-                    ${colorBadge}
+                    ${colorUsageDisplay}
                 </div>
             </td>
             <td data-label="특이사항">
@@ -1026,7 +1094,7 @@ function renderTopUsageCustomers(currentMonthStr) {
         
         card.innerHTML = `
             <div style="display:flex; justify-content:space-between; font-size:0.9rem;">
-                <span style="font-weight:600;">${item.name} <span style="font-size:0.75rem; color:var(--text-muted); font-weight:normal;">(${item.model})</span></span>
+                <span style="font-weight:600; cursor:pointer; color:var(--text-primary);" onclick="openDetailModal('${item.id}')" title="클릭하여 점검 이력 보기"><span style="color:var(--primary);">${item.name}</span> <span style="font-size:0.75rem; color:var(--text-muted); font-weight:normal;">(${item.model})</span></span>
                 <span style="font-weight:700; color:var(--primary);">${(Number(item.total) || 0).toLocaleString()} 매</span>
             </div>
             <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-secondary); margin-bottom:0.2rem;">
@@ -1627,8 +1695,25 @@ function renderInspectionsTable() {
 
         const bwCounterVal = Number(insp.bwCounter) || 0;
         const colorCounterVal = Number(insp.colorCounter) || 0;
-        const bwUsageVal = Number(insp.bwUsage) || 0;
-        const colorUsageVal = Number(insp.colorUsage) || 0;
+        let bwUsageVal = Number(insp.bwUsage) || 0;
+        let colorUsageVal = Number(insp.colorUsage) || 0;
+
+        // Fallback: If usage is 0, check if there is an earlier inspection to calculate true usage
+        if (bwUsageVal === 0 && insp.bwCounter) {
+            const prev = getPreviousInspection(insp.deviceId, insp.date, insp.id, insp.customerId);
+            if (prev && Number(prev.bwCounter) > 0) {
+                const calcBw = Math.max(0, Number(insp.bwCounter) - Number(prev.bwCounter));
+                const calcColor = Math.max(0, Number(insp.colorCounter) - Number(prev.colorCounter));
+                if (calcBw > 0) {
+                    bwUsageVal = calcBw;
+                    insp.bwUsage = calcBw;
+                }
+                if (calcColor > 0) {
+                    colorUsageVal = calcColor;
+                    insp.colorUsage = calcColor;
+                }
+            }
+        }
 
         let bwBadge = '';
         if (bwUsageVal > 0) {
@@ -1659,7 +1744,7 @@ function renderInspectionsTable() {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td data-label="점검일" style="font-weight: 600;">${insp.date || '-'}</td>
-            <td data-label="고객사명"><span style="font-weight: 600;">${customerName}</span></td>
+            <td data-label="고객사명"><span style="font-weight: 600; cursor:pointer; color:var(--primary);" onclick="openDetailModal('${insp.customerId}')" title="클릭하여 점검 이력 보기">${customerName}</span></td>
             <td data-label="복사기 모델">${model}</td>
             <td data-label="흑백 카운터">
                 <div style="display: flex; align-items: center; gap: 0.35rem;">
@@ -2434,9 +2519,14 @@ function openDetailModal(customerId) {
     document.getElementById('detailLocation').textContent = customer.location || '-';
 
     // Get historical inspections
-    const history = state.inspections.filter(i => i.customerId === customerId);
-    // Sort descending by date
-    history.sort((a, b) => new Date(b.date) - new Date(a.date));
+    const history = state.inspections.filter(i => String(i.customerId) === String(customerId));
+    // Sort descending by date, then by ID
+    history.sort((a, b) => {
+        const timeA = a.date ? new Date(a.date).getTime() : 0;
+        const timeB = b.date ? new Date(b.date).getTime() : 0;
+        if (timeB !== timeA) return timeB - timeA;
+        return (b.id || '').localeCompare(a.id || '');
+    });
 
     document.getElementById('detailHistoryCount').textContent = `${history.length}건`;
 
@@ -2447,15 +2537,28 @@ function openDetailModal(customerId) {
         listContainer.innerHTML = '<p style="color: var(--text-muted); text-align: center; margin-top: 3rem;">등록된 점검 이력이 없습니다.</p>';
     } else {
         history.forEach(insp => {
+            let bwUsage = Number(insp.bwUsage || 0);
+            let colorUsage = Number(insp.colorUsage || 0);
+            if (bwUsage === 0 && insp.bwCounter) {
+                const prev = getPreviousInspection(insp.deviceId, insp.date, insp.id, customerId);
+                if (prev && Number(prev.bwCounter) > 0) {
+                    bwUsage = Math.max(0, Number(insp.bwCounter) - Number(prev.bwCounter));
+                    colorUsage = Math.max(0, Number(insp.colorCounter) - Number(prev.colorCounter));
+                }
+            }
+
+            const dev = customer.devices ? customer.devices.find(d => String(d.id) === String(insp.deviceId)) : null;
+            const devLabel = dev ? `<span style="font-size:0.75rem; color:var(--primary); margin-left:0.35rem;">(${dev.name || dev.model})</span>` : '';
+
             const card = document.createElement('div');
             card.className = 'inspection-mini-card';
             card.innerHTML = `
                 <div class="info">
-                    <span class="date">${insp.date}</span>
+                    <span class="date">${insp.date}${devLabel}</span>
                     <span class="usage">
                         사용량: 
-                        흑백 <strong style="color:var(--success)">+${insp.bwUsage.toLocaleString()}</strong> / 
-                        컬러 <strong style="color:#d8b4fe;">+${insp.colorUsage.toLocaleString()}</strong>
+                        흑백 <strong style="color:var(--success)">+${bwUsage.toLocaleString()}</strong> / 
+                        컬러 <strong style="color:#d8b4fe;">+${colorUsage.toLocaleString()}</strong>
                     </span>
                     ${insp.notes ? `<span style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">메모: ${insp.notes}</span>` : ''}
                     ${insp.parts && Array.isArray(insp.parts) && insp.parts.length > 0 ? `
@@ -2471,8 +2574,8 @@ function openDetailModal(customerId) {
                 </div>
                 <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.5rem;">
                     <div class="counters" style="text-align:right;">
-                        <div class="bw">흑백: ${insp.bwCounter.toLocaleString()}</div>
-                        <div class="color">컬러: ${insp.colorCounter.toLocaleString()}</div>
+                        <div class="bw">흑백: ${Number(insp.bwCounter || 0).toLocaleString()}</div>
+                        <div class="color">컬러: ${Number(insp.colorCounter || 0).toLocaleString()}</div>
                     </div>
                     <div style="display:flex; gap:0.25rem;">
                         <button class="btn-icon btn-secondary" style="padding:0.25rem 0.4rem; font-size:0.75rem;" onclick="editInspectionFromDetail('${insp.id}', '${customerId}')" title="수정"><i class="fa-solid fa-pen-to-square" style="color: var(--warning);"></i></button>
@@ -2494,9 +2597,13 @@ function openDetailModal(customerId) {
     };
 }
 
+window.openDetailModal = openDetailModal;
+
 function closeDetailModal() {
     document.getElementById('detailModalBackdrop').classList.remove('active');
 }
+
+window.closeDetailModal = closeDetailModal;
 
 // --- Import / Export Backups (JSON) ---
 
@@ -3260,7 +3367,7 @@ window.openUninspectedModal = function() {
             card.innerHTML = `
                 <div style="display:flex; flex-direction:column; gap:0.25rem;">
                     <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-                        <span style="font-weight:600; font-size:0.95rem; color:var(--text-primary);">${cust.name}</span>
+                        <span style="font-weight:600; font-size:0.95rem; color:var(--primary); cursor:pointer;" onclick="closeUninspectedModal(); openDetailModal('${cust.id}')" title="클릭하여 점검 이력 보기">${cust.name}</span>
                         <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal; background:rgba(255,255,255,0.06); padding:0.1rem 0.35rem; border-radius:4px; border:1px solid rgba(255,255,255,0.1);">
                             지난 점검일: ${lastInspectionDateStr}
                         </span>
