@@ -290,6 +290,12 @@ document.addEventListener('DOMContentLoaded', () => {
         customSoonWrap.classList.add('hidden');
         conflictAlert.classList.add('hidden');
         soonConflictAlert.classList.add('hidden');
+        if (calendar) {
+          calendar.render();
+          renderSelectedDateSchedule(dateInput.value);
+        }
+        renderSoonStatusBoard();
+        renderAdminTable();
       } else {
         alert('신청 저장에 실패했습니다. 다시 시도해주세요.');
       }
@@ -309,9 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function showSuccessModal(data) {
     const modal = document.getElementById('success-modal');
     const summaryEl = document.getElementById('success-summary');
-    const comm = window.visitStore.getCurrentCommunity();
-    const commTitle = comm ? `${comm.communityName} ${comm.pastorName}` : '순심방';
-    const shareText = `🕊️ [${commTitle} 순심방 신청 완료]\n• 순: ${data.soonName} (${data.leaderName} 순장)\n• 일시: ${data.date} ${data.startTime} ~ ${data.endTime}\n• 장소: ${data.place}\n${data.prayerTopic ? `• 기도제목: ${data.prayerTopic}\n` : ''}은혜로운 심방 시간이 되기를 기도합니다!`;
+    const shareText = `🕊️ [우면공동체 강현구 목사님 순심방 신청 완료]\n• 순: ${data.soonName} (${data.leaderName} 순장)\n• 일시: ${data.date} ${data.startTime} ~ ${data.endTime}\n• 장소: ${data.place}\n${data.prayerTopic ? `• 기도제목: ${data.prayerTopic}\n` : ''}은혜로운 심방 시간이 되기를 기도합니다!`;
 
     summaryEl.innerHTML = `
       <div class="bg-slate-50 p-4 rounded-xl space-y-2 text-sm text-slate-700 border border-slate-200 text-left">
@@ -680,10 +684,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const comm = window.visitStore.getCurrentCommunity();
-    const prefix = comm ? `${comm.communityName}_${comm.pastorName.replace(/\s+/g, '')}` : '순심방';
-    link.setAttribute('download', `${prefix}_일정현황_${new Date().toISOString().slice(0, 10)}.csv`);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `우면공동체_강현구목사님_순심방_일정현황_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -910,9 +913,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!currentDetailVisit) return;
       const v = currentDetailVisit;
       const dayName = getDayOfWeekStr(v.date);
-      const comm = window.visitStore.getCurrentCommunity();
-      const commTitle = comm ? `${comm.communityName} ${comm.pastorName}` : '순심방';
-      const text = `🕊️ [${commTitle} 순심방 확정 안내]\n• 대상: ${v.soonName} (${v.leaderName} 순장)\n• 일시: ${v.date} (${dayName}) ${v.startTime} ~ ${v.endTime}\n• 장소: ${v.place}\n${v.attendees ? `• 예상인원: ${v.attendees}명\n` : ''}${v.prayerTopic ? `• 기도제목: ${v.prayerTopic}\n` : ''}\n은혜롭고 따뜻한 심방 시간이 되기를 기도합니다!`;
+      const text = `🕊️ [우면공동체 강현구 목사님 순심방 확정 안내]\n• 대상: ${v.soonName} (${v.leaderName} 순장)\n• 일시: ${v.date} (${dayName}) ${v.startTime} ~ ${v.endTime}\n• 장소: ${v.place}\n${v.attendees ? `• 예상인원: ${v.attendees}명\n` : ''}${v.prayerTopic ? `• 기도제목: ${v.prayerTopic}\n` : ''}\n은혜롭고 따뜻한 심방 시간이 되기를 기도합니다!`;
 
       navigator.clipboard.writeText(text).then(() => {
         alert('카카오톡 공유용 안내 문구가 복사되었습니다!\n순원 단톡방에 붙여넣어 공유하세요.');
