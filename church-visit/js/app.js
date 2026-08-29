@@ -41,121 +41,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const headerProgressBar = document.getElementById('header-progress-bar');
 
   // ==========================================
-  // 0. 멀티 공동체 지원 및 초기화
-  // ==========================================
-  const communitySelect = document.getElementById('community-select');
-  const mobileCommunitySelect = document.getElementById('mobile-community-select');
-  const btnCopyCommunityLink = document.getElementById('btn-copy-community-link');
-
-  function initCommunitySelect() {
-    if (!window.COMMUNITIES_CONFIG) return;
-    const communities = Object.values(window.COMMUNITIES_CONFIG);
-    const currentId = window.cloudSync.currentCommunityId;
-
-    [communitySelect, mobileCommunitySelect].forEach((selectEl) => {
-      if (!selectEl) return;
-      selectEl.innerHTML = '';
-      communities.forEach((comm) => {
-        const opt = document.createElement('option');
-        opt.value = comm.id;
-        opt.textContent = `${comm.communityName} (${comm.pastorName})`;
-        if (comm.id === currentId) opt.selected = true;
-        selectEl.appendChild(opt);
-      });
-
-      selectEl.addEventListener('change', (e) => {
-        switchCommunity(e.target.value);
-      });
-    });
-
-    updateCommunityUI();
-  }
-
-  function switchCommunity(communityId) {
-    if (!window.COMMUNITIES_CONFIG || !window.COMMUNITIES_CONFIG[communityId]) return;
-
-    // URL 파라미터 업데이트 (?c=공동체ID)
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set('c', communityId);
-      window.history.replaceState({}, '', url.toString());
-    } catch (e) {}
-
-    // 동기화 서비스의 공동체 전환 (Firestore 컬렉션 & LocalStorage 분리)
-    window.cloudSync.setCommunity(communityId);
-
-    // 드롭다운 값 동기화
-    if (communitySelect) communitySelect.value = communityId;
-    if (mobileCommunitySelect) mobileCommunitySelect.value = communityId;
-
-    // UI 텍스트 및 순 목록 갱신
-    updateCommunityUI();
-  }
-
-  function updateCommunityUI() {
-    const comm = window.visitStore.getCurrentCommunity();
-    if (!comm) return;
-
-    // 브라우저 탭 및 상단 헤더 텍스트 갱신
-    document.title = `${comm.communityName} ${comm.pastorName} 순심방 신청`;
-    
-    const titleEl = document.getElementById('header-community-title');
-    if (titleEl) {
-      titleEl.innerHTML = `
-        ${comm.communityName} ${comm.pastorName} 순심방 신청
-        <span class="text-xs px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 font-semibold">2026</span>
-      `;
-    }
-
-    const subTitleEl = document.getElementById('header-community-subtitle');
-    if (subTitleEl) {
-      subTitleEl.textContent = comm.subTitle || '말씀과 기도로 하나되는 은혜의 심방';
-    }
-
-    // 순 드롭다운 재구성
-    initSoonSelectOptions();
-
-    // 활성 탭 화면 다시 그리기
-    if (currentTab === 'calendar' && calendar) {
-      calendar.render();
-      renderSelectedDateSchedule(calendar.selectedDateStr);
-    } else if (currentTab === 'status') {
-      renderSoonStatusBoard();
-    } else if (currentTab === 'admin') {
-      renderAdminView();
-    }
-
-    // 상단 요약 바 갱신
-    const stats = window.visitStore.getSoonStats();
-    if (headerSummaryText) {
-      headerSummaryText.textContent = `총 ${stats.total}개 순 중 ${stats.completed}개 순 신청 완료 (${stats.rate}%)`;
-    }
-    if (headerProgressBar) {
-      headerProgressBar.style.width = `${stats.rate}%`;
-    }
-
-    validateConflict();
-  }
-
-  // 현재 공동체 전용 카카오톡 접속 링크 복사
-  if (btnCopyCommunityLink) {
-    btnCopyCommunityLink.addEventListener('click', () => {
-      const comm = window.visitStore.getCurrentCommunity();
-      const baseUrl = window.location.origin + window.location.pathname;
-      const shareUrl = `${baseUrl}?c=${comm.id}`;
-
-      navigator.clipboard.writeText(shareUrl).then(() => {
-        alert(`[${comm.communityName} (${comm.pastorName})] 전용 카카오톡 접속 링크가 복사되었습니다!\n\n👉 링크: ${shareUrl}\n\n순장님들 단톡방에 붙여넣어 공유하세요.`);
-      });
-    });
-  }
-
-  // ==========================================
-  // 1. 초기화 및 순 드롭다운 세팅 (현재 공동체 그룹 기반)
+  // 1. 초기화 및 순 드롭다운 세팅 (여성순, 직여순, 남성순)
   // ==========================================
   function initSoonSelectOptions() {
     const soonGroups = window.visitStore.getSoonGroups();
-    soonSelect.innerHTML = '<option value="">-- 순을 선택하세요 --</option>';
+    soonSelect.innerHTML = '<option value="">-- 순을 선택하세요 (여성/직여/남성) --</option>';
 
     soonGroups.forEach((group) => {
       const optGroup = document.createElement('optgroup');
@@ -1192,7 +1082,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // 시작 초기화 실행
-  initCommunitySelect();
+  initSoonSelectOptions();
   initDefaultDates();
   initCalendar();
   validateConflict();
