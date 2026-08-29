@@ -1,0 +1,109 @@
+/* 교회 순심방 신청 프로그램 커스텀 스타일 */
+@import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --primary: #3b82f6;
+  --primary-dark: #1d4ed8;
+  --primary-light: #eff6ff;
+  --secondary: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --surface: #ffffff;
+  --bg-main: #f8fafc;
+}
+
+body {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--bg-main);
+  color: #1e293b;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 캘린더 커스텀 스타일 */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendar-day-cell {
+  min-height: 84px;
+  transition: all 0.2s ease;
+}
+
+@media (min-width: 768px) {
+  .calendar-day-cell {
+    min-height: 110px;
+  }
+}
+
+.calendar-day-cell:hover {
+  background-color: #f1f5f9;
+}
+
+.calendar-day-cell.selected {
+  background-color: #e0e7ff !important;
+  outline: 2px solid #4f46e5;
+  outline-offset: -2px;
+}
+
+.calendar-day-cell.today {
+  background-color: #f0fdf4;
+}
+
+/* 타임슬롯 바 */
+.timeslot-pill {
+  transition: all 0.15s ease;
+}
+
+.timeslot-pill:hover {
+  transform: translateY(-1px);
+}
+
+/* 배지 애니메이션 */
+@keyframes pulse-gentle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(0.98); }
+}
+
+.pulse-live {
+  animation: pulse-gentle 2s infinite ease-in-out;
+}
+
+/* 부드러운 스크롤 */
+.smooth-scroll {
+  scroll-behavior: smooth;
+}
+
+/* 탭 바 활성화 스타일 */
+.tab-btn.active {
+  color: #2563eb;
+  border-bottom: 2px solid #2563eb;
+  font-weight: 600;
+}
+
+/* 모바일 카드 그림자 및 터치 피드백 */
+.touch-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.touch-card:active {
+  transform: scale(0.99);
+}
+
+/* 프린트 스타일 (목사님 심방 일정표 인쇄용) */
+@media print {
+  body {
+    background-color: #ffffff !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .card-print {
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    break-inside: avoid;
+  }
+}
