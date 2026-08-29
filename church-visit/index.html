@@ -385,6 +385,133 @@
   </div>
 
   <!-- ========================================== -->
+  <!-- [신규] 순심방 상세 확인 및 수정/삭제 모달 -->
+  <!-- ========================================== -->
+  <div id="visit-detail-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+      
+      <!-- 모달 상단 헤더 -->
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3.5 mb-4">
+        <div class="flex items-center gap-2">
+          <span id="detail-modal-soon-badge" class="px-2.5 py-1 rounded-xl text-sm font-extrabold bg-blue-600 text-white">
+            여성1순
+          </span>
+          <h3 class="text-lg font-black text-slate-900">순심방 상세 일정</h3>
+        </div>
+        <button id="btn-close-detail-modal" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 text-lg transition">✕</button>
+      </div>
+
+      <!-- 1. [보기 모드] -->
+      <div id="detail-view-mode" class="space-y-4">
+        <!-- 요약 카드 -->
+        <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-3 text-sm text-slate-700">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+            <span class="text-xs text-slate-500 font-bold">순 / 순장</span>
+            <span class="font-extrabold text-slate-900 text-base" id="detail-view-soon-leader">-</span>
+          </div>
+
+          <div class="flex items-start justify-between py-1">
+            <span class="text-xs text-slate-500 font-bold shrink-0 pt-0.5">📅 심방 일시</span>
+            <span class="font-bold text-blue-700 text-right" id="detail-view-datetime">-</span>
+          </div>
+
+          <div class="flex items-start justify-between py-1">
+            <span class="text-xs text-slate-500 font-bold shrink-0 pt-0.5">📍 심방 장소</span>
+            <span class="font-medium text-slate-800 text-right max-w-[65%]" id="detail-view-place">-</span>
+          </div>
+
+          <div class="flex items-center justify-between py-1" id="detail-view-attendees-wrap">
+            <span class="text-xs text-slate-500 font-bold">👥 예상 인원</span>
+            <span class="font-medium text-slate-800" id="detail-view-attendees">-</span>
+          </div>
+
+          <div class="pt-2 border-t border-slate-200" id="detail-view-prayer-wrap">
+            <span class="text-xs text-slate-500 font-bold block mb-1">🙏 순 기도제목 및 요청사항</span>
+            <div class="bg-white p-3 rounded-xl border border-slate-200 text-slate-700 text-xs sm:text-sm leading-relaxed" id="detail-view-prayer">
+              -
+            </div>
+          </div>
+        </div>
+
+        <!-- 액션 버튼들 -->
+        <div class="space-y-2 pt-2">
+          <button id="btn-detail-copy-share" class="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5 shadow-2xs">
+            <span>💬</span> 카카오톡 공유 문구 복사
+          </button>
+          
+          <div class="grid grid-cols-2 gap-2">
+            <button id="btn-detail-switch-edit" class="py-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 font-bold text-xs sm:text-sm hover:bg-blue-100 transition flex items-center justify-center gap-1">
+              <span>✏️</span> 일정 수정하기
+            </button>
+            <button id="btn-detail-delete" class="py-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 font-bold text-xs sm:text-sm hover:bg-rose-100 transition flex items-center justify-center gap-1">
+              <span>🗑️</span> 신청 취소 / 삭제
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. [수정 모드] (처음엔 hidden) -->
+      <div id="detail-edit-mode" class="hidden space-y-4">
+        <div class="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 font-medium">
+          ✏️ 일정이나 장소, 기도제목을 수정한 뒤 [수정 완료 저장]을 눌러주세요.
+        </div>
+
+        <!-- 수정 중 충돌 경고 알림 -->
+        <div id="edit-conflict-alert" class="hidden text-xs"></div>
+
+        <form id="detail-edit-form" class="space-y-3.5 text-xs sm:text-sm">
+          <div>
+            <label class="font-bold text-slate-700 block mb-1">순장 이름 <span class="text-rose-500">*</span></label>
+            <input type="text" id="edit-leader-name" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+
+          <div>
+            <label class="font-bold text-slate-700 block mb-1">심방 날짜 <span class="text-rose-500">*</span></label>
+            <input type="date" id="edit-visit-date" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold">
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">시작 시간 <span class="text-rose-500">*</span></label>
+              <input type="time" id="edit-start-time" required step="1800" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold">
+            </div>
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">종료 시간 <span class="text-rose-500">*</span></label>
+              <input type="time" id="edit-end-time" required step="1800" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold">
+            </div>
+          </div>
+
+          <div>
+            <label class="font-bold text-slate-700 block mb-1">심방 장소 <span class="text-rose-500">*</span></label>
+            <input type="text" id="edit-visit-place" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">예상 인원 (선택)</label>
+              <input type="number" id="edit-attendees-count" min="1" max="50" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="font-bold text-slate-700 block mb-1">기도제목 / 요청사항 (선택)</label>
+              <input type="text" id="edit-prayer-topic" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+
+          <div class="pt-3 flex gap-2">
+            <button type="submit" id="btn-save-edit" class="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs sm:text-sm hover:bg-blue-700 transition">
+              수정 완료 저장
+            </button>
+            <button type="button" id="btn-cancel-edit" class="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-semibold text-xs sm:text-sm hover:bg-slate-50 transition">
+              취소
+            </button>
+          </div>
+        </form>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================== -->
   <!-- Firebase 클라우드 설정 모달 -->
   <!-- ========================================== -->
   <div id="firebase-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden">

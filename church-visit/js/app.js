@@ -389,17 +389,21 @@ document.addEventListener('DOMContentLoaded', () => {
       html += `<div class="space-y-3">`;
       visits.forEach((v) => {
         html += `
-          <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-blue-300 transition">
+          <div class="card-view-detail p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-blue-400 hover:shadow-md transition cursor-pointer group"
+               data-visit-id="${v.id}">
             <div class="flex items-start justify-between">
               <div class="flex items-center gap-2">
-                <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold bg-blue-100 text-blue-800">
+                <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold bg-blue-100 text-blue-800 group-hover:bg-blue-600 group-hover:text-white transition">
                   ${v.soonName}
                 </span>
                 <span class="text-sm font-bold text-slate-800">${v.leaderName} 순장</span>
               </div>
-              <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                예약확정
-              </span>
+              <div class="flex items-center gap-1.5">
+                <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  예약확정
+                </span>
+                <span class="text-[11px] text-blue-600 font-medium hidden sm:inline">상세보기/수정 🔍</span>
+              </div>
             </div>
             <div class="mt-2.5 space-y-1 text-xs text-slate-600">
               <div class="flex items-center gap-1.5 font-medium text-blue-600">
@@ -418,6 +422,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>`
                   : ''
               }
+            </div>
+            <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-end text-[11px] text-slate-400 font-medium">
+              클릭하여 상세 정보 보기 및 수정 / 삭제 →
             </div>
           </div>
         `;
@@ -463,8 +470,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const v = visitMap.get(soonName);
       if (v) {
         return `
-          <div class="p-3 sm:p-3.5 rounded-2xl bg-white border border-emerald-200/90 shadow-2xs relative overflow-hidden flex flex-col justify-between">
-            <div class="absolute top-0 right-0 w-10 h-10 bg-emerald-50 rounded-bl-2xl -mr-1 -mt-1 flex items-start justify-end p-1.5">
+          <div class="card-view-detail p-3 sm:p-3.5 rounded-2xl bg-white border border-emerald-200/90 shadow-2xs relative overflow-hidden flex flex-col justify-between cursor-pointer hover:border-emerald-500 hover:shadow-md transition group"
+               data-visit-id="${v.id}">
+            <div class="absolute top-0 right-0 w-10 h-10 bg-emerald-50 rounded-bl-2xl -mr-1 -mt-1 flex items-start justify-end p-1.5 group-hover:bg-emerald-100 transition">
               <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
             </div>
             <div>
@@ -478,6 +486,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="text-[11px]">${v.startTime} ~ ${v.endTime}</div>
                 <div class="truncate text-slate-500 text-[11px]">${v.place}</div>
               </div>
+            </div>
+            <div class="mt-2.5 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 group-hover:text-blue-600 font-medium">
+              <span>상세/수정</span>
+              <span>→</span>
             </div>
           </div>
         `;
@@ -814,7 +826,240 @@ document.addEventListener('DOMContentLoaded', () => {
   startTimeInput.addEventListener('change', validateConflict);
   endTimeInput.addEventListener('change', validateConflict);
 
-  // 탭 네비게이션 클릭
+  // ==========================================
+  // 11. 순심방 상세 조회 및 수정 / 삭제 모달 로직
+  // ==========================================
+  let currentDetailVisit = null;
+  const visitDetailModal = document.getElementById('visit-detail-modal');
+  const detailViewMode = document.getElementById('detail-view-mode');
+  const detailEditMode = document.getElementById('detail-edit-mode');
+  const btnCloseDetailModal = document.getElementById('btn-close-detail-modal');
+  const btnDetailCopyShare = document.getElementById('btn-detail-copy-share');
+  const btnDetailSwitchEdit = document.getElementById('btn-detail-switch-edit');
+  const btnDetailDelete = document.getElementById('btn-detail-delete');
+  const btnCancelEdit = document.getElementById('btn-cancel-edit');
+  const detailEditForm = document.getElementById('detail-edit-form');
+  const editConflictAlert = document.getElementById('edit-conflict-alert');
+  const btnSaveEdit = document.getElementById('btn-save-edit');
+
+  // 수정 입력 필드
+  const editLeaderName = document.getElementById('edit-leader-name');
+  const editVisitDate = document.getElementById('edit-visit-date');
+  const editStartTime = document.getElementById('edit-start-time');
+  const editEndTime = document.getElementById('edit-end-time');
+  const editVisitPlace = document.getElementById('edit-visit-place');
+  const editAttendeesCount = document.getElementById('edit-attendees-count');
+  const editPrayerTopic = document.getElementById('edit-prayer-topic');
+
+  // 요일 이름 가져오기
+  function getDayOfWeekStr(dateStr) {
+    if (!dateStr) return '';
+    const dayObj = new Date(dateStr);
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    return days[dayObj.getDay()] || '';
+  }
+
+  // 상세 모달 열기
+  function openVisitDetailModal(visitId) {
+    const visits = window.visitStore.getAllVisits();
+    const visit = visits.find((v) => v.id === visitId);
+    if (!visit) {
+      alert('신청 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    currentDetailVisit = visit;
+    const dayName = getDayOfWeekStr(visit.date);
+
+    // 상세 뷰 데이터 채우기
+    document.getElementById('detail-modal-soon-badge').textContent = visit.soonName;
+    document.getElementById('detail-view-soon-leader').textContent = `${visit.soonName} (${visit.leaderName} 순장)`;
+    document.getElementById('detail-view-datetime').textContent = `${visit.date} (${dayName}요일) ${visit.startTime} ~ ${visit.endTime}`;
+    document.getElementById('detail-view-place').textContent = visit.place;
+    document.getElementById('detail-view-attendees').textContent = visit.attendees ? `${visit.attendees}명` : '미기재';
+    document.getElementById('detail-view-prayer').textContent = visit.prayerTopic || '등록된 기도제목이 없습니다.';
+
+    // 모드 초기화 (보기 모드로)
+    detailViewMode.classList.remove('hidden');
+    detailEditMode.classList.add('hidden');
+    editConflictAlert.classList.add('hidden');
+    visitDetailModal.classList.remove('hidden');
+  }
+
+  // 상세 모달 닫기
+  if (btnCloseDetailModal) {
+    btnCloseDetailModal.addEventListener('click', () => {
+      visitDetailModal.classList.add('hidden');
+    });
+  }
+
+  // 모달 바깥 배경 클릭 시 닫기
+  if (visitDetailModal) {
+    visitDetailModal.addEventListener('click', (e) => {
+      if (e.target === visitDetailModal) {
+        visitDetailModal.classList.add('hidden');
+      }
+    });
+  }
+
+  // 카카오톡 공유 문구 복사
+  if (btnDetailCopyShare) {
+    btnDetailCopyShare.addEventListener('click', () => {
+      if (!currentDetailVisit) return;
+      const v = currentDetailVisit;
+      const dayName = getDayOfWeekStr(v.date);
+      const text = `🕊️ [목사님 순심방 확정 안내]\n• 대상: ${v.soonName} (${v.leaderName} 순장)\n• 일시: ${v.date} (${dayName}) ${v.startTime} ~ ${v.endTime}\n• 장소: ${v.place}\n${v.attendees ? `• 예상인원: ${v.attendees}명\n` : ''}${v.prayerTopic ? `• 기도제목: ${v.prayerTopic}\n` : ''}\n은혜롭고 따뜻한 심방 시간이 되기를 기도합니다!`;
+
+      navigator.clipboard.writeText(text).then(() => {
+        alert('카카오톡 공유용 안내 문구가 복사되었습니다!\n순원 단톡방에 붙여넣어 공유하세요.');
+      });
+    });
+  }
+
+  // 수정 모드로 전환
+  if (btnDetailSwitchEdit) {
+    btnDetailSwitchEdit.addEventListener('click', () => {
+      if (!currentDetailVisit) return;
+      const v = currentDetailVisit;
+
+      // 폼 필드 채우기
+      editLeaderName.value = v.leaderName;
+      editVisitDate.value = v.date;
+      editStartTime.value = v.startTime;
+      editEndTime.value = v.endTime;
+      editVisitPlace.value = v.place;
+      editAttendeesCount.value = v.attendees || '';
+      editPrayerTopic.value = v.prayerTopic || '';
+
+      detailViewMode.classList.add('hidden');
+      detailEditMode.classList.remove('hidden');
+      validateEditConflict();
+    });
+  }
+
+  // 수정 취소
+  if (btnCancelEdit) {
+    btnCancelEdit.addEventListener('click', () => {
+      detailEditMode.classList.add('hidden');
+      detailViewMode.classList.remove('hidden');
+    });
+  }
+
+  // 수정 중 시간 충돌 검사
+  function validateEditConflict() {
+    if (!currentDetailVisit) return true;
+
+    const date = editVisitDate.value;
+    const startTime = editStartTime.value;
+    const endTime = editEndTime.value;
+
+    const timeCheck = window.visitStore.checkTimeConflict(date, startTime, endTime, currentDetailVisit.id);
+
+    if (timeCheck.hasConflict) {
+      editConflictAlert.classList.remove('hidden');
+      editConflictAlert.innerHTML = `
+        <div class="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 flex items-start gap-1.5">
+          <span class="font-bold shrink-0">⚠️ 시간 중복:</span>
+          <span>${timeCheck.reason} 다른 시간대를 선택해주세요.</span>
+        </div>
+      `;
+      btnSaveEdit.disabled = true;
+      btnSaveEdit.classList.add('opacity-50', 'cursor-not-allowed');
+      return false;
+    } else {
+      editConflictAlert.classList.add('hidden');
+      btnSaveEdit.disabled = false;
+      btnSaveEdit.classList.remove('opacity-50', 'cursor-not-allowed');
+      return true;
+    }
+  }
+
+  [editVisitDate, editStartTime, editEndTime].forEach((input) => {
+    if (input) {
+      input.addEventListener('change', validateEditConflict);
+    }
+  });
+
+  // 수정 폼 제출 (저장)
+  if (detailEditForm) {
+    detailEditForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!currentDetailVisit) return;
+
+      if (!validateEditConflict()) {
+        alert('시간 중복이 있습니다. 시간을 다시 확인해주세요.');
+        return;
+      }
+
+      const updateData = {
+        leaderName: editLeaderName.value.trim(),
+        date: editVisitDate.value,
+        startTime: editStartTime.value,
+        endTime: editEndTime.value,
+        place: editVisitPlace.value.trim(),
+        attendees: editAttendeesCount.value ? Number(editAttendeesCount.value) : 0,
+        prayerTopic: editPrayerTopic.value.trim()
+      };
+
+      btnSaveEdit.disabled = true;
+      btnSaveEdit.textContent = '수정 저장 중...';
+
+      try {
+        const res = await window.cloudSync.updateVisit(currentDetailVisit.id, updateData);
+        if (res && res.success) {
+          alert(`[${currentDetailVisit.soonName}] 심방 일정이 성공적으로 수정되었습니다!`);
+          visitDetailModal.classList.add('hidden');
+        } else {
+          alert('수정 저장에 실패했습니다. 다시 시도해주세요.');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('오류가 발생했습니다: ' + err.message);
+      } finally {
+        btnSaveEdit.disabled = false;
+        btnSaveEdit.textContent = '수정 완료 저장';
+      }
+    });
+  }
+
+  // 삭제 / 취소
+  if (btnDetailDelete) {
+    btnDetailDelete.addEventListener('click', async () => {
+      if (!currentDetailVisit) return;
+      const soonName = currentDetailVisit.soonName;
+
+      if (confirm(`정말로 [${soonName}]의 순심방 일정을 취소/삭제하시겠습니까?\n취소하시면 다른 순이 해당 시간대를 신청할 수 있게 됩니다.`)) {
+        try {
+          const res = await window.cloudSync.deleteVisit(currentDetailVisit.id);
+          if (res && res.success) {
+            alert(`[${soonName}] 심방 일정이 취소되었습니다.`);
+            visitDetailModal.classList.add('hidden');
+          } else {
+            alert('삭제에 실패했습니다. 다시 시도해주세요.');
+          }
+        } catch (err) {
+          console.error(err);
+          alert('오류 발생: ' + err.message);
+        }
+      }
+    });
+  }
+
+  // 12. 전체 화면 클릭 이벤트 위임 (카드 클릭 시 상세 모달 열기)
+  document.addEventListener('click', (e) => {
+    const card = e.target.closest('.card-view-detail');
+    if (card) {
+      // 퀵 신청 버튼이나 삭제 버튼 클릭이 아닌 경우만 상세 모달 열기
+      if (!e.target.closest('.btn-quick-apply-soon') && !e.target.closest('.btn-delete-visit')) {
+        const visitId = card.getAttribute('data-visit-id');
+        if (visitId) {
+          openVisitDetailModal(visitId);
+        }
+      }
+    }
+  });
+
+  // 탭 네비게이션 클릭 이벤트
   tabBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
       const tab = btn.getAttribute('data-tab');

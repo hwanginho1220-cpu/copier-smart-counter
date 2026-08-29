@@ -154,7 +154,8 @@ class VisitCalendar {
               .slice(0, 2)
               .map(
                 (v) => `
-              <div class="truncate text-[10px] sm:text-xs py-0.5 px-1.5 rounded font-medium bg-indigo-50 text-indigo-700 border border-indigo-200/60 flex items-center gap-1 shadow-2xs">
+              <div class="card-view-detail truncate text-[10px] sm:text-xs py-0.5 px-1.5 rounded font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900 border border-indigo-200/60 flex items-center gap-1 shadow-2xs cursor-pointer transition"
+                   data-visit-id="${v.id}">
                 <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
                 <span class="font-bold shrink-0">${v.startTime}</span>
                 <span class="truncate">${v.soonName}</span>
