@@ -139,11 +139,19 @@ document.addEventListener('DOMContentLoaded', () => {
       if (soonCheck.isDuplicate) {
         soonConflictAlert.classList.remove('hidden');
         soonConflictAlert.innerHTML = `
-          <div class="flex items-start gap-2 text-amber-800">
+          <div class="flex items-start gap-2.5 text-amber-900">
             <svg class="w-5 h-5 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-            <div>
-              <span class="font-bold">[중복 신청 주의]</span> ${soonCheck.reason}<br>
-              <span class="text-xs text-amber-700">이미 신청된 일정이 있습니다. 일정 변경이 필요하시면 아래 관리자 문의 또는 목사님께 말씀해주세요.</span>
+            <div class="w-full">
+              <span class="font-extrabold text-sm">[이미 신청 완료된 순입니다]</span><br>
+              <span class="text-xs text-amber-800">${soonCheck.reason}</span>
+              <div class="mt-2.5 pt-2 border-t border-amber-200/80 flex flex-wrap gap-2">
+                <button type="button" class="btn-conflict-edit px-3 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 transition flex items-center gap-1 shadow-2xs cursor-pointer" data-visit-id="${soonCheck.existing.id}">
+                  <span>✏️</span> 일정 수정하기
+                </button>
+                <button type="button" class="btn-conflict-delete px-3 py-1.5 rounded-xl bg-rose-500 text-white font-bold text-xs hover:bg-rose-600 transition flex items-center gap-1 shadow-2xs cursor-pointer" data-visit-id="${soonCheck.existing.id}" data-soon="${soonName}">
+                  <span>🗑️</span> 신청 취소(삭제)
+                </button>
+              </div>
             </div>
           </div>
         `;
@@ -995,67 +1003,89 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 수정 폼 제출 (저장)
-  if (detailEditForm) {
-    detailEditForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (!currentDetailVisit) return;
+  // 수정 폼 제출 (저장) 함수
+  async function executeSaveEdit(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!currentDetailVisit) return;
 
-      if (!validateEditConflict()) {
-        alert('시간 중복이 있습니다. 시간을 다시 확인해주세요.');
-        return;
-      }
+    if (!validateEditConflict()) {
+      alert('시간 중복이 있습니다. 시간을 다시 확인해주세요.');
+      return;
+    }
 
-      const soonName = currentDetailVisit.soonName;
-      const targetId = currentDetailVisit.id;
+    const leaderNameVal = editLeaderName.value.trim();
+    const dateVal = editVisitDate.value;
+    const startTimeVal = editStartTime.value;
+    const endTimeVal = editEndTime.value;
+    const placeVal = editVisitPlace.value.trim();
 
-      const updateData = {
-        leaderName: editLeaderName.value.trim(),
-        date: editVisitDate.value,
-        startTime: editStartTime.value,
-        endTime: editEndTime.value,
-        place: editVisitPlace.value.trim(),
-        attendees: editAttendeesCount.value ? Number(editAttendeesCount.value) : 0,
-        prayerTopic: editPrayerTopic.value.trim()
-      };
+    if (!leaderNameVal || !dateVal || !startTimeVal || !endTimeVal || !placeVal) {
+      alert('필수 입력 항목(순장명, 날짜, 시작/종료시간, 장소)을 모두 입력해주세요.');
+      return;
+    }
 
-      btnSaveEdit.disabled = true;
-      btnSaveEdit.textContent = '수정 저장 중...';
+    const soonName = currentDetailVisit.soonName;
+    const targetId = currentDetailVisit.id;
 
-      try {
-        const res = await window.cloudSync.updateVisit(targetId, updateData);
-        if (res && res.success) {
-          alert(`[${soonName}] 심방 일정이 성공적으로 수정되었습니다!`);
-          visitDetailModal.classList.add('hidden');
-          currentDetailVisit = null;
+    const updateData = {
+      leaderName: leaderNameVal,
+      date: dateVal,
+      startTime: startTimeVal,
+      endTime: endTimeVal,
+      place: placeVal,
+      attendees: editAttendeesCount.value ? Number(editAttendeesCount.value) : 0,
+      prayerTopic: editPrayerTopic.value.trim()
+    };
 
-          if (calendar) {
-            calendar.render();
-            renderSelectedDateSchedule(calendar.selectedDateStr);
-          }
-          renderSoonStatusBoard();
-          if (adminAuthenticated) renderAdminTable();
+    btnSaveEdit.disabled = true;
+    btnSaveEdit.textContent = '수정 저장 중...';
 
-          const stats = window.visitStore.getSoonStats();
-          if (headerSummaryText) headerSummaryText.textContent = `총 ${stats.total}개 순 중 ${stats.completed}개 순 신청 완료 (${stats.rate}%)`;
-          if (headerProgressBar) headerProgressBar.style.width = `${stats.rate}%`;
-          validateConflict();
-        } else {
-          alert('수정 저장에 실패했습니다. 다시 시도해주세요.');
+    try {
+      const res = await window.cloudSync.updateVisit(targetId, updateData);
+      if (res && res.success) {
+        alert(`[${soonName}] 심방 일정이 성공적으로 수정되었습니다!`);
+        visitDetailModal.classList.add('hidden');
+        currentDetailVisit = null;
+
+        if (calendar) {
+          calendar.render();
+          renderSelectedDateSchedule(calendar.selectedDateStr);
         }
-      } catch (err) {
-        console.error(err);
-        alert('오류가 발생했습니다: ' + err.message);
-      } finally {
-        btnSaveEdit.disabled = false;
-        btnSaveEdit.textContent = '수정 완료 저장';
+        renderSoonStatusBoard();
+        if (adminAuthenticated) renderAdminTable();
+
+        const stats = window.visitStore.getSoonStats();
+        if (headerSummaryText) headerSummaryText.textContent = `총 ${stats.total}개 순 중 ${stats.completed}개 순 신청 완료 (${stats.rate}%)`;
+        if (headerProgressBar) headerProgressBar.style.width = `${stats.rate}%`;
+        validateConflict();
+      } else {
+        alert('수정 저장에 실패했습니다. 다시 시도해주세요.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('오류가 발생했습니다: ' + err.message);
+    } finally {
+      btnSaveEdit.disabled = false;
+      btnSaveEdit.textContent = '수정 완료 저장';
+    }
+  }
+
+  if (detailEditForm) {
+    detailEditForm.addEventListener('submit', executeSaveEdit);
+  }
+  if (btnSaveEdit) {
+    btnSaveEdit.addEventListener('click', (e) => {
+      // 폼 서브밋이 안 먹힐 경우를 대비한 직접 실행
+      if (e.target.type !== 'submit') {
+        executeSaveEdit(e);
       }
     });
   }
 
   // 삭제 / 취소
   if (btnDetailDelete) {
-    btnDetailDelete.addEventListener('click', async () => {
+    btnDetailDelete.addEventListener('click', async (e) => {
+      e.preventDefault();
       if (!currentDetailVisit) return;
       const soonName = currentDetailVisit.soonName;
       const targetId = currentDetailVisit.id;
@@ -1090,8 +1120,34 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 12. 전체 화면 클릭 이벤트 위임 (카드 클릭 시 상세 모달 열기)
+  // 12. 전체 화면 클릭 이벤트 위임
   document.addEventListener('click', (e) => {
+    // 1) 중복 알림창 안의 [기존 일정 수정하기] 버튼 클릭
+    const btnConflictEdit = e.target.closest('.btn-conflict-edit');
+    if (btnConflictEdit) {
+      const visitId = btnConflictEdit.getAttribute('data-visit-id');
+      if (visitId) {
+        openVisitDetailModal(visitId);
+        if (btnDetailSwitchEdit) btnDetailSwitchEdit.click();
+      }
+      return;
+    }
+
+    // 2) 중복 알림창 안의 [신청 취소(삭제)하기] 버튼 클릭
+    const btnConflictDelete = e.target.closest('.btn-conflict-delete');
+    if (btnConflictDelete) {
+      const visitId = btnConflictDelete.getAttribute('data-visit-id');
+      const soon = btnConflictDelete.getAttribute('data-soon') || '해당 순';
+      if (confirm(`정말로 [${soon}]의 기존 심방 신청을 취소/삭제하시겠습니까?`)) {
+        window.cloudSync.deleteVisit(visitId).then(() => {
+          alert(`[${soon}] 기존 신청이 취소되었습니다. 이제 새로운 시간으로 신청하실 수 있습니다.`);
+          validateConflict();
+        });
+      }
+      return;
+    }
+
+    // 3) 카드 클릭 시 상세 모달 열기
     const card = e.target.closest('.card-view-detail');
     if (card) {
       // 퀵 신청 버튼이나 삭제 버튼 클릭이 아닌 경우만 상세 모달 열기

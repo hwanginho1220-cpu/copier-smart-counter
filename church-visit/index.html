@@ -435,15 +435,15 @@
 
         <!-- 액션 버튼들 -->
         <div class="space-y-2 pt-2">
-          <button id="btn-detail-copy-share" class="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5 shadow-2xs">
+          <button type="button" id="btn-detail-copy-share" class="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5 shadow-2xs">
             <span>💬</span> 카카오톡 공유 문구 복사
           </button>
           
           <div class="grid grid-cols-2 gap-2">
-            <button id="btn-detail-switch-edit" class="py-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 font-bold text-xs sm:text-sm hover:bg-blue-100 transition flex items-center justify-center gap-1">
+            <button type="button" id="btn-detail-switch-edit" class="py-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 font-bold text-xs sm:text-sm hover:bg-blue-100 transition flex items-center justify-center gap-1">
               <span>✏️</span> 일정 수정하기
             </button>
-            <button id="btn-detail-delete" class="py-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 font-bold text-xs sm:text-sm hover:bg-rose-100 transition flex items-center justify-center gap-1">
+            <button type="button" id="btn-detail-delete" class="py-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 font-bold text-xs sm:text-sm hover:bg-rose-100 transition flex items-center justify-center gap-1">
               <span>🗑️</span> 신청 취소 / 삭제
             </button>
           </div>
@@ -473,11 +473,11 @@
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="font-bold text-slate-700 block mb-1">시작 시간 <span class="text-rose-500">*</span></label>
-              <input type="time" id="edit-start-time" required step="1800" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold">
+              <input type="time" id="edit-start-time" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold">
             </div>
             <div>
               <label class="font-bold text-slate-700 block mb-1">종료 시간 <span class="text-rose-500">*</span></label>
-              <input type="time" id="edit-end-time" required step="1800" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold">
+              <input type="time" id="edit-end-time" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold">
             </div>
           </div>
 
@@ -583,11 +583,11 @@
     </div>
   </div>
 
-  <!-- 스크립트 로드 순서: 파이어베이스설정 -> 서비스 -> 스토어 -> 캘린더 -> 앱 (캐시 방지 v=20260829_fix3) -->
-  <script src="js/firebase-config.js?v=20260829_fix3"></script>
-  <script src="js/firebase-service.js?v=20260829_fix3"></script>
-  <script src="js/store.js?v=20260829_fix3"></script>
-  <script src="js/calendar.js?v=20260829_fix3"></script>
-  <script src="js/app.js?v=20260829_fix3"></script>
+  <!-- 스크립트 로드 순서: 파이어베이스설정 -> 서비스 -> 스토어 -> 캘린더 -> 앱 (캐시 방지 v=20260829_fix4) -->
+  <script src="js/firebase-config.js?v=20260829_fix4"></script>
+  <script src="js/firebase-service.js?v=20260829_fix4"></script>
+  <script src="js/store.js?v=20260829_fix4"></script>
+  <script src="js/calendar.js?v=20260829_fix4"></script>
+  <script src="js/app.js?v=20260829_fix4"></script>
 </body>
 </html>
