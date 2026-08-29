@@ -5,6 +5,7 @@
 
 const STORAGE_KEY_VISITS = 'church_visit_data_v1';
 const STORAGE_KEY_FIREBASE_CONFIG = 'church_visit_firebase_config';
+const STORAGE_KEY_DELETED = 'church_visit_deleted_ids_v1';
 
 class CloudSyncService {
   constructor() {
@@ -13,7 +14,23 @@ class CloudSyncService {
     this.unsubscribe = null;
     this.listeners = [];
     this.visits = [];
+    this.deletedVisitIds = this.loadDeletedIds();
     this.init();
+  }
+
+  loadDeletedIds() {
+    try {
+      const str = localStorage.getItem(STORAGE_KEY_DELETED);
+      return new Set(str ? JSON.parse(str) : []);
+    } catch (e) {
+      return new Set();
+    }
+  }
+
+  saveDeletedIds() {
+    try {
+      localStorage.setItem(STORAGE_KEY_DELETED, JSON.stringify([...this.deletedVisitIds]));
+    } catch (e) {}
   }
 
   // 초기화: 저장된 Firebase 설정 확인 또는 파일 기본 설정 로드
@@ -89,6 +106,10 @@ class CloudSyncService {
         (snapshot) => {
           const cloudVisits = [];
           snapshot.forEach((doc) => {
+            if (this.deletedVisitIds && this.deletedVisitIds.has(doc.id)) {
+              // 이미 삭제 처리된 항목은 서버에 남아있어도 부활 차단
+              return;
+            }
             cloudVisits.push({ id: doc.id, ...doc.data() });
           });
           this.visits = cloudVisits;
@@ -164,22 +185,23 @@ class CloudSyncService {
       status: 'confirmed'
     };
 
+    // 새로 등록하는 항목은 묘비(삭제목록)에서 해제
+    if (this.deletedVisitIds && this.deletedVisitIds.has(id)) {
+      this.deletedVisitIds.delete(id);
+      this.saveDeletedIds();
+    }
+
     // 1. 로컬 메모리 및 LocalStorage에 즉시 반영 (0.01초 즉각 완료)
-    this.visits = this.visits.filter((v) => v.id !== id);
+    this.visits = this.visits.filter((v) => String(v.id) !== String(id));
     this.visits.push(newEntry);
     this.saveToLocalStorage(this.visits);
     this.notifyListeners({ type: 'NEW_VISIT', data: newEntry });
 
-    // 2. Firebase 클라우드가 켜져 있는 경우 백그라운드 비동기 저장 (3초 타임아웃 안전장치)
+    // 2. Firebase 클라우드가 켜져 있는 경우 백그라운드 비동기 저장
     if (this.isCloudEnabled && this.db) {
-      Promise.race([
-        this.db.collection('visits').doc(id).set(newEntry),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('클라우드 응답 지연')), 3000))
-      ]).then(() => {
-        console.log('클라우드 저장 성공:', id);
-      }).catch((err) => {
-        console.warn('클라우드 저장 지연(로컬에 안전하게 저장됨):', err.message);
-      });
+      this.db.collection('visits').doc(id).set(newEntry)
+        .then(() => console.log('클라우드 저장 성공:', id))
+        .catch((err) => console.warn('클라우드 저장 지연:', err.message));
     }
 
     return { success: true, id };
@@ -193,41 +215,41 @@ class CloudSyncService {
     };
 
     // 1. 로컬 메모리 및 LocalStorage 즉각 반영
-    const index = this.visits.findIndex((v) => v.id === id);
+    const index = this.visits.findIndex((v) => String(v.id) === String(id));
     if (index !== -1) {
       this.visits[index] = { ...this.visits[index], ...updated };
       this.saveToLocalStorage(this.visits);
       this.notifyListeners({ type: 'UPDATE_VISIT', data: this.visits[index] });
     }
 
-    // 2. Firebase 클라우드 백그라운드 비동기 업데이트 (3초 타임아웃)
+    // 2. Firebase 클라우드 백그라운드 비동기 업데이트
     if (this.isCloudEnabled && this.db) {
-      Promise.race([
-        this.db.collection('visits').doc(id).update(updated),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('클라우드 응답 지연')), 3000))
-      ]).catch((err) => {
-        console.warn('클라우드 수정 지연(로컬에 안전하게 반영됨):', err.message);
-      });
+      this.db.collection('visits').doc(id).update(updated)
+        .catch((err) => console.warn('클라우드 수정 지연:', err.message));
     }
 
     return { success: true };
   }
 
-  // 심방 신청 삭제/취소 (즉각 로컬 삭제 + 백그라운드 클라우드 삭제)
+  // 심방 신청 삭제/취소 (즉각 로컬 삭제 + 묘비 등록 + 백그라운드 클라우드 삭제)
   async deleteVisit(id) {
-    // 1. 로컬 메모리 및 LocalStorage에서 즉각 삭제 (0.01초 즉각 완료)
-    this.visits = this.visits.filter((v) => v.id !== id);
-    this.saveToLocalStorage(this.visits);
-    this.notifyListeners({ type: 'DELETE_VISIT', id });
+    const idStr = String(id);
 
-    // 2. Firebase 클라우드 백그라운드 비동기 삭제 (3초 타임아웃)
+    // 1. 묘비(Tombstone) 등록 -> 서버가 재전송해도 부활 차단!
+    if (!this.deletedVisitIds) this.deletedVisitIds = new Set();
+    this.deletedVisitIds.add(idStr);
+    this.saveDeletedIds();
+
+    // 2. 로컬 메모리 및 LocalStorage에서 즉각 삭제
+    this.visits = this.visits.filter((v) => String(v.id) !== idStr);
+    this.saveToLocalStorage(this.visits);
+    this.notifyListeners({ type: 'DELETE_VISIT', id: idStr });
+
+    // 3. Firebase 클라우드 문서 비동기 삭제
     if (this.isCloudEnabled && this.db) {
-      Promise.race([
-        this.db.collection('visits').doc(id).delete(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('클라우드 응답 지연')), 3000))
-      ]).catch((err) => {
-        console.warn('클라우드 삭제 지연(로컬에서 즉시 삭제됨):', err.message);
-      });
+      this.db.collection('visits').doc(idStr).delete()
+        .then(() => console.log('클라우드 문서 삭제 완료:', idStr))
+        .catch((err) => console.warn('클라우드 삭제 실패(로컬에서는 영구 삭제됨):', err.message));
     }
 
     return { success: true };

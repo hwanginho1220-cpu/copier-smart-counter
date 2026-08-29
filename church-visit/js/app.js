@@ -655,6 +655,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confirm(`정말로 [${soon}]의 심방 일정을 취소/삭제하시겠습니까?`)) {
           await window.cloudSync.deleteVisit(id);
           renderAdminTable();
+          if (calendar) {
+            calendar.render();
+            renderSelectedDateSchedule(calendar.selectedDateStr);
+          }
+          renderSoonStatusBoard();
+          const stats = window.visitStore.getSoonStats();
+          if (headerSummaryText) headerSummaryText.textContent = `총 ${stats.total}개 순 중 ${stats.completed}개 순 신청 완료 (${stats.rate}%)`;
+          if (headerProgressBar) headerProgressBar.style.width = `${stats.rate}%`;
+          validateConflict();
         }
       });
     });
@@ -1014,6 +1023,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (res && res.success) {
           alert(`[${currentDetailVisit.soonName}] 심방 일정이 성공적으로 수정되었습니다!`);
           visitDetailModal.classList.add('hidden');
+          currentDetailVisit = null;
+
+          if (calendar) {
+            calendar.render();
+            renderSelectedDateSchedule(calendar.selectedDateStr);
+          }
+          renderSoonStatusBoard();
+          if (adminAuthenticated) renderAdminTable();
+
+          const stats = window.visitStore.getSoonStats();
+          if (headerSummaryText) headerSummaryText.textContent = `총 ${stats.total}개 순 중 ${stats.completed}개 순 신청 완료 (${stats.rate}%)`;
+          if (headerProgressBar) headerProgressBar.style.width = `${stats.rate}%`;
+          validateConflict();
         } else {
           alert('수정 저장에 실패했습니다. 다시 시도해주세요.');
         }
@@ -1032,13 +1054,27 @@ document.addEventListener('DOMContentLoaded', () => {
     btnDetailDelete.addEventListener('click', async () => {
       if (!currentDetailVisit) return;
       const soonName = currentDetailVisit.soonName;
+      const targetId = currentDetailVisit.id;
 
       if (confirm(`정말로 [${soonName}]의 순심방 일정을 취소/삭제하시겠습니까?\n취소하시면 다른 순이 해당 시간대를 신청할 수 있게 됩니다.`)) {
         try {
-          const res = await window.cloudSync.deleteVisit(currentDetailVisit.id);
+          const res = await window.cloudSync.deleteVisit(targetId);
           if (res && res.success) {
             alert(`[${soonName}] 심방 일정이 취소되었습니다.`);
             visitDetailModal.classList.add('hidden');
+            currentDetailVisit = null;
+
+            if (calendar) {
+              calendar.render();
+              renderSelectedDateSchedule(calendar.selectedDateStr);
+            }
+            renderSoonStatusBoard();
+            if (adminAuthenticated) renderAdminTable();
+
+            const stats = window.visitStore.getSoonStats();
+            if (headerSummaryText) headerSummaryText.textContent = `총 ${stats.total}개 순 중 ${stats.completed}개 순 신청 완료 (${stats.rate}%)`;
+            if (headerProgressBar) headerProgressBar.style.width = `${stats.rate}%`;
+            validateConflict();
           } else {
             alert('삭제에 실패했습니다. 다시 시도해주세요.');
           }
