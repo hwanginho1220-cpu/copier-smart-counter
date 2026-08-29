@@ -209,22 +209,30 @@ class CloudSyncService {
 
   // 심방 신청 수정 (즉각 로컬 반영 + 백그라운드 클라우드 동기화)
   async updateVisit(id, updateData) {
+    const idStr = String(id);
     const updated = {
       ...updateData,
       updatedAt: new Date().toISOString()
     };
 
+    // 혹시 삭제 목록에 등록되어 있었다면 해제
+    if (this.deletedVisitIds && this.deletedVisitIds.has(idStr)) {
+      this.deletedVisitIds.delete(idStr);
+      this.saveDeletedIds();
+    }
+
     // 1. 로컬 메모리 및 LocalStorage 즉각 반영
-    const index = this.visits.findIndex((v) => String(v.id) === String(id));
+    const index = this.visits.findIndex((v) => String(v.id) === idStr);
     if (index !== -1) {
       this.visits[index] = { ...this.visits[index], ...updated };
       this.saveToLocalStorage(this.visits);
       this.notifyListeners({ type: 'UPDATE_VISIT', data: this.visits[index] });
     }
 
-    // 2. Firebase 클라우드 백그라운드 비동기 업데이트
+    // 2. Firebase 클라우드 백그라운드 비동기 업데이트 (set with merge로 문서 유무 무관 100% 성공)
     if (this.isCloudEnabled && this.db) {
-      this.db.collection('visits').doc(id).update(updated)
+      this.db.collection('visits').doc(idStr).set(updated, { merge: true })
+        .then(() => console.log('클라우드 수정 완료:', idStr))
         .catch((err) => console.warn('클라우드 수정 지연:', err.message));
     }
 

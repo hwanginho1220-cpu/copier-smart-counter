@@ -876,7 +876,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 상세 모달 열기
   function openVisitDetailModal(visitId) {
     const visits = window.visitStore.getAllVisits();
-    const visit = visits.find((v) => v.id === visitId);
+    const visit = visits.find((v) => String(v.id) === String(visitId));
     if (!visit) {
       alert('신청 정보를 찾을 수 없습니다.');
       return;
@@ -991,6 +991,7 @@ document.addEventListener('DOMContentLoaded', () => {
   [editVisitDate, editStartTime, editEndTime].forEach((input) => {
     if (input) {
       input.addEventListener('change', validateEditConflict);
+      input.addEventListener('input', validateEditConflict);
     }
   });
 
@@ -1004,6 +1005,9 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('시간 중복이 있습니다. 시간을 다시 확인해주세요.');
         return;
       }
+
+      const soonName = currentDetailVisit.soonName;
+      const targetId = currentDetailVisit.id;
 
       const updateData = {
         leaderName: editLeaderName.value.trim(),
@@ -1019,9 +1023,9 @@ document.addEventListener('DOMContentLoaded', () => {
       btnSaveEdit.textContent = '수정 저장 중...';
 
       try {
-        const res = await window.cloudSync.updateVisit(currentDetailVisit.id, updateData);
+        const res = await window.cloudSync.updateVisit(targetId, updateData);
         if (res && res.success) {
-          alert(`[${currentDetailVisit.soonName}] 심방 일정이 성공적으로 수정되었습니다!`);
+          alert(`[${soonName}] 심방 일정이 성공적으로 수정되었습니다!`);
           visitDetailModal.classList.add('hidden');
           currentDetailVisit = null;
 

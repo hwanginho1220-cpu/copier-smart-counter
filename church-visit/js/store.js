@@ -91,7 +91,7 @@ class VisitStore {
     const dayVisits = this.getVisitsByDate(date);
 
     for (const v of dayVisits) {
-      if (excludeId && v.id === excludeId) continue;
+      if (excludeId && String(v.id) === String(excludeId)) continue;
 
       const vStart = this.timeToMinutes(v.startTime);
       const vEnd = this.timeToMinutes(v.endTime);
@@ -121,7 +121,7 @@ class VisitStore {
 
     const trimmed = soonName.trim();
     const existing = this.getAllVisits().find(
-      (v) => v.soonName.trim() === trimmed && (!excludeId || v.id !== excludeId)
+      (v) => v.soonName.trim() === trimmed && (!excludeId || String(v.id) !== String(excludeId))
     );
 
     if (existing) {
