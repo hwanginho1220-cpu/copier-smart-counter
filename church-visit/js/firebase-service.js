@@ -106,11 +106,23 @@ class CloudSyncService {
         (snapshot) => {
           const cloudVisits = [];
           snapshot.forEach((doc) => {
-            if (this.deletedVisitIds && this.deletedVisitIds.has(doc.id)) {
-              // 이미 삭제 처리된 항목은 서버에 남아있어도 부활 차단
-              return;
+            const data = doc.data();
+            const docId = doc.id;
+            const fieldId = data.id ? String(data.id) : null;
+
+            // doc.id 또는 data.id 중 하나라도 삭제목록에 있으면 부활 차단!
+            if (this.deletedVisitIds) {
+              if (this.deletedVisitIds.has(docId) || (fieldId && this.deletedVisitIds.has(fieldId))) {
+                return;
+              }
             }
-            cloudVisits.push({ id: doc.id, ...doc.data() });
+
+            // doc.id를 고유 id로 강제 통일하여 Firestore 문서 삭제와 100% 일치
+            cloudVisits.push({
+              ...data,
+              id: docId,
+              rawFieldId: fieldId
+            });
           });
           this.visits = cloudVisits;
           this.saveToLocalStorage(this.visits);
@@ -243,21 +255,35 @@ class CloudSyncService {
   async deleteVisit(id) {
     const idStr = String(id);
 
-    // 1. 묘비(Tombstone) 등록 -> 서버가 재전송해도 부활 차단!
+    // 1. 현재 메모리에서 항목 찾기 (doc.id 또는 rawFieldId 일치)
+    const existing = this.visits.find((v) => String(v.id) === idStr || (v.rawFieldId && String(v.rawFieldId) === idStr));
+
+    // 2. 묘비(Tombstone) 등록 -> 서버가 재전송해도 부활 차단!
     if (!this.deletedVisitIds) this.deletedVisitIds = new Set();
     this.deletedVisitIds.add(idStr);
+    if (existing) {
+      this.deletedVisitIds.add(String(existing.id));
+      if (existing.rawFieldId) this.deletedVisitIds.add(String(existing.rawFieldId));
+    }
     this.saveDeletedIds();
 
-    // 2. 로컬 메모리 및 LocalStorage에서 즉각 삭제
-    this.visits = this.visits.filter((v) => String(v.id) !== idStr);
+    // 3. 로컬 메모리 및 LocalStorage에서 즉각 삭제
+    this.visits = this.visits.filter((v) => String(v.id) !== idStr && (!v.rawFieldId || String(v.rawFieldId) !== idStr));
     this.saveToLocalStorage(this.visits);
     this.notifyListeners({ type: 'DELETE_VISIT', id: idStr });
 
-    // 3. Firebase 클라우드 문서 비동기 삭제
+    // 4. Firebase 클라우드 문서 비동기 삭제 (doc.id 및 rawFieldId 둘 다 삭제)
     if (this.isCloudEnabled && this.db) {
       this.db.collection('visits').doc(idStr).delete()
         .then(() => console.log('클라우드 문서 삭제 완료:', idStr))
-        .catch((err) => console.warn('클라우드 삭제 실패(로컬에서는 영구 삭제됨):', err.message));
+        .catch((err) => console.warn('클라우드 삭제 지연:', err.message));
+
+      if (existing && existing.rawFieldId && String(existing.rawFieldId) !== idStr) {
+        this.db.collection('visits').doc(String(existing.rawFieldId)).delete().catch(() => {});
+      }
+      if (existing && existing.id && String(existing.id) !== idStr) {
+        this.db.collection('visits').doc(String(existing.id)).delete().catch(() => {});
+      }
     }
 
     return { success: true };
@@ -277,7 +303,7 @@ class CloudSyncService {
 
     const samples = [
       {
-        id: 'sample_1',
+        id: 'sample_v2_1_' + Date.now(),
         soonName: '여성1순',
         leaderName: '김철수',
         date: getDateStr(2),
@@ -290,7 +316,7 @@ class CloudSyncService {
         status: 'confirmed'
       },
       {
-        id: 'sample_2',
+        id: 'sample_v2_2_' + Date.now(),
         soonName: '직여3순',
         leaderName: '이영희',
         date: getDateStr(2),
@@ -303,7 +329,7 @@ class CloudSyncService {
         status: 'confirmed'
       },
       {
-        id: 'sample_3',
+        id: 'sample_v2_3_' + Date.now(),
         soonName: '남성2순',
         leaderName: '박민수',
         date: getDateStr(4),
@@ -316,7 +342,7 @@ class CloudSyncService {
         status: 'confirmed'
       },
       {
-        id: 'sample_4',
+        id: 'sample_v2_4_' + Date.now(),
         soonName: '여성7순',
         leaderName: '정다은',
         date: getDateStr(5),
@@ -333,6 +359,8 @@ class CloudSyncService {
     samples.forEach((sample) => {
       this.addVisit(sample);
     });
+
+    this.notifyListeners({ type: 'SEED_COMPLETE' });
   }
 }
 
