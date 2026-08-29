@@ -74,8 +74,8 @@
     <!-- 전체 신청률 프로그레스 바 -->
     <div class="max-w-5xl mx-auto px-4 sm:px-6 pb-2.5 pt-1">
       <div class="flex items-center justify-between text-xs text-slate-600 mb-1 font-medium">
-        <span id="header-summary-text">총 30개 순 중 0개 순 신청 완료 (0%)</span>
-        <span class="text-slate-400">목표 30개 순</span>
+        <span id="header-summary-text">총 31개 순 중 0개 순 신청 완료 (0%)</span>
+        <span class="text-slate-400">목표 31개 순 (여성11·직여12·남성8)</span>
       </div>
       <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
         <div id="header-progress-bar" class="bg-blue-600 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
@@ -91,7 +91,7 @@
         <span>📅</span> 캘린더 현황 (미리보기)
       </button>
       <button class="tab-nav-btn py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-1.5 shrink-0 transition" data-tab="status">
-        <span>📊</span> 30개 순 전체현황
+        <span>📊</span> 순별 전체현황 (31개 순)
       </button>
       <button class="tab-nav-btn py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-1.5 shrink-0 transition" data-tab="admin">
         <span>🔒</span> 목사님 관리자
@@ -275,12 +275,15 @@
 
       <!-- 1순 ~ 30순 카드 그리드 -->
       <div class="bg-white rounded-3xl p-5 sm:p-7 border border-slate-200 shadow-sm">
-        <div class="flex items-center justify-between mb-5">
-          <h3 class="text-lg font-black text-slate-800">30개 순별 심방 현황판</h3>
-          <span class="text-xs text-slate-500">미신청 순을 누르면 바로 신청할 수 있습니다</span>
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-lg font-black text-slate-800">순별 심방 신청 현황판</h3>
+            <p class="text-xs text-slate-500 mt-0.5">여성순(1~11순) · 직여순(1~12순) · 남성순(1~8순) 총 31개 순</p>
+          </div>
+          <span class="text-xs text-slate-400 hidden sm:inline">미신청 순의 [신청하기]를 누르면 바로 작성 가능</span>
         </div>
-        <div id="soon-status-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
-          <!-- JS 동적 렌더링 -->
+        <div id="soon-status-grid" class="space-y-4">
+          <!-- JS 동적 렌더링 (여성/직여/남성 그룹별) -->
         </div>
       </div>
     </section>

@@ -250,7 +250,7 @@ class CloudSyncService {
     const samples = [
       {
         id: 'sample_1',
-        soonName: '1순',
+        soonName: '여성1순',
         leaderName: '김철수',
         date: getDateStr(2),
         startTime: '10:00',
@@ -263,7 +263,7 @@ class CloudSyncService {
       },
       {
         id: 'sample_2',
-        soonName: '3순',
+        soonName: '직여3순',
         leaderName: '이영희',
         date: getDateStr(2),
         startTime: '14:00',
@@ -276,7 +276,7 @@ class CloudSyncService {
       },
       {
         id: 'sample_3',
-        soonName: '7순',
+        soonName: '남성2순',
         leaderName: '박민수',
         date: getDateStr(4),
         startTime: '19:00',
@@ -289,7 +289,7 @@ class CloudSyncService {
       },
       {
         id: 'sample_4',
-        soonName: '12순',
+        soonName: '여성7순',
         leaderName: '정다은',
         date: getDateStr(5),
         startTime: '11:00',

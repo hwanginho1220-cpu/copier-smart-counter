@@ -2,16 +2,40 @@
  * 순심방 비즈니스 로직 및 중복 방지 검증 모듈
  */
 
-const DEFAULT_SOONS = Array.from({ length: 30 }, (_, i) => `${i + 1}순`);
+const SOON_GROUPS = [
+  {
+    category: '여성순',
+    items: Array.from({ length: 11 }, (_, i) => `여성${i + 1}순`)
+  },
+  {
+    category: '직여순 (직장여성)',
+    items: Array.from({ length: 12 }, (_, i) => `직여${i + 1}순`)
+  },
+  {
+    category: '남성순',
+    items: Array.from({ length: 8 }, (_, i) => `남성${i + 1}순`)
+  }
+];
+
+const DEFAULT_SOONS = [
+  ...SOON_GROUPS[0].items,
+  ...SOON_GROUPS[1].items,
+  ...SOON_GROUPS[2].items
+];
 
 class VisitStore {
   constructor(syncService) {
     this.sync = syncService;
   }
 
-  // 30개 기본 순 목록 가져오기
+  // 전체 순 목록 가져오기 (총 31개)
   getDefaultSoons() {
     return DEFAULT_SOONS;
+  }
+
+  // 그룹별 순 목록 가져오기
+  getSoonGroups() {
+    return SOON_GROUPS;
   }
 
   // 전체 신청 내역 (시간순 정렬)

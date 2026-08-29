@@ -41,17 +41,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const headerProgressBar = document.getElementById('header-progress-bar');
 
   // ==========================================
-  // 1. 초기화 및 순 드롭다운 세팅
+  // 1. 초기화 및 순 드롭다운 세팅 (여성순, 직여순, 남성순)
   // ==========================================
   function initSoonSelectOptions() {
-    const defaultSoons = window.visitStore.getDefaultSoons();
-    soonSelect.innerHTML = '<option value="">-- 순을 선택하세요 (1순~30순) --</option>';
+    const soonGroups = window.visitStore.getSoonGroups();
+    soonSelect.innerHTML = '<option value="">-- 순을 선택하세요 (여성/직여/남성) --</option>';
 
-    defaultSoons.forEach((soon) => {
-      const opt = document.createElement('option');
-      opt.value = soon;
-      opt.textContent = soon;
-      soonSelect.appendChild(opt);
+    soonGroups.forEach((group) => {
+      const optGroup = document.createElement('optgroup');
+      optGroup.label = group.category;
+      group.items.forEach((soon) => {
+        const opt = document.createElement('option');
+        opt.value = soon;
+        opt.textContent = soon;
+        optGroup.appendChild(opt);
+      });
+      soonSelect.appendChild(optGroup);
     });
 
     const customOpt = document.createElement('option');
@@ -436,13 +441,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ==========================================
-  // 6. 30개 순 전체 현황판 렌더링
+  // 6. 순 전체 현황판 렌더링 (여성순, 직여순, 남성순 그룹화)
   // ==========================================
   function renderSoonStatusBoard() {
     const container = document.getElementById('soon-status-grid');
     if (!container) return;
 
     const stats = window.visitStore.getSoonStats();
+    const soonGroups = window.visitStore.getSoonGroups();
+    const allVisits = window.visitStore.getAllVisits();
+    const visitMap = new Map();
+    allVisits.forEach((v) => visitMap.set(v.soonName.trim(), v));
 
     // 상단 진행상황 카드 갱신
     document.getElementById('status-completed-count').textContent = `${stats.completed}개 순`;
@@ -450,47 +459,83 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('status-rate-text').textContent = `${stats.rate}%`;
     document.getElementById('status-progress-bar').style.width = `${stats.rate}%`;
 
-    let html = '';
-    stats.soonList.forEach((item) => {
-      if (item.isRegistered) {
-        const v = item.visit;
-        html += `
-          <div class="p-3.5 sm:p-4 rounded-2xl bg-white border border-emerald-200/80 shadow-2xs relative overflow-hidden flex flex-col justify-between">
-            <div class="absolute top-0 right-0 w-12 h-12 bg-emerald-50 rounded-bl-3xl -mr-2 -mt-2 flex items-start justify-end p-2">
-              <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+    const renderCard = (soonName) => {
+      const v = visitMap.get(soonName);
+      if (v) {
+        return `
+          <div class="p-3 sm:p-3.5 rounded-2xl bg-white border border-emerald-200/90 shadow-2xs relative overflow-hidden flex flex-col justify-between">
+            <div class="absolute top-0 right-0 w-10 h-10 bg-emerald-50 rounded-bl-2xl -mr-1 -mt-1 flex items-start justify-end p-1.5">
+              <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
             </div>
             <div>
-              <div class="flex items-center gap-2">
-                <span class="text-base font-extrabold text-slate-800">${item.name}</span>
-                <span class="text-xs font-medium text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">완료</span>
+              <div class="flex items-center gap-1.5">
+                <span class="text-sm sm:text-base font-extrabold text-slate-800">${soonName}</span>
+                <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-1.5 py-0.5 rounded-full">완료</span>
               </div>
-              <p class="text-xs text-slate-500 mt-1 font-medium">${v.leaderName} 순장</p>
-              <div class="mt-2.5 space-y-1 text-xs text-slate-600">
-                <div class="font-bold text-blue-700">${v.date}</div>
-                <div>${v.startTime} ~ ${v.endTime}</div>
-                <div class="truncate text-slate-500">${v.place}</div>
+              <p class="text-xs text-slate-500 mt-0.5 font-medium">${v.leaderName} 순장</p>
+              <div class="mt-2 space-y-0.5 text-xs text-slate-600">
+                <div class="font-bold text-blue-700 text-[11px]">${v.date}</div>
+                <div class="text-[11px]">${v.startTime} ~ ${v.endTime}</div>
+                <div class="truncate text-slate-500 text-[11px]">${v.place}</div>
               </div>
             </div>
           </div>
         `;
       } else {
-        html += `
-          <div class="p-3.5 sm:p-4 rounded-2xl bg-slate-50/70 border border-dashed border-slate-300 flex flex-col justify-between hover:bg-white hover:border-blue-400 transition">
+        return `
+          <div class="p-3 sm:p-3.5 rounded-2xl bg-slate-50/70 border border-dashed border-slate-300 flex flex-col justify-between hover:bg-white hover:border-blue-400 transition">
             <div>
               <div class="flex items-center justify-between">
-                <span class="text-base font-bold text-slate-500">${item.name}</span>
-                <span class="text-[11px] font-medium text-slate-400 bg-slate-200/60 px-2 py-0.5 rounded-full">미신청</span>
+                <span class="text-sm sm:text-base font-bold text-slate-500">${soonName}</span>
+                <span class="text-[10px] font-medium text-slate-400 bg-slate-200/60 px-1.5 py-0.5 rounded-full">미신청</span>
               </div>
-              <p class="text-xs text-slate-400 mt-1">심방 일정 미정</p>
+              <p class="text-xs text-slate-400 mt-0.5">심방 미정</p>
             </div>
-            <button class="btn-quick-apply-soon mt-4 w-full py-1.5 text-xs font-semibold rounded-xl bg-white border border-slate-200 text-blue-600 hover:bg-blue-50 transition"
-                    data-soon="${item.name}">
+            <button class="btn-quick-apply-soon mt-3 w-full py-1 text-xs font-semibold rounded-xl bg-white border border-slate-200 text-blue-600 hover:bg-blue-50 transition"
+                    data-soon="${soonName}">
               신청하기
             </button>
           </div>
         `;
       }
+    };
+
+    let html = '';
+    soonGroups.forEach((group) => {
+      const groupCount = group.items.length;
+      const groupDoneCount = group.items.filter((item) => visitMap.has(item)).length;
+
+      html += `
+        <div class="col-span-full mt-3 first:mt-0 pt-3 first:pt-0 border-t first:border-0 border-slate-100">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="font-extrabold text-slate-800 text-sm sm:text-base flex items-center gap-2">
+              <span>${group.category}</span>
+              <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
+                ${groupDoneCount} / ${groupCount} 완료
+              </span>
+            </h4>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-3">
+            ${group.items.map((soon) => renderCard(soon)).join('')}
+          </div>
+        </div>
+      `;
     });
+
+    // 기타(직접 입력한 순)이 있는 경우
+    const extraSoons = allVisits.filter((v) => !window.visitStore.getDefaultSoons().includes(v.soonName.trim()));
+    if (extraSoons.length > 0) {
+      html += `
+        <div class="col-span-full mt-4 pt-3 border-t border-slate-100">
+          <div class="mb-3 font-extrabold text-slate-800 text-sm flex items-center gap-2">
+            <span>기타 순</span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-3">
+            ${extraSoons.map((v) => renderCard(v.soonName)).join('')}
+          </div>
+        </div>
+      `;
+    }
 
     container.innerHTML = html;
 
