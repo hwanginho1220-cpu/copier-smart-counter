@@ -2396,27 +2396,64 @@ function handleInspectionCustomerChange() {
  */
 function updatePreviousCountersInfo(overrideDeviceId = null, excludeId = null) {
     const infoBox = document.getElementById('previousCountersInfo');
-    const deviceId = overrideDeviceId || document.getElementById('inspectionDeviceSelect').value;
+    const deviceId = overrideDeviceId || document.getElementById('inspectionDeviceSelect')?.value;
+    const customerId = document.getElementById('inspectionCustomerSelect')?.value || null;
+    const currentId = excludeId || document.getElementById('inspectionId')?.value || null;
     
-    if (!deviceId) {
+    if (!deviceId && !customerId) {
         infoBox.style.display = 'none';
         return;
     }
 
-    const dateVal = document.getElementById('inspectionDate').value;
+    const dateVal = document.getElementById('inspectionDate')?.value;
     
     // Find the closest previous inspection
-    const prev = getPreviousInspection(deviceId, dateVal || getLocalDateString(), excludeId);
+    const prev = getPreviousInspection(deviceId, dateVal || getLocalDateString(), currentId, customerId);
 
     if (prev) {
         infoBox.style.display = 'block';
+
+        let notesHtml = '';
+        if (prev.notes && prev.notes.trim()) {
+            notesHtml = `
+                <div style="margin-top: 0.4rem; padding-top: 0.35rem; border-top: 1px dashed var(--border-color); font-size: 0.82rem; line-height: 1.4;">
+                    <span style="color: var(--warning); font-weight: 600;"><i class="fa-solid fa-note-sticky"></i> 직전 특이사항/메모:</span>
+                    <span style="color: var(--text-primary); margin-left: 0.25rem;">${prev.notes.trim()}</span>
+                </div>
+            `;
+        } else {
+            notesHtml = `
+                <div style="margin-top: 0.4rem; padding-top: 0.35rem; border-top: 1px dashed var(--border-color); font-size: 0.8rem; color: var(--text-muted);">
+                    <span><i class="fa-solid fa-note-sticky" style="opacity: 0.5;"></i> 직전 특이사항/메모:</span> <span style="font-style: italic;">없음</span>
+                </div>
+            `;
+        }
+
+        let partsHtml = '';
+        if (prev.parts && Array.isArray(prev.parts) && prev.parts.length > 0) {
+            partsHtml = `
+                <div style="margin-top: 0.3rem; font-size: 0.8rem; display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center;">
+                    <span style="color: #60a5fa; font-weight: 500;"><i class="fa-solid fa-screwdriver-wrench"></i> 직전 교체부품:</span>
+                    ${prev.parts.map(p => `
+                        <span class="badge badge-info" style="font-size: 0.72rem; padding: 0.1rem 0.35rem; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">
+                            ${p.name} (${p.quantity}개)
+                        </span>
+                    `).join('')}
+                </div>
+            `;
+        }
+
         infoBox.innerHTML = `
-            <div style="font-weight: 600; margin-bottom: 0.15rem; color: var(--primary);">
-                <i class="fa-solid fa-clock-rotate-left"></i> 직전 점검 내역 (${prev.date})
+            <div style="font-weight: 600; margin-bottom: 0.3rem; color: var(--primary); display: flex; justify-content: space-between; align-items: center;">
+                <span><i class="fa-solid fa-clock-rotate-left"></i> 직전 점검 내역 (${prev.date})</span>
             </div>
-            <div>흑백 카운터: <span style="font-weight:600; color:var(--text-primary);">${Number(prev.bwCounter || 0).toLocaleString()}</span></div>
-            <div>컬러 카운터: <span style="font-weight:600; color:var(--text-primary);">${Number(prev.colorCounter || 0).toLocaleString()}</span></div>
-            <div style="font-size:0.75rem; color:var(--text-muted); margin-top: 0.25rem;">* 입력하시는 카운터 값과 비교하여 사용량을 자동 계산합니다.</div>
+            <div style="display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.15rem; font-size: 0.85rem;">
+                <div>흑백 카운터: <span style="font-weight:600; color:var(--text-primary);">${Number(prev.bwCounter || 0).toLocaleString()}</span></div>
+                <div>컬러 카운터: <span style="font-weight:600; color:#c084fc;">${Number(prev.colorCounter || 0).toLocaleString()}</span></div>
+            </div>
+            ${notesHtml}
+            ${partsHtml}
+            <div style="font-size:0.75rem; color:var(--text-muted); margin-top: 0.35rem;">* 입력하시는 카운터 값과 비교하여 사용량을 자동 계산합니다.</div>
         `;
         // Pre-populate input fields as suggestion (so user doesn't start from 0 if they don't want to)
         document.getElementById('bwCounter').placeholder = prev.bwCounter !== undefined ? prev.bwCounter : '0';
