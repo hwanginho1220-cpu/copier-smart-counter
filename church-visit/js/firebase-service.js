@@ -8,6 +8,7 @@ const STORAGE_KEY_FIREBASE_CONFIG = 'church_visit_firebase_config';
 const STORAGE_KEY_DELETED = 'church_visit_deleted_ids_v1';
 const STORAGE_KEY_SCHEDULE_MAP = 'church_visit_schedule_map_v2';
 const STORAGE_KEY_RESTRICT_MODE = 'church_visit_restrict_mode_v2';
+const EXCLUDED_SOONS = ['여성1순', '남성2순'];
 
 class CloudSyncService {
   constructor() {
@@ -252,6 +253,14 @@ class CloudSyncService {
               }
             }
 
+            const soonName = data.soonName ? String(data.soonName).trim() : '';
+            if (EXCLUDED_SOONS.includes(soonName)) {
+              if (this.isCloudEnabled && this.db && docId) {
+                this.db.collection('visits').doc(docId).delete().catch(() => {});
+              }
+              return;
+            }
+
             cloudVisits.push({
               ...data,
               id: docId,
@@ -303,12 +312,18 @@ class CloudSyncService {
     }
   }
 
-  // 로컬 스토리지 데이터 로드
+  // 로컬 스토리지 데이터 로드 (제외된 순 필터링 및 정리)
   loadFromLocalStorage() {
     try {
       const dataStr = localStorage.getItem(STORAGE_KEY_VISITS);
       if (dataStr) {
-        this.visits = JSON.parse(dataStr);
+        const raw = JSON.parse(dataStr);
+        this.visits = Array.isArray(raw)
+          ? raw.filter((v) => !EXCLUDED_SOONS.includes(v.soonName ? String(v.soonName).trim() : ''))
+          : [];
+        if (Array.isArray(raw) && raw.length !== this.visits.length) {
+          this.saveToLocalStorage(this.visits);
+        }
       } else {
         this.visits = [];
       }
@@ -451,7 +466,7 @@ class CloudSyncService {
     const samples = [
       {
         id: 'sample_v2_1_' + Date.now(),
-        soonName: '여성1순',
+        soonName: '여성2순',
         leaderName: '김철수',
         date: '2026-09-16',
         startTime: '10:00',
@@ -477,7 +492,7 @@ class CloudSyncService {
       },
       {
         id: 'sample_v2_3_' + Date.now(),
-        soonName: '남성2순',
+        soonName: '남성1순',
         leaderName: '박민수',
         date: '2026-09-29',
         startTime: '19:00',

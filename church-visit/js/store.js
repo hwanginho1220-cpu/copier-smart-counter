@@ -6,17 +6,22 @@
 const SOON_GROUPS = [
   {
     category: '여성순',
-    items: Array.from({ length: 11 }, (_, i) => `여성${i + 1}순`)
+    items: Array.from({ length: 10 }, (_, i) => `여성${i + 2}순`) // 여성2순 ~ 여성11순 (여성1순 제외)
   },
   {
     category: '직여순 (직장여성)',
-    items: Array.from({ length: 12 }, (_, i) => `직여${i + 1}순`)
+    items: Array.from({ length: 12 }, (_, i) => `직여${i + 1}순`) // 직여1순 ~ 직여12순
   },
   {
     category: '남성순',
-    items: Array.from({ length: 8 }, (_, i) => `남성${i + 1}순`)
+    items: [1, 3, 4, 5, 6, 7, 8].map((n) => `남성${n}순`) // 남성1순, 남성3순 ~ 남성8순 (남성2순 제외)
   }
 ];
+
+const EXCLUDED_SOONS = ['여성1순', '남성2순'];
+if (typeof window !== 'undefined') {
+  window.EXCLUDED_SOONS = EXCLUDED_SOONS;
+}
 
 const DEFAULT_SOONS = [
   ...SOON_GROUPS[0].items,
@@ -113,15 +118,17 @@ class VisitStore {
     return SOON_GROUPS;
   }
 
-  // 전체 신청 내역 (시간순 정렬)
+  // 전체 신청 내역 (시간순 정렬, 제외된 순 필터링)
   getAllVisits() {
     const list = this.sync.getVisits();
-    return list.sort((a, b) => {
-      if (a.date !== b.date) {
-        return a.date.localeCompare(b.date);
-      }
-      return a.startTime.localeCompare(b.startTime);
-    });
+    return list
+      .filter((v) => !EXCLUDED_SOONS.includes(v.soonName ? v.soonName.trim() : ''))
+      .sort((a, b) => {
+        if (a.date !== b.date) {
+          return a.date.localeCompare(b.date);
+        }
+        return a.startTime.localeCompare(b.startTime);
+      });
   }
 
   // 특정 날짜의 신청 목록
@@ -303,6 +310,13 @@ class VisitStore {
     if (!soonName) return { isDuplicate: false, existing: null };
 
     const trimmed = soonName.trim();
+    if (EXCLUDED_SOONS.includes(trimmed)) {
+      return {
+        isDuplicate: true,
+        existing: null,
+        reason: `[${trimmed}]은(는) 심방 운영 대상에서 제외된 순입니다.`
+      };
+    }
     const existing = this.getAllVisits().find(
       (v) => v.soonName.trim() === trimmed && (!excludeId || String(v.id) !== String(excludeId))
     );
@@ -334,7 +348,7 @@ class VisitStore {
   }
 
   /**
-   * 31개 순 전체 신청 현황 통계
+   * 순 전체 신청 현황 통계
    */
   getSoonStats() {
     const allVisits = this.getAllVisits();
@@ -354,9 +368,10 @@ class VisitStore {
       };
     });
 
-    // 기본 31순 외에 직접 입력한 특별 순이 있는 경우 추가
+    // 기본 순 외에 직접 입력한 특별 순이 있는 경우 추가 (제외된 순은 미포함)
     allVisits.forEach((v) => {
-      if (!DEFAULT_SOONS.includes(v.soonName.trim())) {
+      const name = v.soonName ? v.soonName.trim() : '';
+      if (!DEFAULT_SOONS.includes(name) && !EXCLUDED_SOONS.includes(name)) {
         soonList.push({
           name: v.soonName,
           isRegistered: true,
