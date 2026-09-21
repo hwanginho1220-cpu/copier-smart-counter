@@ -55,6 +55,7 @@ class VisitCalendar {
 
     const todayStr = this.formatDate(new Date());
     const allVisits = window.visitStore ? window.visitStore.getAllVisits() : [];
+    const isRestrictMode = window.visitStore ? window.visitStore.isRestrictMode() : false;
 
     // 날짜별 방문 맵 구축
     const dateMap = new Map();
@@ -85,6 +86,20 @@ class VisitCalendar {
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             </button>
           </div>
+        </div>
+
+        <!-- 안내 범례 바 -->
+        <div class="px-4 py-2 bg-slate-50/80 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <div class="flex items-center gap-3">
+            <span class="flex items-center gap-1.5 font-medium"><span class="w-2 h-2 rounded-full bg-blue-600"></span> 오늘</span>
+            ${
+              isRestrictMode
+                ? `<span class="flex items-center gap-1.5 font-medium text-emerald-700"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> 심방 가능일</span>
+                   <span class="flex items-center gap-1.5 text-slate-400"><span class="w-2 h-2 rounded-full bg-slate-300"></span> 일정 없음</span>`
+                : `<span class="text-slate-500 font-medium">모든 날짜 자유 신청 가능</span>`
+            }
+          </div>
+          <span class="text-[11px] text-slate-400">날짜 클릭 시 해당 일자의 예약 현황 확인</span>
         </div>
 
         <!-- 요일 헤더 -->
@@ -122,46 +137,85 @@ class VisitCalendar {
       const isSelected = dayDateStr === this.selectedDateStr;
       const visits = dateMap.get(dayDateStr) || [];
       const hasVisits = visits.length > 0;
+      const isDateAvailable = window.visitStore ? window.visitStore.isDateAvailable(dayDateStr) : true;
+      const slotSummary = (isRestrictMode && isDateAvailable && window.visitStore) ? window.visitStore.getSlotSummaryForDate(dayDateStr) : null;
 
       let textClass = 'text-slate-700';
       if (dayOfWeek === 0) textClass = 'text-rose-600 font-medium';
       if (dayOfWeek === 6) textClass = 'text-blue-600 font-medium';
 
-      let cellBg = isToday ? 'today' : 'bg-white';
+      let cellBg = 'bg-white';
+      if (isToday) {
+        cellBg = 'today';
+      } else if (isRestrictMode && !isDateAvailable && !hasVisits) {
+        cellBg = 'bg-slate-50/50';
+      }
+
       if (isSelected) cellBg += ' selected';
 
       html += `
-        <div class="calendar-day-cell p-1 sm:p-2 cursor-pointer ${cellBg} relative flex flex-col justify-between"
+        <div class="calendar-day-cell p-1 sm:p-2 cursor-pointer ${cellBg} relative flex flex-col justify-between transition"
              data-date="${dayDateStr}">
           <div class="flex items-center justify-between">
             <span class="text-xs sm:text-sm font-semibold rounded-full w-6 h-6 flex items-center justify-center ${
               isToday ? 'bg-blue-600 text-white shadow-sm' : textClass
-            }">
+            } ${isRestrictMode && !isDateAvailable && !isToday ? 'opacity-40' : ''}">
               ${day}
             </span>
-            ${
-              hasVisits
-                ? `<span class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-blue-100 text-blue-700">
-                    ${visits.length}건
-                   </span>`
-                : ''
-            }
+            <div class="flex items-center gap-1">
+              ${
+                isRestrictMode && isDateAvailable
+                  ? `<span class="inline-flex items-center justify-center px-1.5 py-0.5 text-[9px] font-bold rounded-md ${
+                      slotSummary && slotSummary.includes('전일')
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        : slotSummary && slotSummary === '저녁'
+                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                        : slotSummary && slotSummary === '오후'
+                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                        : 'bg-blue-100 text-blue-800 border border-blue-200'
+                    }">
+                      ${slotSummary || '가능'}
+                     </span>`
+                  : ''
+              }
+              ${
+                hasVisits
+                  ? `<span class="inline-flex items-center justify-center px-1.5 py-0.2 text-[10px] font-bold rounded-full ${
+                      window.visitStore && visits.every((v) => window.visitStore.isVisitFinished(v))
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        : 'bg-blue-100 text-blue-700'
+                    }">
+                      ${visits.length}건
+                     </span>`
+                  : ''
+              }
+            </div>
           </div>
 
           <!-- 예약 내역 배지 칩 -->
           <div class="mt-1 space-y-1 overflow-hidden">
             ${visits
               .slice(0, 2)
-              .map(
-                (v) => `
+              .map((v) => {
+                const isFin = window.visitStore && window.visitStore.isVisitFinished(v);
+                return isFin
+                  ? `
+              <div class="card-view-detail truncate text-[10px] sm:text-xs py-0.5 px-1.5 rounded font-bold bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300/80 flex items-center gap-1 shadow-2xs cursor-pointer transition"
+                   data-visit-id="${v.id}" title="심방 완료: ${v.soonName}">
+                <span class="text-[10px] text-emerald-700 font-extrabold shrink-0">✓</span>
+                <span class="font-bold shrink-0">${v.startTime}</span>
+                <span class="truncate">${v.soonName}</span>
+              </div>
+            `
+                  : `
               <div class="card-view-detail truncate text-[10px] sm:text-xs py-0.5 px-1.5 rounded font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900 border border-indigo-200/60 flex items-center gap-1 shadow-2xs cursor-pointer transition"
                    data-visit-id="${v.id}">
                 <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
                 <span class="font-bold shrink-0">${v.startTime}</span>
                 <span class="truncate">${v.soonName}</span>
               </div>
-            `
-              )
+            `;
+              })
               .join('')}
             ${
               visits.length > 2

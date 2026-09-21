@@ -1,5 +1,6 @@
 /**
  * 순심방 비즈니스 로직 및 중복 방지 검증 모듈
+ * 우면공동체 공식 심방 가능 일정(오전/오후/저녁 슬롯) 내장
  */
 
 const SOON_GROUPS = [
@@ -22,6 +23,80 @@ const DEFAULT_SOONS = [
   ...SOON_GROUPS[1].items,
   ...SOON_GROUPS[2].items
 ];
+
+// 우면공동체 9월~12월 공식 심방 가능 일정 (양육 프로그램 및 교회 일정 반영)
+const OFFICIAL_SCHEDULE = {
+  // 9월
+  '2026-09-16': ['morning', 'afternoon', 'evening'], // 16일(수) 오전, 오후, 저녁
+  '2026-09-17': ['morning', 'afternoon'],            // 17일(목) 오전, 오후
+  '2026-09-22': ['morning', 'afternoon', 'evening'], // 22일(화) 오전, 오후, 저녁
+  '2026-09-29': ['evening'],                         // 29일(화) 저녁
+  '2026-09-30': ['morning', 'afternoon', 'evening'], // 30일(수) 오전, 오후, 저녁
+
+  // 10월
+  '2026-10-01': ['morning', 'afternoon', 'evening'], // 1일(목) 오전, 오후, 저녁
+  '2026-10-02': ['morning', 'afternoon'],            // 2일(금) 오전, 오후
+  '2026-10-07': ['morning', 'afternoon'],            // 7일(수) 오전, 오후
+  '2026-10-08': ['evening'],                         // 8일(목) 저녁
+  '2026-10-13': ['evening'],                         // 13일(화) 저녁
+  '2026-10-14': ['morning', 'afternoon', 'evening'], // 14일(수) 오전, 오후, 저녁
+  '2026-10-15': ['afternoon'],                       // 15일(목) 오후
+  '2026-10-16': ['morning', 'afternoon', 'evening'], // 16일(금) 오전, 오후, 저녁
+  '2026-10-17': ['afternoon'],                       // 17일(토) 오후
+  '2026-10-20': ['evening'],                         // 20일(화) 저녁
+  '2026-10-21': ['evening'],                         // 21일(수) 저녁
+  '2026-10-22': ['evening'],                         // 22일(목) 저녁
+  '2026-10-23': ['morning', 'afternoon', 'evening'], // 23일(금) 오전, 오후, 저녁
+  '2026-10-24': ['afternoon'],                       // 24일(토) 오후
+  '2026-10-30': ['evening'],                         // 30일(금) 저녁
+
+  // 11월
+  '2026-11-03': ['evening'],                         // 3일(화) 저녁
+  '2026-11-04': ['morning', 'afternoon'],            // 4일(수) 오전, 오후
+  '2026-11-05': ['afternoon', 'evening'],            // 5일(목) 오후, 저녁
+  '2026-11-06': ['morning', 'afternoon', 'evening'], // 6일(금) 오전, 오후, 저녁
+  '2026-11-07': ['afternoon'],                       // 7일(토) 오후
+  '2026-11-12': ['afternoon', 'evening'],            // 12일(목) 오후, 저녁
+  '2026-11-13': ['morning', 'afternoon', 'evening'], // 13일(금) 오전, 오후, 저녁
+  '2026-11-14': ['morning', 'afternoon', 'evening'], // 14일(토) 오전, 오후, 저녁 (사용자 '14일(금)' 표기 모두 지원)
+  '2026-11-17': ['evening'],                         // 17일(화) 저녁
+  '2026-11-18': ['morning', 'afternoon', 'evening'], // 18일(수) 오전, 오후, 저녁
+  '2026-11-24': ['evening'],                         // 24일(화) 저녁
+  '2026-11-25': ['morning', 'afternoon', 'evening'], // 25일(수) 오전, 오후, 저녁
+  '2026-11-26': ['afternoon', 'evening'],            // 26일(목) 오후, 저녁
+  '2026-11-27': ['morning', 'afternoon', 'evening'], // 27일(금) 오전, 오후, 저녁
+
+  // 12월
+  '2026-12-02': ['afternoon', 'evening'],            // 2일(수) 오후, 저녁
+  '2026-12-03': ['afternoon', 'evening']             // 3일(목) 오후, 저녁
+};
+
+const SLOT_DEFINITIONS = {
+  morning: {
+    key: 'morning',
+    name: '오전',
+    defaultStart: '10:00',
+    defaultEnd: '12:00',
+    minMinutes: 540,  // 09:00
+    maxMinutes: 780   // 13:00
+  },
+  afternoon: {
+    key: 'afternoon',
+    name: '오후',
+    defaultStart: '14:00',
+    defaultEnd: '16:00',
+    minMinutes: 780,  // 13:00
+    maxMinutes: 1080  // 18:00
+  },
+  evening: {
+    key: 'evening',
+    name: '저녁',
+    defaultStart: '19:00',
+    defaultEnd: '21:00',
+    minMinutes: 1080, // 18:00
+    maxMinutes: 1350  // 22:30
+  }
+};
 
 class VisitStore {
   constructor(syncService) {
@@ -61,20 +136,132 @@ class VisitStore {
     return h * 60 + m;
   }
 
+  // ==========================================
+  // 심방 가능 날짜 및 시간대(슬롯) 관리 로직
+  // ==========================================
+  getScheduleMap() {
+    if (this.sync && typeof this.sync.getScheduleMap === 'function') {
+      const map = this.sync.getScheduleMap();
+      if (map && Object.keys(map).length > 0) return map;
+    }
+    return OFFICIAL_SCHEDULE;
+  }
+
+  getAvailableDates() {
+    return Object.keys(this.getScheduleMap()).sort();
+  }
+
+  isRestrictMode() {
+    if (!this.sync) return true;
+    return this.sync.getIsRestrictMode();
+  }
+
+  isDateAvailable(dateStr) {
+    if (!dateStr) return false;
+    if (!this.isRestrictMode()) return true;
+    return this.getAvailableDates().includes(dateStr);
+  }
+
+  getAllowedSlots(dateStr) {
+    const schedule = this.getScheduleMap();
+    return schedule[dateStr] || ['morning', 'afternoon', 'evening'];
+  }
+
+  getSlotsLabel(slots) {
+    if (!slots || slots.length === 0) return '신청 불가';
+    const names = slots.map((s) => (SLOT_DEFINITIONS[s] ? SLOT_DEFINITIONS[s].name : s));
+    if (slots.length === 3) return '전일(오전/오후/저녁)';
+    return names.join('·');
+  }
+
+  getSlotSummaryForDate(dateStr) {
+    const slots = this.getAllowedSlots(dateStr);
+    return this.getSlotsLabel(slots);
+  }
+
   /**
-   * [핵심] 시간 중복(충돌) 검사 함수
-   * 두 시간대 [startA, endA)와 [startB, endB)가 겹치는 조건:
-   * startA < endB && endA > startB
-   * 
-   * @param {string} date 'YYYY-MM-DD'
-   * @param {string} startTime 'HH:mm'
-   * @param {string} endTime 'HH:mm'
-   * @param {string|null} excludeId 수정 시 자기 자신 제외
-   * @returns {{ hasConflict: boolean, conflictVisit: object|null, reason: string|null }}
+   * 시간대가 허용된 슬롯(오전/오후/저녁)에 부합하는지 검사
+   */
+  checkSlotRestriction(dateStr, startTime, endTime) {
+    if (!dateStr) return { allowed: true };
+    if (!this.isRestrictMode()) return { allowed: true };
+
+    // 1. 날짜 존재 여부 검사
+    if (!this.isDateAvailable(dateStr)) {
+      return {
+        allowed: false,
+        reason: '선택하신 날짜는 목사님 심방 일정이 없는 날짜입니다. 안내된 심방 가능 날짜를 확인해주세요.'
+      };
+    }
+
+    // 2. 시간대 슬롯 검사
+    if (!startTime || !endTime) return { allowed: true };
+
+    const startMin = this.timeToMinutes(startTime);
+    const endMin = this.timeToMinutes(endTime);
+    const allowedSlots = this.getAllowedSlots(dateStr);
+
+    // 해당 시간대가 어떤 슬롯에 속하는지 판별
+    let matchedSlot = null;
+    if (startMin >= 540 && endMin <= 780) {
+      matchedSlot = 'morning';
+    } else if (startMin >= 780 && endMin <= 1080) {
+      matchedSlot = 'afternoon';
+    } else if (startMin >= 1080 && endMin <= 1350) {
+      matchedSlot = 'evening';
+    } else {
+      // 슬롯 경계를 넘어서는 경우 (예: 12시~14시 등)
+      if (startMin < 780 && endMin > 540 && !allowedSlots.includes('morning')) {
+        matchedSlot = 'disallowed';
+      } else if (startMin < 1080 && endMin > 780 && !allowedSlots.includes('afternoon')) {
+        matchedSlot = 'disallowed';
+      } else if (startMin < 1350 && endMin > 1080 && !allowedSlots.includes('evening')) {
+        matchedSlot = 'disallowed';
+      }
+    }
+
+    if (matchedSlot === 'disallowed' || (matchedSlot && !allowedSlots.includes(matchedSlot))) {
+      const allowedNames = this.getSlotsLabel(allowedSlots);
+      const chosenName = matchedSlot && SLOT_DEFINITIONS[matchedSlot] ? SLOT_DEFINITIONS[matchedSlot].name : '해당 시간대';
+      return {
+        allowed: false,
+        reason: `[${chosenName} 신청 불가] 해당 날짜(${dateStr})는 [${allowedNames}] 심방만 가능합니다. (양육 프로그램 및 교회 일정 고려)`
+      };
+    }
+
+    return { allowed: true };
+  }
+
+  // 날짜 유효성 검사 결과
+  checkDateRestriction(dateStr) {
+    if (!dateStr) return { allowed: true, reason: null };
+    if (!this.isRestrictMode()) return { allowed: true, reason: null };
+    const allowed = this.isDateAvailable(dateStr);
+    if (!allowed) {
+      return {
+        allowed: false,
+        reason: '선택하신 날짜는 목사님 심방 일정이 없는 날짜입니다. 지정된 심방 가능 날짜를 선택해주세요.'
+      };
+    }
+    return { allowed: true, reason: null };
+  }
+
+  /**
+   * [핵심] 시간 중복(충돌) 및 슬롯 검사 함수
    */
   checkTimeConflict(date, startTime, endTime, excludeId = null) {
     if (!date || !startTime || !endTime) {
       return { hasConflict: false, conflictVisit: null, reason: null };
+    }
+
+    // 1. 날짜 및 시간대(오전/오후/저녁) 슬롯 검증
+    const slotCheck = this.checkSlotRestriction(date, startTime, endTime);
+    if (!slotCheck.allowed) {
+      return {
+        hasConflict: true,
+        conflictVisit: null,
+        reason: slotCheck.reason
+      };
     }
 
     const startMin = this.timeToMinutes(startTime);
@@ -88,6 +275,7 @@ class VisitStore {
       };
     }
 
+    // 2. 다른 순과의 시간대 겹침 검사
     const dayVisits = this.getVisitsByDate(date);
 
     for (const v of dayVisits) {
@@ -96,7 +284,6 @@ class VisitStore {
       const vStart = this.timeToMinutes(v.startTime);
       const vEnd = this.timeToMinutes(v.endTime);
 
-      // 시간대 겹침 판단
       if (startMin < vEnd && endMin > vStart) {
         return {
           hasConflict: true,
@@ -111,10 +298,6 @@ class VisitStore {
 
   /**
    * 동일 순 중복 신청 검사
-   * 한 순이 여러 번 중복 신청하는 것을 방지
-   * 
-   * @param {string} soonName 순 이름 (예: '1순')
-   * @param {string|null} excludeId 수정 시 제외
    */
   checkSoonDuplicate(soonName, excludeId = null) {
     if (!soonName) return { isDuplicate: false, existing: null };
@@ -136,7 +319,22 @@ class VisitStore {
   }
 
   /**
-   * 30개 순 전체 신청 현황 통계
+   * 심방 완료 여부 판별 (날짜 및 시간이 지났는지 확인)
+   * @param {object} visit 
+   * @returns {boolean}
+   */
+  isVisitFinished(visit) {
+    if (!visit || !visit.date) return false;
+    const now = new Date();
+    const [y, m, d] = visit.date.split('-').map(Number);
+    const timeStr = visit.endTime || visit.startTime || '23:59';
+    const [hh, mm] = timeStr.split(':').map(Number);
+    const visitEndTime = new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0);
+    return now >= visitEndTime;
+  }
+
+  /**
+   * 31개 순 전체 신청 현황 통계
    */
   getSoonStats() {
     const allVisits = this.getAllVisits();
@@ -151,27 +349,33 @@ class VisitStore {
       return {
         name: soon,
         isRegistered: !!visit,
-        visit: visit || null
+        visit: visit || null,
+        isFinished: visit ? this.isVisitFinished(visit) : false
       };
     });
 
-    // 기본 30순 외에 직접 입력한 특별 순이 있는 경우 추가
+    // 기본 31순 외에 직접 입력한 특별 순이 있는 경우 추가
     allVisits.forEach((v) => {
       if (!DEFAULT_SOONS.includes(v.soonName.trim())) {
         soonList.push({
           name: v.soonName,
           isRegistered: true,
-          visit: v
+          visit: v,
+          isFinished: this.isVisitFinished(v)
         });
       }
     });
 
     const completedCount = allVisits.length;
+    const finishedCount = allVisits.filter((v) => this.isVisitFinished(v)).length;
+    const upcomingCount = completedCount - finishedCount;
     const totalCount = DEFAULT_SOONS.length;
 
     return {
       total: totalCount,
-      completed: completedCount,
+      completed: completedCount, // 전체 신청된 순
+      finished: finishedCount,   // 심방 완료된 순 (시간 경과)
+      upcoming: upcomingCount,   // 심방 예정인 순
       remaining: Math.max(0, totalCount - completedCount),
       rate: Math.round((completedCount / totalCount) * 100),
       soonList
@@ -179,7 +383,7 @@ class VisitStore {
   }
 
   /**
-   * 특정 날짜의 타임슬롯 현황 (오전 9시 ~ 밤 10시까지 30분 단위 분석)
+   * 특정 날짜의 타임슬롯 현황
    */
   getDaySlotsStatus(dateStr) {
     const dayVisits = this.getVisitsByDate(dateStr);
@@ -192,7 +396,6 @@ class VisitStore {
         const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
         const currentMin = h * 60 + m;
 
-        // 이 타임에 걸치는 심방 찾기
         const matched = dayVisits.find((v) => {
           const vStart = this.timeToMinutes(v.startTime);
           const vEnd = this.timeToMinutes(v.endTime);
@@ -211,5 +414,7 @@ class VisitStore {
   }
 }
 
-// 전역 인스턴스
+// 전역 인스턴스 및 상수 노출
+window.OFFICIAL_SCHEDULE = OFFICIAL_SCHEDULE;
+window.SLOT_DEFINITIONS = SLOT_DEFINITIONS;
 window.visitStore = new VisitStore(window.cloudSync);
