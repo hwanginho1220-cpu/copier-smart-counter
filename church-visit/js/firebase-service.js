@@ -8,7 +8,7 @@ const STORAGE_KEY_FIREBASE_CONFIG = 'church_visit_firebase_config';
 const STORAGE_KEY_DELETED = 'church_visit_deleted_ids_v1';
 const STORAGE_KEY_SCHEDULE_MAP = 'church_visit_schedule_map_v2';
 const STORAGE_KEY_RESTRICT_MODE = 'church_visit_restrict_mode_v2';
-const EXCLUDED_SOONS = ['여성1순', '남성2순'];
+const EXCLUDED_SOONS_DEF = ['여성1순', '남성2순'];
 
 class CloudSyncService {
   constructor() {
@@ -254,7 +254,7 @@ class CloudSyncService {
             }
 
             const soonName = data.soonName ? String(data.soonName).trim() : '';
-            if (EXCLUDED_SOONS.includes(soonName)) {
+            if (EXCLUDED_SOONS_DEF.includes(soonName)) {
               if (this.isCloudEnabled && this.db && docId) {
                 this.db.collection('visits').doc(docId).delete().catch(() => {});
               }
@@ -319,7 +319,7 @@ class CloudSyncService {
       if (dataStr) {
         const raw = JSON.parse(dataStr);
         this.visits = Array.isArray(raw)
-          ? raw.filter((v) => !EXCLUDED_SOONS.includes(v.soonName ? String(v.soonName).trim() : ''))
+          ? raw.filter((v) => !EXCLUDED_SOONS_DEF.includes(v.soonName ? String(v.soonName).trim() : ''))
           : [];
         if (Array.isArray(raw) && raw.length !== this.visits.length) {
           this.saveToLocalStorage(this.visits);

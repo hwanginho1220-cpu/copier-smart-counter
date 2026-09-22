@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const opt = document.createElement('option');
         opt.value = soon;
         opt.textContent = soon;
-        soonSelect.appendChild(opt);
+        optGroup.appendChild(opt);
       });
       soonSelect.appendChild(optGroup);
     });
@@ -154,6 +154,13 @@ document.addEventListener('DOMContentLoaded', () => {
       renderAdminView();
     }
   }
+
+  tabBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tab = btn.getAttribute('data-tab');
+      switchTab(tab);
+    });
+  });
 
   // ==========================================
   // 3. 날짜별 시간대(오전/오후/저녁) 버튼 동적 제어
@@ -226,14 +233,18 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="w-full">
               <span class="font-extrabold text-sm">[이미 신청 완료된 순입니다]</span><br>
               <span class="text-xs text-amber-800">${soonCheck.reason}</span>
-              <div class="mt-2.5 pt-2 border-t border-amber-200/80 flex flex-wrap gap-2">
-                <button type="button" class="btn-conflict-edit px-3 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 transition flex items-center gap-1 shadow-2xs cursor-pointer" data-visit-id="${soonCheck.existing.id}">
-                  <span>✏️</span> 일정 수정하기
-                </button>
-                <button type="button" class="btn-conflict-delete px-3 py-1.5 rounded-xl bg-rose-500 text-white font-bold text-xs hover:bg-rose-600 transition flex items-center gap-1 shadow-2xs cursor-pointer" data-visit-id="${soonCheck.existing.id}" data-soon="${soonName}">
-                  <span>🗑️</span> 신청 취소(삭제)
-                </button>
-              </div>
+              ${
+                soonCheck.existing
+                  ? `<div class="mt-2.5 pt-2 border-t border-amber-200/80 flex flex-wrap gap-2">
+                      <button type="button" class="btn-conflict-edit px-3 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 transition flex items-center gap-1 shadow-2xs cursor-pointer" data-visit-id="${soonCheck.existing.id}">
+                        <span>✏️</span> 일정 수정하기
+                      </button>
+                      <button type="button" class="btn-conflict-delete px-3 py-1.5 rounded-xl bg-rose-500 text-white font-bold text-xs hover:bg-rose-600 transition flex items-center gap-1 shadow-2xs cursor-pointer" data-visit-id="${soonCheck.existing.id}" data-soon="${soonName}">
+                        <span>🗑️</span> 신청 취소(삭제)
+                      </button>
+                    </div>`
+                  : ''
+              }
             </div>
           </div>
         `;
@@ -1640,13 +1651,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
     }
-  });
-
-  tabBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const tab = btn.getAttribute('data-tab');
-      switchTab(tab);
-    });
   });
 
   const sampleBtn = document.getElementById('btn-seed-sample');
