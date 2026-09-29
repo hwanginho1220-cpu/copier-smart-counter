@@ -647,10 +647,43 @@
         <button id="btn-close-firebase-modal" class="text-slate-400 hover:text-slate-600 p-1 text-lg">✕</button>
       </div>
 
-      <div class="bg-blue-50 border border-blue-200 rounded-xl p-3.5 text-xs text-blue-900 mb-5 space-y-1.5">
+      <div class="bg-blue-50 border border-blue-200 rounded-xl p-3.5 text-xs text-blue-900 mb-4 space-y-1.5">
         <p class="font-bold">💡 실시간 동기화란?</p>
         <p>Google Firebase의 무료 티어를 연결하면, 순장님들이 각자의 스마트폰에서 신청한 내역이 <strong>1초 만에 모든 사람의 캘린더에 실시간으로 공유</strong>되어 중복 신청이 완벽히 차단됩니다.</p>
         <p class="text-[11px] text-blue-700 pt-1">* 설정하지 않아도 브라우저 로컬 저장소로 즉시 사용 가능합니다.</p>
+      </div>
+
+      <!-- 클라우드 권한 만료(PERMISSION_DENIED) 안내 배너 -->
+      <div id="fb-permission-alert" class="hidden mb-4 p-4 bg-amber-50/90 border-2 border-amber-300 rounded-2xl text-xs space-y-3 animate-fade-in shadow-xs">
+        <div class="flex items-center gap-2 text-amber-950 font-bold text-sm">
+          <span class="text-base">⚠️</span>
+          <span>Firebase 클라우드 30일 테스트 보안 규칙이 만료되었습니다</span>
+        </div>
+        <p class="text-amber-900 leading-relaxed text-[11.5px]">
+          Firebase 생성 시 지정된 <strong>30일 테스트 모드 규칙</strong>이 기한 만료되어 일시적으로 읽기/쓰기가 차단되었습니다.<br>
+          아래 규칙 코드를 복사하여 Firebase 콘솔의 <strong>[Firestore > 규칙(Rules)]</strong> 탭에 붙여넣고 <strong>[게시(Publish)]</strong>를 누르시면 영구적으로 정상 작동합니다!
+        </p>
+        <div class="bg-slate-900 text-slate-100 p-3 rounded-xl font-mono text-[11px] relative overflow-x-auto select-all">
+          <pre id="fb-rule-code" class="leading-relaxed">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}</pre>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-1">
+          <button type="button" id="btn-copy-fb-rule" class="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition flex items-center gap-1.5 shadow-2xs">
+            <span>📋</span> 보안 규칙 복사하기
+          </button>
+          <a id="link-firebase-rules" href="https://console.firebase.google.com/project/church-visit/firestore/rules" target="_blank" rel="noopener noreferrer" class="px-3 py-2 rounded-xl bg-white border border-amber-300 text-amber-950 hover:bg-amber-100 font-bold transition flex items-center gap-1.5 shadow-2xs">
+            <span>🔗</span> Firebase 규칙 페이지 바로가기 ↗
+          </a>
+          <button type="button" id="btn-reconnect-firebase-modal" class="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition flex items-center gap-1.5 shadow-2xs ml-auto">
+            <span>🔄</span> 지금 다시 연결
+          </button>
+        </div>
       </div>
 
       <form id="firebase-config-form" class="space-y-3.5 text-xs">
@@ -706,11 +739,11 @@
     </div>
   </div>
 
-  <!-- 스크립트 로드 순서: 파이어베이스설정 -> 서비스 -> 스토어 -> 캘린더 -> 앱 (캐시 방지 v=20260922_fix_v5) -->
-  <script src="js/firebase-config.js?v=20260922_fix_v5"></script>
-  <script src="js/firebase-service.js?v=20260922_fix_v5"></script>
-  <script src="js/store.js?v=20260922_fix_v5"></script>
-  <script src="js/calendar.js?v=20260922_fix_v5"></script>
-  <script src="js/app.js?v=20260922_fix_v5"></script>
+  <!-- 스크립트 로드 순서: 파이어베이스설정 -> 서비스 -> 스토어 -> 캘린더 -> 앱 (캐시 방지 v=20260929_cloud_fix) -->
+  <script src="js/firebase-config.js?v=20260929_cloud_fix"></script>
+  <script src="js/firebase-service.js?v=20260929_cloud_fix"></script>
+  <script src="js/store.js?v=20260929_cloud_fix"></script>
+  <script src="js/calendar.js?v=20260929_cloud_fix"></script>
+  <script src="js/app.js?v=20260929_cloud_fix"></script>
 </body>
 </html>

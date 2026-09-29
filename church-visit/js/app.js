@@ -1189,30 +1189,91 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==========================================
   // 10. Firebase 클라우드 연동 모달
   // ==========================================
+  // 10. Firebase 클라우드 연동 모달
+  // ==========================================
   const firebaseModal = document.getElementById('firebase-modal');
   const btnOpenFirebase = document.getElementById('btn-open-firebase-modal');
   const btnCloseFirebase = document.getElementById('btn-close-firebase-modal');
   const formFirebase = document.getElementById('firebase-config-form');
   const btnResetFirebase = document.getElementById('btn-reset-firebase');
+  const fbPermissionAlert = document.getElementById('fb-permission-alert');
+  const btnCopyFbRule = document.getElementById('btn-copy-fb-rule');
+  const btnReconnectFirebase = document.getElementById('btn-reconnect-firebase-modal');
+
+  function openFirebaseModal() {
+    if (!firebaseModal) return;
+    let currentConfig = window.cloudSync.getSavedFirebaseConfig();
+    if ((!currentConfig || !currentConfig.apiKey) && typeof window.DEFAULT_FIREBASE_CONFIG !== 'undefined') {
+      currentConfig = window.DEFAULT_FIREBASE_CONFIG;
+    }
+    if (currentConfig) {
+      if (document.getElementById('fb-api-key')) document.getElementById('fb-api-key').value = currentConfig.apiKey || '';
+      if (document.getElementById('fb-auth-domain')) document.getElementById('fb-auth-domain').value = currentConfig.authDomain || '';
+      if (document.getElementById('fb-project-id')) document.getElementById('fb-project-id').value = currentConfig.projectId || '';
+      if (document.getElementById('fb-storage-bucket')) document.getElementById('fb-storage-bucket').value = currentConfig.storageBucket || '';
+      if (document.getElementById('fb-messaging-sender-id')) document.getElementById('fb-messaging-sender-id').value = currentConfig.messagingSenderId || '';
+      if (document.getElementById('fb-app-id')) document.getElementById('fb-app-id').value = currentConfig.appId || '';
+    }
+
+    // 권한 만료 또는 오류 상태 확인
+    const lastErr = window.cloudSync ? window.cloudSync.lastError : null;
+    const isPermissionError = (lastErr && (
+      lastErr.code === 'permission-denied' ||
+      (lastErr.message && lastErr.message.toLowerCase().includes('permission'))
+    )) || (window.cloudSync && !window.cloudSync.isCloud && window.cloudSync.activeConfig);
+
+    if (fbPermissionAlert) {
+      if (isPermissionError) {
+        fbPermissionAlert.classList.remove('hidden');
+      } else {
+        fbPermissionAlert.classList.add('hidden');
+      }
+    }
+
+    firebaseModal.classList.remove('hidden');
+  }
+
+  if (cloudStatusBadge) {
+    cloudStatusBadge.addEventListener('click', openFirebaseModal);
+  }
 
   if (btnOpenFirebase) {
-    btnOpenFirebase.addEventListener('click', () => {
-      const currentConfig = window.cloudSync.getSavedFirebaseConfig();
-      if (currentConfig) {
-        document.getElementById('fb-api-key').value = currentConfig.apiKey || '';
-        document.getElementById('fb-auth-domain').value = currentConfig.authDomain || '';
-        document.getElementById('fb-project-id').value = currentConfig.projectId || '';
-        document.getElementById('fb-storage-bucket').value = currentConfig.storageBucket || '';
-        document.getElementById('fb-messaging-sender-id').value = currentConfig.messagingSenderId || '';
-        document.getElementById('fb-app-id').value = currentConfig.appId || '';
-      }
-      firebaseModal.classList.remove('hidden');
-    });
+    btnOpenFirebase.addEventListener('click', openFirebaseModal);
   }
 
   if (btnCloseFirebase) {
     btnCloseFirebase.addEventListener('click', () => {
       firebaseModal.classList.add('hidden');
+    });
+  }
+
+  if (btnCopyFbRule) {
+    btnCopyFbRule.addEventListener('click', async () => {
+      const code = `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if true;\n    }\n  }\n}`;
+      try {
+        await navigator.clipboard.writeText(code);
+        alert('📋 Firebase 보안 규칙 코드가 클립보드에 복사되었습니다!\n\nFirebase 콘솔의 [Firestore Database > 규칙] 탭에 붙여넣고 [게시(Publish)]를 눌러주세요.');
+      } catch (err) {
+        prompt('아래 규칙 코드를 복사하여 Firebase 규칙 탭에 붙여넣으세요:', code);
+      }
+    });
+  }
+
+  if (btnReconnectFirebase) {
+    btnReconnectFirebase.addEventListener('click', async () => {
+      const originalText = btnReconnectFirebase.innerHTML;
+      btnReconnectFirebase.disabled = true;
+      btnReconnectFirebase.innerHTML = '<span>🔄</span> 연결 확인 중...';
+      const success = await window.cloudSync.reconnect();
+      btnReconnectFirebase.disabled = false;
+      btnReconnectFirebase.innerHTML = originalText;
+
+      if (success) {
+        alert('🎉 Firebase 클라우드에 성공적으로 연결되었습니다!\n모든 스마트폰과 실시간 동기화가 재개됩니다.');
+        firebaseModal.classList.add('hidden');
+      } else {
+        alert('⚠️ 아직 클라우드 권한이 확인되지 않았습니다.\n\nFirebase 콘솔에서 보안 규칙을 붙여넣고 [게시(Publish)] 버튼을 누른 후 다시 이 버튼을 클릭해주세요.');
+      }
     });
   }
 
@@ -1257,6 +1318,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // 11. 실시간 데이터 갱신 리스너
   // ==========================================
   window.cloudSync.subscribe((visits, meta) => {
+    const isPermissionError = meta.isPermissionDenied || (
+      window.cloudSync.lastError && (
+        window.cloudSync.lastError.code === 'permission-denied' ||
+        (window.cloudSync.lastError.message && window.cloudSync.lastError.message.toLowerCase().includes('permission'))
+      )
+    );
+
     if (meta.isCloud) {
       cloudStatusBadge.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
@@ -1264,12 +1332,21 @@ document.addEventListener('DOMContentLoaded', () => {
         <span class="text-emerald-700 font-semibold">실시간 클라우드 동기화 중</span>
       `;
       cloudStatusBadge.className = 'px-3 py-1 rounded-full text-xs bg-emerald-50 border border-emerald-200 flex items-center gap-1.5 cursor-pointer hover:bg-emerald-100 transition';
+      cloudStatusBadge.title = '클라우드 정상 연결됨 (클릭하여 설정 확인)';
+    } else if (isPermissionError) {
+      cloudStatusBadge.innerHTML = `
+        <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+        <span class="text-rose-700 font-bold">⚠️ 클라우드 권한 만료 (조치 필요)</span>
+      `;
+      cloudStatusBadge.className = 'px-3 py-1 rounded-full text-xs bg-rose-50 border border-rose-300 flex items-center gap-1.5 cursor-pointer hover:bg-rose-100 transition shadow-2xs';
+      cloudStatusBadge.title = 'Firebase 30일 테스트 보안 규칙이 만료되었습니다. 클릭하여 해결 가이드를 확인하세요.';
     } else {
       cloudStatusBadge.innerHTML = `
         <span class="w-2 h-2 rounded-full bg-amber-500"></span>
         <span class="text-amber-700 font-semibold">로컬 모드 (클라우드 설정 가능)</span>
       `;
       cloudStatusBadge.className = 'px-3 py-1 rounded-full text-xs bg-amber-50 border border-amber-200 flex items-center gap-1.5 cursor-pointer hover:bg-amber-100 transition';
+      cloudStatusBadge.title = '클라우드 동기화 설정 열기';
     }
 
     const stats = window.visitStore.getSoonStats();

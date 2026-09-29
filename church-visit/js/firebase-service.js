@@ -21,6 +21,8 @@ class CloudSyncService {
     this.deletedVisitIds = this.loadDeletedIds();
     this.scheduleMap = this.loadScheduleMap();
     this.isRestrictMode = this.loadRestrictMode();
+    this.lastError = null;
+    this.activeConfig = null;
     this.init();
   }
 
@@ -170,8 +172,8 @@ class CloudSyncService {
   init() {
     let savedConfig = this.getSavedFirebaseConfig();
     
-    // 파일(firebase-config.js)에 기본 설정이 적혀있는 경우 우선 적용
-    if (!savedConfig && window.DEFAULT_FIREBASE_CONFIG && window.DEFAULT_FIREBASE_CONFIG.apiKey && window.DEFAULT_FIREBASE_CONFIG.projectId) {
+    // 파일(firebase-config.js)에 기본 설정이 적혀있는 경우 기본 설정 적용
+    if ((!savedConfig || !savedConfig.apiKey) && typeof window !== 'undefined' && window.DEFAULT_FIREBASE_CONFIG && window.DEFAULT_FIREBASE_CONFIG.apiKey && window.DEFAULT_FIREBASE_CONFIG.projectId) {
       savedConfig = window.DEFAULT_FIREBASE_CONFIG;
     }
 
@@ -180,6 +182,29 @@ class CloudSyncService {
     } else {
       this.loadFromLocalStorage();
     }
+
+    // 브라우저 탭 복귀 시(사용자가 Firebase 콘솔에서 규칙 수정한 후 돌아왔을 때) 자동 재연결 시도
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && !this.isCloudEnabled && this.lastError && (this.lastError.code === 'permission-denied' || String(this.lastError.message).includes('permissions'))) {
+          console.log('탭 활성화 감지: 클라우드 자동 재연결 시도');
+          this.reconnect();
+        }
+      });
+    }
+  }
+
+  // 클라우드 즉시 재연결 함수
+  async reconnect() {
+    this.lastError = null;
+    let config = this.getSavedFirebaseConfig();
+    if ((!config || !config.apiKey) && typeof window !== 'undefined' && window.DEFAULT_FIREBASE_CONFIG) {
+      config = window.DEFAULT_FIREBASE_CONFIG;
+    }
+    if (config && config.apiKey && config.projectId) {
+      return this.initFirebase(config);
+    }
+    return false;
   }
 
   getSavedFirebaseConfig() {
@@ -267,15 +292,27 @@ class CloudSyncService {
               rawFieldId: fieldId
             });
           });
+          this.lastError = null;
+          this.isCloudEnabled = true;
           this.visits = cloudVisits;
           this.saveToLocalStorage(this.visits);
-          this.notifyListeners({ type: 'SYNC_UPDATE', source: 'cloud' });
+          this.notifyListeners({ type: 'SYNC_UPDATE', source: 'cloud', isCloud: true });
         },
         (error) => {
           console.error('Firestore 실시간 동기화 에러:', error);
+          this.lastError = error;
           this.isCloudEnabled = false;
           this.loadFromLocalStorage();
-          this.notifyListeners({ type: 'ERROR', message: '클라우드 동기화 실패. 로컬 모드로 전환됩니다.' });
+          const isPermissionDenied = error && (error.code === 'permission-denied' || String(error.message).includes('permissions'));
+          this.notifyListeners({
+            type: 'ERROR',
+            error,
+            isCloud: false,
+            isPermissionDenied,
+            message: isPermissionDenied
+              ? '파이어베이스 보안 규칙(30일 만료) 권한이 만료되었습니다. 콘솔에서 규칙을 갱신해주세요.'
+              : '클라우드 동기화 실패. 로컬 모드로 전환됩니다.'
+          });
         }
       );
 
