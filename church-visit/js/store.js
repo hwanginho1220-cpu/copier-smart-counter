@@ -369,9 +369,11 @@ class VisitStore {
     });
 
     // 기본 순 외에 직접 입력한 특별 순이 있는 경우 추가 (제외된 순은 미포함)
+    const extraVisits = [];
     allVisits.forEach((v) => {
       const name = v.soonName ? v.soonName.trim() : '';
       if (!DEFAULT_SOONS.includes(name) && !EXCLUDED_SOONS.includes(name)) {
+        extraVisits.push(v);
         soonList.push({
           name: v.soonName,
           isRegistered: true,
@@ -384,15 +386,20 @@ class VisitStore {
     const completedCount = allVisits.length;
     const finishedCount = allVisits.filter((v) => this.isVisitFinished(v)).length;
     const upcomingCount = completedCount - finishedCount;
-    const totalCount = DEFAULT_SOONS.length;
+    // 실제 미신청된 순의 개수 (기본 순 중 미신청 수)
+    const remainingCount = soonList.filter((s) => !s.isRegistered).length;
+    // 전체 순 개수 (기본 순 + 직접 추가된 기타 순)
+    const totalCount = DEFAULT_SOONS.length + extraVisits.length;
 
     return {
       total: totalCount,
+      defaultTotal: DEFAULT_SOONS.length,
+      extraCount: extraVisits.length,
       completed: completedCount, // 전체 신청된 순
       finished: finishedCount,   // 심방 완료된 순 (시간 경과)
       upcoming: upcomingCount,   // 심방 예정인 순
-      remaining: Math.max(0, totalCount - completedCount),
-      rate: Math.round((completedCount / totalCount) * 100),
+      remaining: remainingCount,  // 아직 미신청된 순
+      rate: totalCount > 0 ? Math.min(100, Math.round((completedCount / totalCount) * 100)) : 0,
       soonList
     };
   }
