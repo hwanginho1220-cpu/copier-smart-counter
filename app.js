@@ -136,6 +136,8 @@ let currentView = 'dashboard';
 
 // Chart instance reference
 let usageChart = null;
+let anMonthlyChart = null;
+let anRatioChart = null;
 
 // Firebase State Variables
 let db = null;
@@ -676,6 +678,11 @@ function switchView(viewName) {
         
         generateMonthlyReport();
         setTimeout(adjustReportScale, 50);
+    } else if (viewName === 'analytics') {
+        viewTitle.textContent = '통계 분석';
+        viewSubtitle.textContent = '전체 고객사 복사기 사용량 추이, 컬러/흑백 비율 및 종합 경영 통계';
+        headerActionBtn.style.display = 'none';
+        renderAnalytics();
     }
 }
 
@@ -1217,6 +1224,437 @@ function renderUsageChart() {
             }
         }
     });
+}
+
+// --- UI Rendering: Analytics & Statistics ---
+function renderAnalytics() {
+    try {
+        const totalCustomers = state.customers.length;
+        const targetCustomers = state.customers.filter(c => c.isMonthlyInspection !== false);
+        
+        let totalBwUsage = 0;
+        let totalColorUsage = 0;
+        const custStats = {};
+        const monthlyStats = {};
+        const replacedParts = {};
+        
+        // Initialize customer stats map
+        state.customers.forEach(c => {
+            let modelStr = '-';
+            if (c.devices && c.devices.length > 0) {
+                modelStr = c.devices[0].model || '미지정';
+                if (c.devices.length > 1) modelStr += ` 외 ${c.devices.length - 1}대`;
+            } else if (c.copierModel) {
+                modelStr = c.copierModel;
+            }
+            custStats[String(c.id)] = {
+                id: c.id,
+                name: c.name,
+                model: modelStr,
+                bw: 0,
+                color: 0,
+                total: 0,
+                inspections: 0,
+                latestDate: '',
+                contact: c.contact || '-'
+            };
+        });
+
+        // Traverse inspections
+        state.inspections.forEach(i => {
+            const bw = Number(i.bwUsage) || 0;
+            const col = Number(i.colorUsage) || 0;
+            const tot = bw + col;
+            
+            totalBwUsage += bw;
+            totalColorUsage += col;
+            
+            const d = i.date ? String(i.date) : '';
+            const m = d.substring(0, 7);
+            if (m && m.length === 7) {
+                if (!monthlyStats[m]) {
+                    monthlyStats[m] = { bw: 0, color: 0, total: 0, count: 0 };
+                }
+                monthlyStats[m].bw += bw;
+                monthlyStats[m].color += col;
+                monthlyStats[m].total += tot;
+                monthlyStats[m].count += 1;
+            }
+
+            const cid = String(i.customerId);
+            if (custStats[cid]) {
+                custStats[cid].bw += bw;
+                custStats[cid].color += col;
+                custStats[cid].total += tot;
+                custStats[cid].inspections += 1;
+                if (!custStats[cid].latestDate || d > custStats[cid].latestDate) {
+                    custStats[cid].latestDate = d;
+                }
+            }
+
+            // Parts
+            if (i.parts && Array.isArray(i.parts)) {
+                i.parts.forEach(p => {
+                    const pname = p.name ? String(p.name) : '부품';
+                    const qty = Number(p.quantity) || 1;
+                    replacedParts[pname] = (replacedParts[pname] || 0) + qty;
+                });
+            }
+        });
+
+        const totalUsage = totalBwUsage + totalColorUsage;
+        const bwPct = totalUsage > 0 ? (totalBwUsage / totalUsage * 100).toFixed(1) : 0;
+        const colorPct = totalUsage > 0 ? (totalColorUsage / totalUsage * 100).toFixed(1) : 0;
+
+        // 1. Update Metrics Cards
+        const anTotalCustEl = document.getElementById('anTotalCustomersVal');
+        if (anTotalCustEl) anTotalCustEl.textContent = totalCustomers.toLocaleString();
+        
+        const anTargetDiffEl = document.getElementById('anTargetDiffVal');
+        if (anTargetDiffEl) anTargetDiffEl.textContent = `정기점검 대상: ${targetCustomers.length}개소`;
+
+        const anTotalUsageEl = document.getElementById('anTotalUsageVal');
+        if (anTotalUsageEl) anTotalUsageEl.textContent = totalUsage.toLocaleString();
+
+        const anInspDiffEl = document.getElementById('anInspectionsDiffVal');
+        if (anInspDiffEl) anInspDiffEl.textContent = `총 점검 기록: ${state.inspections.length.toLocaleString()}건`;
+
+        const anBwUsageEl = document.getElementById('anBwUsageVal');
+        if (anBwUsageEl) anBwUsageEl.textContent = totalBwUsage.toLocaleString();
+
+        const anBwPctEl = document.getElementById('anBwPctVal');
+        if (anBwPctEl) anBwPctEl.textContent = `전체 비중 ${bwPct}%`;
+
+        const anColorUsageEl = document.getElementById('anColorUsageVal');
+        if (anColorUsageEl) anColorUsageEl.textContent = totalColorUsage.toLocaleString();
+
+        const anColorPctEl = document.getElementById('anColorPctVal');
+        if (anColorPctEl) anColorPctEl.textContent = `전체 비중 ${colorPct}%`;
+
+        // 2. Render Charts
+        renderAnalyticsCharts(monthlyStats, totalBwUsage, totalColorUsage);
+
+        // 3. Render Top 15 Customer Ranking Table
+        renderAnalyticsRanking(Object.values(custStats));
+
+        // 4. Render Top Parts
+        renderAnalyticsParts(replacedParts);
+
+        // 5. Render Uninspected Current Month
+        renderAnalyticsUninspected(Object.values(custStats));
+
+    } catch (err) {
+        console.error("통계 분석 렌더링 중 오류:", err);
+    }
+}
+
+function renderAnalyticsCharts(monthlyStats, totalBw, totalColor) {
+    // 1. Monthly Chart
+    const mCtx = document.getElementById('anMonthlyChart');
+    if (mCtx) {
+        if (anMonthlyChart) {
+            anMonthlyChart.destroy();
+        }
+
+        const sortedMonths = Object.keys(monthlyStats).sort();
+        const recentMonths = sortedMonths.length > 12 ? sortedMonths.slice(-12) : sortedMonths;
+
+        const labels = recentMonths.map(m => {
+            const parts = m.split('-');
+            return parts.length === 2 ? `${parts[0].slice(2)}년 ${parseInt(parts[1])}월` : m;
+        });
+
+        const bwData = recentMonths.map(m => monthlyStats[m].bw);
+        const colorData = recentMonths.map(m => monthlyStats[m].color);
+
+        anMonthlyChart = new Chart(mCtx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '흑백(BW)',
+                        data: bwData,
+                        backgroundColor: 'rgba(59, 130, 246, 0.75)',
+                        borderColor: '#60a5fa',
+                        borderWidth: 1.5,
+                        borderRadius: 4
+                    },
+                    {
+                        label: '컬러(Color)',
+                        data: colorData,
+                        backgroundColor: 'rgba(192, 132, 252, 0.75)',
+                        borderColor: '#c084fc',
+                        borderWidth: 1.5,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: '#94a3b8', font: { family: 'Inter, Noto Sans KR' } }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                return `${ctx.dataset.label}: ${ctx.raw.toLocaleString()} 매`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                        ticks: { color: '#94a3b8', font: { family: 'Inter, Noto Sans KR', size: 11 } }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                        ticks: {
+                            color: '#94a3b8',
+                            font: { family: 'Inter, Noto Sans KR' },
+                            callback: function(val) { return val >= 10000 ? (val/10000).toLocaleString() + '만' : val.toLocaleString(); }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 2. Ratio Doughnut Chart
+    const rCtx = document.getElementById('anRatioChart');
+    if (rCtx) {
+        if (anRatioChart) {
+            anRatioChart.destroy();
+        }
+
+        anRatioChart = new Chart(rCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['흑백(BW)', '컬러(Color)'],
+                datasets: [{
+                    data: [totalBw, totalColor],
+                    backgroundColor: [
+                        'rgba(59, 130, 246, 0.8)',
+                        'rgba(192, 132, 252, 0.8)'
+                    ],
+                    borderColor: ['#3b82f6', '#a855f7'],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: '#94a3b8', font: { family: 'Inter, Noto Sans KR' }, padding: 16 }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                const total = totalBw + totalColor;
+                                const pct = total > 0 ? (ctx.raw / total * 100).toFixed(1) : 0;
+                                return ` ${ctx.label}: ${ctx.raw.toLocaleString()} 매 (${pct}%)`;
+                            }
+                        }
+                    }
+                },
+                cutout: '62%'
+            }
+        });
+    }
+}
+
+function renderAnalyticsRanking(custStatsList) {
+    const tbody = document.getElementById('anCustomerRankingTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const sorted = [...custStatsList].sort((a, b) => b.total - a.total).slice(0, 15);
+
+    if (sorted.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:2rem;">데이터가 없습니다.</td></tr>';
+        return;
+    }
+
+    sorted.forEach((item, idx) => {
+        const tr = document.createElement('tr');
+        const colorRatio = item.total > 0 ? Math.round((item.color / item.total) * 100) : 0;
+        
+        let rankBadge = `<span style="font-weight:700; color:var(--text-secondary);">${idx + 1}</span>`;
+        if (idx === 0) rankBadge = `<span class="badge" style="background:rgba(245,158,11,0.2); color:#fbbf24; border:1px solid rgba(245,158,11,0.4);"><i class="fa-solid fa-crown"></i> 1</span>`;
+        else if (idx === 1) rankBadge = `<span class="badge" style="background:rgba(148,163,184,0.2); color:#cbd5e1; border:1px solid rgba(148,163,184,0.4);">2</span>`;
+        else if (idx === 2) rankBadge = `<span class="badge" style="background:rgba(180,83,9,0.2); color:#fdba74; border:1px solid rgba(180,83,9,0.4);">3</span>`;
+
+        tr.innerHTML = `
+            <td style="text-align:center;">${rankBadge}</td>
+            <td><strong style="color:var(--text-primary); cursor:pointer;" onclick="openDetailModal('${item.id}')" title="상세보기">${item.name}</strong></td>
+            <td><span style="font-size:0.85rem; color:var(--text-secondary);">${item.model}</span></td>
+            <td style="text-align:right;"><strong style="color:var(--primary);">${item.total.toLocaleString()}</strong></td>
+            <td style="text-align:right; color:#60a5fa;">${item.bw.toLocaleString()}</td>
+            <td style="text-align:right; color:#c084fc;">${item.color.toLocaleString()}</td>
+            <td style="text-align:center;">
+                <span class="badge ${colorRatio > 60 ? 'badge-danger' : (colorRatio > 30 ? 'badge-info' : 'badge-secondary')}" style="font-size:0.75rem;">
+                    ${colorRatio}%
+                </span>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function renderAnalyticsParts(replacedParts) {
+    const container = document.getElementById('anTopPartsContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const sortedParts = Object.entries(replacedParts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+    if (sortedParts.length === 0) {
+        container.innerHTML = '<p style="text-align:center; color:var(--text-muted); font-size:0.85rem; padding:1rem 0;">부품 교체 이력이 없습니다.</p>';
+        return;
+    }
+
+    const maxQty = sortedParts[0][1] || 1;
+
+    sortedParts.forEach(([name, qty]) => {
+        const pct = Math.round((qty / maxQty) * 100);
+        const item = document.createElement('div');
+        item.style.cssText = 'display:flex; flex-direction:column; gap:0.25rem;';
+        item.innerHTML = `
+            <div style="display:flex; justify-content:space-between; font-size:0.85rem;">
+                <span style="font-weight:500; color:var(--text-primary);">${name}</span>
+                <span style="font-weight:600; color:var(--primary);">${qty}건</span>
+            </div>
+            <div style="width:100%; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
+                <div style="width:${pct}%; height:100%; background:linear-gradient(90deg, #3b82f6, #60a5fa); border-radius:3px;"></div>
+            </div>
+        `;
+        container.appendChild(item);
+    });
+}
+
+function renderAnalyticsUninspected(custStatsList) {
+    const container = document.getElementById('anUninspectedMiniList');
+    const badge = document.getElementById('anUninspectedBadge');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const currentYearMonth = getLocalDateString().substring(0, 7);
+
+    // Filter target customers who haven't been inspected this month
+    const uninspected = state.customers.filter(c => {
+        if (c.isMonthlyInspection === false) return false;
+        const stat = custStatsList.find(s => String(s.id) === String(c.id));
+        return !stat || !stat.latestDate || !stat.latestDate.startsWith(currentYearMonth);
+    });
+
+    if (badge) {
+        badge.textContent = `${uninspected.length}개소`;
+    }
+
+    if (uninspected.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:1rem; color:var(--success); font-size:0.85rem;"><i class="fa-solid fa-circle-check"></i> 이번 달 모든 대상 업체의 점검이 완료되었습니다!</div>';
+        return;
+    }
+
+    uninspected.slice(0, 8).forEach(c => {
+        const stat = custStatsList.find(s => String(s.id) === String(c.id));
+        const latest = stat && stat.latestDate ? stat.latestDate : '기록 없음';
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:0.4rem 0.6rem; background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:6px; font-size:0.82rem;';
+        row.innerHTML = `
+            <span style="font-weight:600; color:var(--text-primary); cursor:pointer;" onclick="openDetailModal('${c.id}')">${c.name}</span>
+            <span style="color:var(--text-secondary); font-size:0.75rem;">최근: ${latest}</span>
+        `;
+        container.appendChild(row);
+    });
+
+    if (uninspected.length > 8) {
+        const more = document.createElement('div');
+        more.style.cssText = 'text-align:center; font-size:0.75rem; color:var(--text-muted); padding-top:0.3rem;';
+        more.textContent = `... 외 ${uninspected.length - 8}개소 미점검`;
+        container.appendChild(more);
+    }
+}
+
+function exportAnalyticsCsv() {
+    try {
+        const custStats = {};
+        state.customers.forEach(c => {
+            let modelStr = '-';
+            if (c.devices && c.devices.length > 0) {
+                modelStr = c.devices[0].model || '미지정';
+            } else if (c.copierModel) {
+                modelStr = c.copierModel;
+            }
+            custStats[String(c.id)] = {
+                name: c.name,
+                model: modelStr,
+                contact: c.contact || '-',
+                bw: 0,
+                color: 0,
+                total: 0,
+                inspections: 0,
+                latestDate: '-'
+            };
+        });
+
+        state.inspections.forEach(i => {
+            const cid = String(i.customerId);
+            if (custStats[cid]) {
+                const bw = Number(i.bwUsage) || 0;
+                const col = Number(i.colorUsage) || 0;
+                custStats[cid].bw += bw;
+                custStats[cid].color += col;
+                custStats[cid].total += (bw + col);
+                custStats[cid].inspections += 1;
+                const d = i.date ? String(i.date) : '';
+                if (!custStats[cid].latestDate || custStats[cid].latestDate === '-' || d > custStats[cid].latestDate) {
+                    custStats[cid].latestDate = d;
+                }
+            }
+        });
+
+        const sorted = Object.values(custStats).sort((a, b) => b.total - a.total);
+        let csvContent = '\uFEFF순위,고객사명,복사기모델,총출력량,흑백사용량,컬러사용량,컬러비율(%),점검횟수,최근점검일,연락처\n';
+        
+        sorted.forEach((item, idx) => {
+            const colorPct = item.total > 0 ? (item.color / item.total * 100).toFixed(1) : 0;
+            const row = [
+                idx + 1,
+                `"${(item.name || '').replace(/"/g, '""')}"`,
+                `"${(item.model || '').replace(/"/g, '""')}"`,
+                item.total,
+                item.bw,
+                item.color,
+                colorPct,
+                item.inspections,
+                item.latestDate,
+                `"${(item.contact || '').replace(/"/g, '""')}"`
+            ];
+            csvContent += row.join(',') + '\n';
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const todayStr = getLocalDateString();
+        a.download = `스마트카운터_고객사별_출력통계_${todayStr}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('엑셀(CSV) 파일이 다운로드되었습니다.', 'success');
+    } catch (err) {
+        console.error("CSV 내보내기 실패:", err);
+        alert("CSV 파일 생성 중 오류가 발생했습니다: " + err.message);
+    }
 }
 
 // --- UI Rendering: Customer Table & Management ---
@@ -1929,6 +2367,8 @@ function refreshAllViews() {
         renderInspectionsTable();
     } else if (currentView === 'parts') {
         renderPartsTable();
+    } else if (currentView === 'analytics') {
+        renderAnalytics();
     }
 }
 
