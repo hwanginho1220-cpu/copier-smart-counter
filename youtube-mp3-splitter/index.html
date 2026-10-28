@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>유튜브 플레이리스트 & 모음곡 MP3 분할 스튜디오</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- 헤더 -->
+    <header class="top-header">
+      <div class="brand">
+        <span class="brand-icon">🎧</span>
+        <div>
+          <h1>YouTube MP3 Track Splitter</h1>
+          <p class="subtitle">긴 유튜브 음악/플레이리스트 영상을 곡별로 깔끔하게 나눠 개별 MP3로 저장하세요</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btn-open-downloads" class="btn btn-secondary" type="button">
+          📁 저장 폴더 열기
+        </button>
+      </div>
+    </header>
+
+    <!-- 1단계: 유튜브 주소 입력 및 분석 -->
+    <section class="card url-section">
+      <div class="section-header">
+        <span class="step-badge">STEP 1</span>
+        <h2>유튜브 음악 영상 주소 입력</h2>
+      </div>
+      <div class="url-input-row">
+        <input
+          type="url"
+          id="yt-url-input"
+          class="text-input url-input"
+          placeholder="https://www.youtube.com/watch?v=... (긴 플레이리스트나 앨범 영상 주소를 붙여넣으세요)"
+          autocomplete="off"
+        />
+        <select id="bitrate-select" class="select-input" title="MP3 음질 선택">
+          <!-- DOMContentLoaded 최상단에서 기본 옵션 채움 -->
+        </select>
+        <button id="btn-analyze" class="btn btn-primary" type="button">
+          🔍 영상 & 곡 목록 불러오기
+        </button>
+      </div>
+      <div id="analyze-status" class="status-banner hidden"></div>
+
+      <!-- 영상 정보 프리뷰 카드 -->
+      <div id="video-info-card" class="video-info-card hidden">
+        <img id="video-thumb" class="video-thumb" src="" alt="썸네일" />
+        <div class="video-meta">
+          <div class="meta-badges">
+            <span id="badge-source" class="badge badge-accent">챕터 자동 인식</span>
+            <span id="badge-duration" class="badge badge-neutral">00:00</span>
+          </div>
+          <h3 id="video-title">영상 제목</h3>
+          <p id="video-uploader" class="video-uploader">채널명</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2단계: 분할 방식 탭 & 트랙 편집 -->
+    <section class="card workspace-section">
+      <div class="section-header-row">
+        <div class="section-header">
+          <span class="step-badge">STEP 2</span>
+          <h2>곡 분할 방식 및 트랙 리스트 설정</h2>
+        </div>
+
+        <!-- 분할 모드 탭 네비게이션 -->
+        <div class="tab-nav" role="tablist">
+          <button type="button" class="tab-btn active" data-tab="tab-timeline">
+            🎼 타임라인 / 챕터 분할
+          </button>
+          <button type="button" class="tab-btn" data-tab="tab-paste">
+            📋 댓글 타임라인 붙여넣기
+          </button>
+          <button type="button" class="tab-btn" data-tab="tab-silence">
+            🔇 무음 구간 자동 감지 (타임라인 없을 때)
+          </button>
+        </div>
+      </div>
+
+      <!-- 탭 1: 타임라인 / 챕터 리스트 편집 -->
+      <div id="tab-timeline" class="tab-panel active">
+        <div class="toolbar-row">
+          <div class="toolbar-left">
+            <label class="checkbox-label">
+              <input type="checkbox" id="check-all-tracks" checked />
+              <span>전체 선택 (<strong id="track-count-label">0</strong>곡)</span>
+            </label>
+          </div>
+          <div class="toolbar-right">
+            <button type="button" id="btn-add-track" class="btn btn-sm btn-outline">
+              ➕ 구간 직접 추가
+            </button>
+            <button type="button" id="btn-single-track" class="btn btn-sm btn-outline">
+              🎵 분할 없이 통째로 1곡으로 설정
+            </button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="track-table">
+            <thead>
+              <tr>
+                <th style="width: 48px;">선택</th>
+                <th style="width: 60px;">번호</th>
+                <th>곡 제목 (파일명으로 저장됨)</th>
+                <th style="width: 120px;">시작 시간</th>
+                <th style="width: 120px;">종료 시간</th>
+                <th style="width: 90px;">길이</th>
+                <th style="width: 64px;">삭제</th>
+              </tr>
+            </thead>
+            <tbody id="track-tbody">
+              <tr class="empty-row">
+                <td colspan="7">
+                  위에서 유튜브 주소를 입력하고 <strong>[영상 & 곡 목록 불러오기]</strong>를 누르거나,
+                  <strong>[댓글 타임라인 붙여넣기]</strong> 탭을 이용해 보세요.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 탭 2: 고정 댓글이나 설명란 타임라인 붙여넣기 -->
+      <div id="tab-paste" class="tab-panel">
+        <p class="helper-text">
+          유튜브 영상의 <strong>고정 댓글</strong>이나 설명란에 적힌 타임라인 텍스트를 그대로 복사해서 아래에 붙여넣으세요.
+          <code>00:00 곡제목</code>, <code>[03:21] 노래 - 가수</code> 등 어떤 형태든 자동으로 시간과 제목을 분리합니다!
+        </p>
+        <textarea
+          id="paste-timeline-input"
+          class="textarea-input"
+          rows="8"
+          placeholder="예시:&#10;00:00 첫 번째 노래 제목&#10;03:42 두 번째 노래 제목&#10;07:15 세 번째 노래 제목&#10;11:05 네 번째 노래 제목"
+        ></textarea>
+        <div class="paste-actions">
+          <button type="button" id="btn-sample-timeline" class="btn btn-outline">
+            ✨ 예시 타임라인 넣어보기
+          </button>
+          <button type="button" id="btn-apply-timeline" class="btn btn-primary">
+            ✅ 타임라인 분석해서 트랙 목록에 적용하기
+          </button>
+        </div>
+      </div>
+
+      <!-- 탭 3: 무음 구간 자동 감지 설정 -->
+      <div id="tab-silence" class="tab-panel">
+        <div class="silence-box">
+          <h3>🤖 타임라인이 아예 없는 영상인가요?</h3>
+          <p class="helper-text">
+            걱정하지 마세요! 오디오 파형을 분석해 <strong>노래와 노래 사이의 조용한 무음 구간</strong>을 찾아내어 자동으로 한 곡씩 잘라줍니다.
+          </p>
+          <div class="silence-grid">
+            <div class="form-group">
+              <label for="silence-duration">최소 무음 길이 (초)</label>
+              <input type="number" id="silence-duration" class="text-input" value="1.5" step="0.2" min="0.5" max="10" />
+              <small>곡 사이 정적이 이 시간 이상 지속되면 다음 곡으로 나눕니다 (기본 1.5초)</small>
+            </div>
+            <div class="form-group">
+              <label for="silence-db">무음 기준 볼륨 (dB)</label>
+              <input type="number" id="silence-db" class="text-input" value="-38" step="2" min="-60" max="-20" />
+              <small>이 데시벨보다 작은 소리를 무음으로 간주합니다 (기본 -38dB)</small>
+            </div>
+            <div class="form-group">
+              <label for="min-track-sec">최소 한 곡 길이 (초)</label>
+              <input type="number" id="min-track-sec" class="text-input" value="45" step="5" min="10" max="600" />
+              <small>노래 중간의 짧은 정적에서 잘못 잘리는 것을 방지합니다 (기본 45초)</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 실행 버튼 영역 -->
+      <div class="action-footer">
+        <button type="button" id="btn-start-split" class="btn btn-cta">
+          🚀 선택한 곡 MP3로 분할 추출 시작하기
+        </button>
+      </div>
+    </section>
+
+    <!-- 3단계: 진행 상태 및 결과 다운로드 -->
+    <section id="result-section" class="card result-section hidden">
+      <div class="section-header">
+        <span class="step-badge">STEP 3</span>
+        <h2>MP3 추출 진행률 및 결과 파일</h2>
+      </div>
+
+      <div id="progress-box" class="progress-box">
+        <div class="progress-info">
+          <span id="progress-message">작업 준비 중...</span>
+          <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%;"></div>
+        </div>
+      </div>
+
+      <div id="completed-box" class="completed-box hidden">
+        <div class="completed-banner">
+          <div>
+            <h3 id="completed-title">🎉 MP3 분할 추출 완료!</h3>
+            <p id="completed-path" class="completed-path"></p>
+          </div>
+          <div class="completed-buttons">
+            <a id="btn-download-zip" href="#" class="btn btn-primary" download>
+              📦 전곡 ZIP 한번에 다운로드
+            </a>
+            <button type="button" id="btn-open-album-folder" class="btn btn-secondary">
+              📂 저장된 폴더 열기
+            </button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="track-table result-table">
+            <thead>
+              <tr>
+                <th style="width: 60px;">번호</th>
+                <th>저장된 MP3 파일명</th>
+                <th style="width: 140px;">구간 (길이)</th>
+                <th style="width: 90px;">크기</th>
+                <th style="width: 260px;">미리듣기</th>
+                <th style="width: 120px;">개별 저장</th>
+              </tr>
+            </thead>
+            <tbody id="result-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
