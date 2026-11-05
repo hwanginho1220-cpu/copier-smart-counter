@@ -213,7 +213,7 @@ def update_job(job_id: str, **kwargs):
             JOBS[job_id].update(kwargs)
 
 
-def run_split_job(job_id: str, url: str, tracks: list, mode: str, bitrate: str, silence_opts: dict):
+def run_split_job(job_id: str, url: str, tracks: list, mode: str, bitrate: str, silence_opts: dict, start_number: int = 1):
     try:
         job_dir = OUTPUT_ROOT / job_id
         job_dir.mkdir(parents=True, exist_ok=True)
@@ -281,8 +281,11 @@ def run_split_job(job_id: str, url: str, tracks: list, mode: str, bitrate: str, 
         total_tracks = len(tracks)
 
         for idx, tr in enumerate(tracks):
-            track_num = idx + 1
-            raw_title = tr.get("title") or f"Track {track_num:02d}"
+            track_num = start_number + idx
+            raw_title = (tr.get("title") or "").strip()
+            # 기본 자동생성 제목(Track 01 등)인 경우 지정된 시작 번호에 맞춰 갱신
+            if not raw_title or re.match(r"^Track\s+\d+$", raw_title, re.IGNORECASE):
+                raw_title = f"Track {track_num:02d}"
             clean_title = sanitize_filename(raw_title)
             filename = f"{track_num:02d}. {clean_title}.mp3"
             out_path = album_dir / filename
@@ -444,7 +447,8 @@ class SplitterRequestHandler(SimpleHTTPRequestHandler):
                     for idx, ch in enumerate(chapters):
                         st = float(ch.get("start_time") or 0.0)
                         ed = float(ch.get("end_time") or 0.0)
-                        ch_title = (ch.get("title") or f"Track {idx + 1}").strip()
+                        raw_ch_title = (ch.get("title") or "").strip()
+                        ch_title = re.sub(r"^\d{1,3}[\s.\-):]+\s*", "", raw_ch_title).strip() or raw_ch_title or f"Track {idx + 1:02d}"
                         tracks.append({
                             "index": idx + 1,
                             "title": ch_title,
@@ -494,6 +498,12 @@ class SplitterRequestHandler(SimpleHTTPRequestHandler):
                 mode = body.get("mode") or "timeline"
                 bitrate = str(body.get("bitrate") or "192")
                 silence_opts = body.get("silence_opts") or {}
+                try:
+                    start_number = int(body.get("start_number", 1))
+                except (ValueError, TypeError):
+                    start_number = 1
+                if start_number < 0:
+                    start_number = 0
 
                 # Convert any start_str / end_str edits into numeric seconds
                 normalized_tracks = []
@@ -504,9 +514,10 @@ class SplitterRequestHandler(SimpleHTTPRequestHandler):
                         ed = hms_to_seconds(end_str)
                     else:
                         ed = float(tr.get("end", 0))
+                    track_no = start_number + idx
                     normalized_tracks.append({
-                        "index": idx + 1,
-                        "title": (tr.get("title") or f"Track {idx + 1:02d}").strip(),
+                        "index": track_no,
+                        "title": (tr.get("title") or f"Track {track_no:02d}").strip(),
                         "start": st,
                         "end": ed
                     })
@@ -523,7 +534,7 @@ class SplitterRequestHandler(SimpleHTTPRequestHandler):
 
                 t = threading.Thread(
                     target=run_split_job,
-                    args=(job_id, url, normalized_tracks, mode, bitrate, silence_opts),
+                    args=(job_id, url, normalized_tracks, mode, bitrate, silence_opts, start_number),
                     daemon=True
                 )
                 t.start()

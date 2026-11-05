@@ -7,6 +7,7 @@
       videoTitle: "",
       videoDuration: 0,
       activeMode: "timeline", // 'timeline' | 'silence'
+      startNumber: 1,
       tracks: [],
       currentJobId: null,
       pollTimer: null,
@@ -15,6 +16,30 @@
   };
 
   var appState = window.YT_SPLITTER_APP.state;
+
+  function getStartNumber() {
+    var input = document.getElementById("start-number-input");
+    if (!input) return appState.startNumber || 1;
+    var parsed = parseInt(input.value, 10);
+    if (isNaN(parsed) || parsed < 0) {
+      return 1;
+    }
+    appState.startNumber = parsed;
+    return parsed;
+  }
+
+  function formatTrackNumber(num) {
+    return String(num).padStart(2, "0");
+  }
+
+  function updateFilenamePreview() {
+    var startNum = getStartNumber();
+    var previewEl = document.getElementById("filename-preview-text");
+    if (!previewEl) return;
+    var firstStr = formatTrackNumber(startNum);
+    var secondStr = formatTrackNumber(startNum + 1);
+    previewEl.textContent = firstStr + ". 곡제목.mp3, " + secondStr + ". 곡제목.mp3 ...";
+  }
 
   // =========================================================================
   // 1. UI 초기화 및 기본 조작 보호 (탭, 드롭다운) - DOMContentLoaded 최상단
@@ -134,13 +159,20 @@
     }
 
     var selectedCount = 0;
+    var startNum = getStartNumber();
+    var nextTrackNum = startNum;
 
     appState.tracks.forEach(function (track, idx) {
       if (!track) return;
       if (typeof track.checked === "undefined") {
         track.checked = true;
       }
-      if (track.checked) selectedCount++;
+      var assignedNumStr = "-";
+      if (track.checked) {
+        selectedCount++;
+        assignedNumStr = formatTrackNumber(nextTrackNum);
+        nextTrackNum++;
+      }
 
       var tr = document.createElement("tr");
 
@@ -156,9 +188,9 @@
       tdCheck.appendChild(chk);
       tr.appendChild(tdCheck);
 
-      // 번호
+      // 번호 (시작 번호 기준 자동 반영)
       var tdNum = document.createElement("td");
-      tdNum.textContent = String(idx + 1).padStart(2, "0");
+      tdNum.textContent = assignedNumStr;
       tr.appendChild(tdNum);
 
       // 제목 입력
@@ -405,6 +437,7 @@
           url: url,
           mode: appState.activeMode,
           bitrate: bitrate,
+          start_number: getStartNumber(),
           tracks: selectedTracks,
           silence_opts: silenceOpts
         })
@@ -551,6 +584,19 @@
   document.addEventListener("DOMContentLoaded", function () {
     // [최우선] 드롭다운 및 탭 전환 UI 초기화
     initBitrateDropdown();
+    updateFilenamePreview();
+
+    var startNumInput = document.getElementById("start-number-input");
+    if (startNumInput) {
+      startNumInput.addEventListener("input", function () {
+        updateFilenamePreview();
+        renderTracksTable();
+      });
+      startNumInput.addEventListener("change", function () {
+        updateFilenamePreview();
+        renderTracksTable();
+      });
+    }
 
     var tabButtons = document.querySelectorAll(".tab-btn");
     tabButtons.forEach(function (btn) {

@@ -83,6 +83,28 @@
         </div>
       </div>
 
+      <!-- 파일명 시작 번호 설정 바 (모든 탭 공통 적용) -->
+      <div class="numbering-bar">
+        <div class="numbering-left">
+          <label for="start-number-input" class="numbering-label">
+            🔢 저장 파일명 시작 번호:
+          </label>
+          <input
+            type="number"
+            id="start-number-input"
+            class="text-input start-num-input"
+            value="1"
+            min="0"
+            max="9999"
+            step="1"
+          />
+          <span class="numbering-unit">번부터 순서대로 매기기</span>
+        </div>
+        <div class="numbering-preview">
+          파일명 예시: <code id="filename-preview-text">01. 곡제목.mp3, 02. 곡제목.mp3 ...</code>
+        </div>
+      </div>
+
       <!-- 탭 1: 타임라인 / 챕터 리스트 편집 -->
       <div id="tab-timeline" class="tab-panel active">
         <div class="toolbar-row">

@@ -350,6 +350,59 @@ body {
   display: block;
 }
 
+/* Numbering Bar */
+.numbering-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  border-radius: 11px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+
+.numbering-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.numbering-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #e0e7ff;
+}
+
+.start-num-input {
+  width: 86px;
+  padding: 6px 10px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.numbering-unit {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.numbering-preview {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.numbering-preview code {
+  background: rgba(15, 23, 42, 0.75);
+  color: #a5b4fc;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+}
+
 /* Toolbar & Table */
 .toolbar-row {
   display: flex;
