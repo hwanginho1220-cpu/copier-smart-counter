@@ -98,6 +98,9 @@ def parse_timestamps_from_text(text: str, total_duration: float = 0.0) -> list:
         line_str = line.strip()
         if not line_str:
             continue
+        # '3분 25초', '03;25' 같은 변형 표기를 표준 '03:25'로 정규화
+        line_str = re.sub(r'(\d{1,2})\s*분\s*(\d{1,2})\s*초?', lambda m: f"{int(m.group(1)):02d}:{int(m.group(2)):02d}", line_str)
+        line_str = re.sub(r'(?<!\d)(\d{1,2});(\d{2})(?!\d)', r'\1:\2', line_str)
 
         matches = list(TS_TOKEN_RE.finditer(line_str))
         if not matches:
@@ -158,6 +161,33 @@ def parse_timestamps_from_text(text: str, total_duration: float = 0.0) -> list:
 
     if len(raw_items) < 1:
         return []
+
+    # 만약 첫 곡이 00:00(또는 45초 이내)로 시작하지 않고 시간들이 증가하지 않는 경우 (각 곡의 재생 길이만 적어둔 목록인 경우)
+    # 자동으로 누적 시작~종료 시간으로 변환!
+    if len(raw_items) >= 2 and raw_items[0]["start"] >= 45:
+        non_increasing_count = sum(
+            1 for i in range(len(raw_items) - 1) if raw_items[i + 1]["start"] <= raw_items[i]["start"]
+        )
+        if non_increasing_count >= 1:
+            cum_sec = 0.0
+            tracks = []
+            for i, item in enumerate(raw_items):
+                dur_s = item["start"]
+                st_s = cum_sec
+                ed_s = cum_sec + dur_s
+                if total_duration > 0 and i == len(raw_items) - 1:
+                    ed_s = total_duration
+                cum_sec = ed_s
+                tracks.append({
+                    "index": i + 1,
+                    "title": item["title"],
+                    "start": st_s,
+                    "end": ed_s,
+                    "start_str": seconds_to_hms(st_s),
+                    "end_str": seconds_to_hms(ed_s),
+                    "duration_str": seconds_to_hms(ed_s - st_s)
+                })
+            return tracks
 
     # Sort by start time and deduplicate identical start times
     raw_items.sort(key=lambda x: x["start"])
@@ -272,6 +302,100 @@ def run_split_job(job_id: str, url: str, tracks: list, mode: str, bitrate: str, 
     try:
         job_dir = OUTPUT_ROOT / job_id
         job_dir.mkdir(parents=True, exist_ok=True)
+
+        # 재생목록(개별 video_url이 있는 트랙들)인지 확인
+        is_playlist_job = any(bool(t.get("video_url")) for t in tracks)
+
+        if is_playlist_job:
+            safe_album_folder = "YouTube_Playlist_MP3"
+            album_dir = job_dir / safe_album_folder
+            album_dir.mkdir(parents=True, exist_ok=True)
+            results = []
+            total_tracks = len(tracks)
+
+            for idx, tr in enumerate(tracks):
+                track_num = start_number + idx
+                item_url = tr.get("video_url") or url
+                raw_title = (tr.get("title") or f"Track {track_num:02d}").strip()
+                clean_title = sanitize_filename(raw_title)
+                filename = f"{track_num:02d}. {clean_title}.mp3"
+                out_path = album_dir / filename
+
+                pct = 10 + int((idx / max(1, total_tracks)) * 84)
+                update_job(
+                    job_id,
+                    status="splitting",
+                    progress=pct,
+                    message=f"재생목록 [{idx + 1}/{total_tracks}] '{clean_title}' 다운로드 및 MP3 변환 중..."
+                )
+
+                temp_tmpl = str(job_dir / f"pl_item_{idx}.%(ext)s")
+                ydl_item_opts = {
+                    "format": "bestaudio/best",
+                    "outtmpl": temp_tmpl,
+                    "noplaylist": True,
+                    "quiet": True,
+                    "no_warnings": True,
+                }
+                with yt_dlp.YoutubeDL(ydl_item_opts) as ydl:
+                    ent_info = ydl.extract_info(item_url, download=True)
+                    ent_uploader = ent_info.get("uploader") or "YouTube"
+                    ent_dur = float(ent_info.get("duration") or 0.0)
+
+                item_files = list(job_dir.glob(f"pl_item_{idx}.*"))
+                if not item_files:
+                    continue
+                item_source = item_files[0]
+
+                cmd = [
+                    FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error",
+                    "-i", str(item_source),
+                    "-vn", "-acodec", "libmp3lame", "-b:a", f"{bitrate}k",
+                    "-metadata", f"title={raw_title}",
+                    "-metadata", f"artist={ent_uploader}",
+                    "-metadata", f"track={track_num}",
+                    str(out_path)
+                ]
+                subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                try:
+                    item_source.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+                if out_path.exists():
+                    size_mb = round(out_path.stat().st_size / (1024 * 1024), 2)
+                    results.append({
+                        "index": track_num,
+                        "title": raw_title,
+                        "filename": filename,
+                        "start_str": "00:00",
+                        "end_str": seconds_to_hms(ent_dur) if ent_dur > 0 else "끝",
+                        "duration_str": seconds_to_hms(ent_dur) if ent_dur > 0 else "-",
+                        "size_mb": size_mb,
+                        "url": f"/downloads/{job_id}/{safe_album_folder}/{filename}"
+                    })
+
+            update_job(job_id, status="zipping", progress=96, message="전체 곡 ZIP 압축 파일 생성 중...")
+            zip_filename = f"{safe_album_folder}_모음.zip"
+            zip_path = job_dir / zip_filename
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for item in results:
+                    mp3_file = album_dir / item["filename"]
+                    if mp3_file.exists():
+                        zf.write(mp3_file, arcname=item["filename"])
+
+            update_job(
+                job_id,
+                status="done",
+                progress=100,
+                message=f"재생목록 총 {len(results)}곡 MP3 저장이 완료되었습니다!",
+                album_title=safe_album_folder,
+                folder_path=str(album_dir),
+                zip_url=f"/downloads/{job_id}/{zip_filename}",
+                zip_filename=zip_filename,
+                files=results
+            )
+            return
 
         update_job(job_id, status="downloading", progress=8, message="유튜브에서 원본 고음질 오디오 스트림을 다운로드하는 중...")
 
@@ -535,7 +659,7 @@ class SplitterRequestHandler(SimpleHTTPRequestHandler):
                                 "getcomments": True,
                                 "extractor_args": {
                                     "youtube": {
-                                        "max_comments": ["20", "20", "0", "0"],
+                                        "max_comments": ["50", "50", "0", "0"],
                                         "comment_sort": ["top"]
                                     }
                                 }
@@ -554,6 +678,42 @@ class SplitterRequestHandler(SimpleHTTPRequestHandler):
                                 tracks = best_comment_tracks
                         except Exception:
                             pass
+
+                # 만약 단일 영상에서 타임라인을 못 찾았는데 주소에 list= (재생목록)가 포함되어 있는 경우 재생목록 전체 곡 불러오기
+                if not tracks and "list=" in url:
+                    try:
+                        pl_opts = {
+                            "quiet": True,
+                            "no_warnings": True,
+                            "noplaylist": False,
+                            "extract_flat": "in_playlist",
+                            "playlistend": 80,
+                        }
+                        with yt_dlp.YoutubeDL(pl_opts) as ydl_pl:
+                            pl_info = ydl_pl.extract_info(url, download=False)
+                        entries = pl_info.get("entries") or []
+                        if len(entries) >= 2:
+                            detected_source = "playlist"
+                            title = pl_info.get("title") or title
+                            for idx_e, ent in enumerate(entries):
+                                if not ent:
+                                    continue
+                                ent_id = ent.get("id") or ""
+                                ent_url = ent.get("url") or (f"https://www.youtube.com/watch?v={ent_id}" if ent_id else "")
+                                ent_title = (ent.get("title") or f"Track {idx_e + 1:02d}").strip()
+                                ent_dur = float(ent.get("duration") or 0.0)
+                                tracks.append({
+                                    "index": idx_e + 1,
+                                    "title": ent_title,
+                                    "start": 0.0,
+                                    "end": ent_dur,
+                                    "start_str": "재생목록",
+                                    "end_str": seconds_to_hms(ent_dur) if ent_dur > 0 else "전체",
+                                    "duration_str": seconds_to_hms(ent_dur) if ent_dur > 0 else "-",
+                                    "video_url": ent_url
+                                })
+                    except Exception:
+                        pass
 
                 return self._send_json({
                     "title": title,
@@ -599,18 +759,25 @@ class SplitterRequestHandler(SimpleHTTPRequestHandler):
                 # Convert any start_str / end_str edits into numeric seconds
                 normalized_tracks = []
                 for idx, tr in enumerate(tracks):
-                    st = hms_to_seconds(str(tr.get("start_str", "00:00"))) if "start_str" in tr else float(tr.get("start", 0))
+                    raw_st = str(tr.get("start_str", "00:00")).strip()
+                    if re.match(r"^(?:\d+:)?\d+:\d+$", raw_st):
+                        st = hms_to_seconds(raw_st)
+                    else:
+                        st = float(tr.get("start") or 0.0)
+
                     end_str = str(tr.get("end_str", "")).strip()
-                    if end_str and end_str not in ("끝까지", "끝", "-"):
+                    if re.match(r"^(?:\d+:)?\d+:\d+$", end_str):
                         ed = hms_to_seconds(end_str)
                     else:
-                        ed = float(tr.get("end", 0))
+                        ed = float(tr.get("end") or 0.0)
+
                     track_no = start_number + idx
                     normalized_tracks.append({
                         "index": track_no,
                         "title": (tr.get("title") or f"Track {track_no:02d}").strip(),
                         "start": st,
-                        "end": ed
+                        "end": ed,
+                        "video_url": (tr.get("video_url") or "").strip()
                     })
 
                 job_id = time.strftime("%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:6]
@@ -650,6 +817,24 @@ class SplitterRequestHandler(SimpleHTTPRequestHandler):
         return self._send_json({"error": "Not found"}, 404)
 
 
+def free_port_on_windows(port: int):
+    if not sys.platform.startswith("win"):
+        return
+    try:
+        my_pid = os.getpid()
+        out = subprocess.check_output(["netstat", "-aon"], text=True, encoding="utf-8", errors="ignore")
+        for line in out.splitlines():
+            if f":{port}" in line and "LISTENING" in line:
+                parts = line.split()
+                if parts:
+                    pid = int(parts[-1])
+                    if pid != my_pid and pid > 0:
+                        subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+                        time.sleep(0.4)
+    except Exception:
+        pass
+
+
 def main():
     if hasattr(sys.stdout, "reconfigure"):
         try:
@@ -658,6 +843,7 @@ def main():
         except Exception:
             pass
     port = int(os.environ.get("PORT", "8765"))
+    free_port_on_windows(port)
     server = ThreadingHTTPServer(("127.0.0.1", port), SplitterRequestHandler)
     print("============================================================")
     print(" [YouTube MP3 Splitter Studio] Server Started!")

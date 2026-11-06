@@ -32,6 +32,17 @@
     return String(num).padStart(2, "0");
   }
 
+  function secondsToHmsStr(sec) {
+    var s = Math.max(0, Math.round(sec || 0));
+    var h = Math.floor(s / 3600);
+    var m = Math.floor((s % 3600) / 60);
+    var rem = s % 60;
+    if (h > 0) {
+      return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0") + ":" + String(rem).padStart(2, "0");
+    }
+    return String(m).padStart(2, "0") + ":" + String(rem).padStart(2, "0");
+  }
+
   function updateFilenamePreview() {
     var startNum = getStartNumber();
     var previewEl = document.getElementById("filename-preview-text");
@@ -315,6 +326,8 @@
             badgeSource.textContent = "✅ 공식 챕터 " + data.tracks.length + "곡 자동 감지됨";
           } else if (data.detected_source === "comments") {
             badgeSource.textContent = "✅ 고정/베스트 댓글 타임라인 " + data.tracks.length + "곡 자동 감지됨";
+          } else if (data.detected_source === "playlist") {
+            badgeSource.textContent = "✅ 유튜브 재생목록 " + data.tracks.length + "곡 자동 감지됨";
           } else {
             badgeSource.textContent = "✅ 영상 설명란 타임라인 " + data.tracks.length + "곡 자동 감지됨";
           }
@@ -613,6 +626,39 @@
           if (t) t.checked = checkAll.checked;
         });
         renderTracksTable();
+      });
+    }
+
+    // N곡으로 균등 분할 버튼
+    var btnEqualSplit = document.getElementById("btn-equal-split");
+    if (btnEqualSplit) {
+      btnEqualSplit.addEventListener("click", function () {
+        var countInput = document.getElementById("equal-split-count");
+        var n = countInput ? parseInt(countInput.value, 10) : 10;
+        if (isNaN(n) || n < 2) n = 2;
+        if (n > 100) n = 100;
+        var totalDur = appState.videoDuration > 0 ? appState.videoDuration : n * 210;
+        var step = totalDur / n;
+        var newTracks = [];
+        for (var i = 0; i < n; i++) {
+          var st = Math.round(i * step);
+          var ed = i === n - 1 ? Math.round(totalDur) : Math.round((i + 1) * step);
+          newTracks.push({
+            index: i + 1,
+            title: "Track " + String(i + 1).padStart(2, "0"),
+            start: st,
+            end: ed,
+            start_str: secondsToHmsStr(st),
+            end_str: secondsToHmsStr(ed),
+            duration_str: secondsToHmsStr(ed - st),
+            checked: true
+          });
+        }
+        appState.explicitSingle = false;
+        appState.tracks = newTracks;
+        switchTab("tab-timeline");
+        renderTracksTable();
+        showStatus("✂️ 전체 영상을 " + n + "곡으로 균등 분할했습니다. 필요하면 시작/종료 시간을 미세 조정한 뒤 추출하세요!", false);
       });
     }
 
