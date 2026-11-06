@@ -26,6 +26,10 @@ if exist "..\.venv\Scripts\python.exe" (
 echo [2/2] 필수 패키지(yt-dlp, 내장 FFmpeg) 확인 및 최신 업데이트 중...
 "%PY_EXE%" -m pip install --quiet --upgrade yt-dlp imageio-ffmpeg
 
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8765" ^| findstr "LISTENING"') do (
+    taskkill /F /PID %%a >nul 2>&1
+)
+
 echo.
 echo ============================================================
 echo  준비 완료! 브라우저가 자동으로 열립니다 (http://127.0.0.1:8765)

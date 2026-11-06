@@ -68,17 +68,27 @@ def hms_to_seconds(ts: str) -> float:
     return 0.0
 
 
-TIMESTAMP_LINE_RE = re.compile(
-    r'(?:^|[\s\[\(\-•*])((?:\d{1,2}:)?\d{1,2}:\d{2})(?:[\]\)\s\-~—:]+|$)'
-)
+TS_TOKEN_RE = re.compile(r'(?<!\d)((?:\d{1,2}:)?\d{1,2}:\d{2})(?!\d)')
+
+
+def clean_track_title(raw: str, fallback_idx: int) -> str:
+    title = raw.strip()
+    # 앞뒤 괄호, 구분선, 번호(01., 1), [1] 등) 제거
+    title = re.sub(r'^[\s\[\]\(\)\-~—•*:/|]+', '', title).strip()
+    title = re.sub(r'^(?:\[\d+\]|\(\d+\)|\d{1,3}[\s.\-):]+)\s*', '', title).strip()
+    title = re.sub(r'^[\s\[\]\(\)\-~—•*:/|]+', '', title).strip()
+    title = re.sub(r'[\s\[\]\(\)\-~—•*:/|]+$', '', title).strip()
+    return title or f"Track {fallback_idx:02d}"
 
 
 def parse_timestamps_from_text(text: str, total_duration: float = 0.0) -> list:
     """
-    Parse lines containing timestamps like:
-    00:00 Intro - Artist
-    [03:24] 2. Song Title
-    Song Title 06:45
+    Parse lines containing timestamps in any format:
+    - 00:00 Intro - Artist
+    - 00:00찬양제목 (붙어있는 한글)
+    - 01. 00:00 ~ 03:24 Song Title
+    - Song Title [03:24]
+    - 00:00 곡1 / 03:24 곡2 / 07:10 곡3 (한 줄에 여러 곡)
     """
     if not text:
         return []
@@ -88,33 +98,61 @@ def parse_timestamps_from_text(text: str, total_duration: float = 0.0) -> list:
         line_str = line.strip()
         if not line_str:
             continue
-        # Find all timestamps on this line
-        matches = list(re.finditer(r'\b((?:\d{1,2}:)?\d{1,2}:\d{2})\b', line_str))
+
+        matches = list(TS_TOKEN_RE.finditer(line_str))
         if not matches:
             continue
 
-        start_ts = matches[0].group(1)
-        start_sec = hms_to_seconds(start_ts)
+        # 케이스 1: 타임스탬프가 2개이고 두 타임스탬프 사이에 '~' 또는 '-' 만 있는 경우 (시작 ~ 종료 시간 표시)
+        if len(matches) == 2:
+            between = line_str[matches[0].end():matches[1].start()].strip()
+            if re.fullmatch(r'[\s~\-—to\[\]\(\)]*', between, re.IGNORECASE):
+                start_sec = hms_to_seconds(matches[0].group(1))
+                end_sec = hms_to_seconds(matches[1].group(1))
+                title_part = (line_str[:matches[0].start()] + " " + line_str[matches[1].end():]).strip()
+                title = clean_track_title(title_part, len(raw_items) + 1)
+                raw_items.append({
+                    "start": start_sec,
+                    "end": end_sec if end_sec > start_sec else None,
+                    "title": title
+                })
+                continue
 
-        # Check if line has start ~ end timestamp
-        end_sec = None
+        # 케이스 2: 한 줄에 타임스탬프가 여러 개 나열된 경우 (예: 00:00 곡1 03:20 곡2)
         if len(matches) >= 2:
-            possible_end = hms_to_seconds(matches[1].group(1))
-            if possible_end > start_sec:
-                end_sec = possible_end
+            for idx_m, m in enumerate(matches):
+                start_sec = hms_to_seconds(m.group(1))
+                seg_start = m.end()
+                seg_end = matches[idx_m + 1].start() if idx_m + 1 < len(matches) else len(line_str)
+                seg_title = line_str[seg_start:seg_end].strip()
+                if not seg_title and idx_m == 0 and m.start() > 0:
+                    seg_title = line_str[:m.start()].strip()
+                title = clean_track_title(seg_title, len(raw_items) + 1)
+                raw_items.append({
+                    "start": start_sec,
+                    "end": None,
+                    "title": title
+                })
+            continue
 
-        # Clean title by removing the matched timestamp(s) and surrounding brackets/separators
-        title = line_str
-        for m in matches[:2]:
-            title = title.replace(m.group(0), " ")
-        title = re.sub(r'^[\s\[\]\(\)\-~—•*:.\d]+', '', title).strip()
-        title = re.sub(r'[\s\[\]\(\)\-~—•*:]+$', '', title).strip()
-        if not title:
-            title = f"Track {len(raw_items) + 1}"
+        # 케이스 3: 한 줄에 타임스탬프 1개 (가장 일반적)
+        m = matches[0]
+        start_sec = hms_to_seconds(m.group(1))
+        # 타임스탬프 앞의 트랙 번호(예: "01. 00:00 노래")는 버리고, 만약 제목이 타임스탬프 앞에 있으면 보존
+        before_ts = line_str[:m.start()].strip()
+        after_ts = line_str[m.end():].strip()
+        # 앞부분이 단순 번호("1.", "01)", "[1]")면 뒷부분만 제목으로 사용
+        if re.fullmatch(r'[\[\(\s]*\d{1,3}[\]\)\s.\-:•]*', before_ts):
+            title_part = after_ts
+        elif after_ts:
+            title_part = f"{before_ts} {after_ts}".strip()
+        else:
+            title_part = before_ts
 
+        title = clean_track_title(title_part, len(raw_items) + 1)
         raw_items.append({
             "start": start_sec,
-            "end": end_sec,
+            "end": None,
             "title": title
         })
 
@@ -155,10 +193,7 @@ def parse_timestamps_from_text(text: str, total_duration: float = 0.0) -> list:
     return tracks
 
 
-def detect_silence_tracks(audio_path: Path, min_silence_len: float = 1.5, silence_thresh_db: int = -38, min_track_len: float = 30.0) -> list:
-    """
-    Use ffmpeg silencedetect filter to find silence boundaries between songs.
-    """
+def _run_ffmpeg_silencedetect(audio_path: Path, min_silence_len: float, silence_thresh_db: int, min_track_len: float):
     cmd = [
         FFMPEG_BIN, "-hide_banner", "-nostats",
         "-i", str(audio_path),
@@ -168,13 +203,11 @@ def detect_silence_tracks(audio_path: Path, min_silence_len: float = 1.5, silenc
     proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     stderr = proc.stderr or ""
 
-    # Get total duration
     dur_match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", stderr)
     total_duration = 0.0
     if dur_match:
         total_duration = int(dur_match.group(1)) * 3600 + int(dur_match.group(2)) * 60 + float(dur_match.group(3))
 
-    # Parse silence_start and silence_end
     starts = [float(x) for x in re.findall(r"silence_start:\s*([0-9.]+)", stderr)]
     ends = [float(x) for x in re.findall(r"silence_end:\s*([0-9.]+)", stderr)]
 
@@ -190,6 +223,28 @@ def detect_silence_tracks(audio_path: Path, min_silence_len: float = 1.5, silenc
         cut_points[-1] = round(total_duration, 1)
     elif total_duration > 0:
         cut_points.append(round(total_duration, 1))
+
+    return cut_points, total_duration
+
+
+def detect_silence_tracks(audio_path: Path, min_silence_len: float = 1.5, silence_thresh_db: int = -38, min_track_len: float = 30.0) -> list:
+    """
+    Use ffmpeg silencedetect filter to find silence boundaries between songs.
+    Automatically adapts sensitivity if initial parameters only find 1 track on a long audio file.
+    """
+    attempts = [
+        (min_silence_len, silence_thresh_db),
+        (min(1.0, min_silence_len), max(-33, silence_thresh_db)),
+        (0.7, -29),
+        (0.5, -25),
+    ]
+
+    cut_points = [0.0]
+    for sil_len, db_val in attempts:
+        cut_points, total_duration = _run_ffmpeg_silencedetect(audio_path, sil_len, db_val, min_track_len)
+        # 2곡 이상으로 나눠졌거나, 전체 길이가 짧은 단일 곡(3분 미만)이면 중단
+        if len(cut_points) >= 3 or total_duration < 180:
+            break
 
     tracks = []
     for i in range(len(cut_points) - 1):
@@ -257,9 +312,15 @@ def run_split_job(job_id: str, url: str, tracks: list, mode: str, bitrate: str, 
             raise RuntimeError("오디오 원본 파일을 찾을 수 없습니다.")
         source_file = source_files[0]
 
-        # If mode is silence detection or no tracks were provided, run silence detection
-        if mode == "silence" or not tracks:
-            update_job(job_id, status="analyzing_silence", progress=50, message="FFmpeg로 무음(곡 간격) 구간을 정밀 탐색하는 중...")
+        # If mode is silence detection, no tracks were provided, or only 1 full-video track was passed on a long video (unless user explicitly requested single mode)
+        is_unsplit_long_video = (
+            mode != "single"
+            and len(tracks) == 1
+            and total_duration >= 240.0
+            and float(tracks[0].get("start") or 0.0) == 0.0
+        )
+        if mode == "silence" or not tracks or is_unsplit_long_video:
+            update_job(job_id, status="analyzing_silence", progress=50, message="FFmpeg로 무음(곡 간격) 구간을 정밀 탐색하여 곡을 나누는 중...")
             min_silence = float(silence_opts.get("min_silence_len", 1.5))
             thresh_db = int(silence_opts.get("silence_thresh_db", -38))
             min_track = float(silence_opts.get("min_track_len", 30.0))
@@ -463,6 +524,36 @@ class SplitterRequestHandler(SimpleHTTPRequestHandler):
                     if len(desc_tracks) >= 2:
                         detected_source = "description"
                         tracks = desc_tracks
+                    else:
+                        # 챕터와 설명란에 타임라인이 없으면 고정 댓글 / 인기 댓글 상위 20개를 자동 스캔!
+                        try:
+                            comment_opts = {
+                                "quiet": True,
+                                "no_warnings": True,
+                                "noplaylist": True,
+                                "skip_download": True,
+                                "getcomments": True,
+                                "extractor_args": {
+                                    "youtube": {
+                                        "max_comments": ["20", "20", "0", "0"],
+                                        "comment_sort": ["top"]
+                                    }
+                                }
+                            }
+                            with yt_dlp.YoutubeDL(comment_opts) as ydl_c:
+                                info_c = ydl_c.extract_info(url, download=False)
+                            comments = info_c.get("comments") or []
+                            best_comment_tracks = []
+                            for c in comments:
+                                c_text = c.get("text") or ""
+                                c_tracks = parse_timestamps_from_text(c_text, duration)
+                                if len(c_tracks) >= 2 and len(c_tracks) > len(best_comment_tracks):
+                                    best_comment_tracks = c_tracks
+                            if len(best_comment_tracks) >= 2:
+                                detected_source = "comments"
+                                tracks = best_comment_tracks
+                        except Exception:
+                            pass
 
                 return self._send_json({
                     "title": title,

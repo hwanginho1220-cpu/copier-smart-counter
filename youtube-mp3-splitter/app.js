@@ -273,8 +273,9 @@
     }
 
     appState.videoUrl = url;
+    appState.explicitSingle = false;
     if (btnAnalyze) btnAnalyze.disabled = true;
-    showStatus("⏳ 유튜브 영상 정보와 챕터/타임라인을 분석하고 있습니다...", false);
+    showStatus("⏳ 유튜브 영상 정보와 챕터·설명란·고정댓글 타임라인을 분석하고 있습니다...", false);
 
     try {
       var res = await fetch("/api/analyze", {
@@ -310,36 +311,29 @@
           return t;
         });
         if (badgeSource) {
-          badgeSource.textContent =
-            data.detected_source === "chapters"
-              ? "✅ 공식 챕터 " + data.tracks.length + "곡 자동 감지됨"
-              : "✅ 영상 설명란 타임라인 " + data.tracks.length + "곡 자동 감지됨";
+          if (data.detected_source === "chapters") {
+            badgeSource.textContent = "✅ 공식 챕터 " + data.tracks.length + "곡 자동 감지됨";
+          } else if (data.detected_source === "comments") {
+            badgeSource.textContent = "✅ 고정/베스트 댓글 타임라인 " + data.tracks.length + "곡 자동 감지됨";
+          } else {
+            badgeSource.textContent = "✅ 영상 설명란 타임라인 " + data.tracks.length + "곡 자동 감지됨";
+          }
         }
-        showStatus("✨ 총 " + data.tracks.length + "곡의 구간을 자동으로 찾았습니다! 아래에서 제목이나 구간을 확인 후 추출을 시작하세요.", false);
+        showStatus("✨ 총 " + data.tracks.length + "곡의 구간을 자동으로 찾았습니다! 아래에서 제목이나 시작 번호를 확인 후 추출을 시작하세요.", false);
         switchTab("tab-timeline");
         renderTracksTable();
       } else {
-        // 챕터/설명란 타임라인이 없는 경우 기본 1곡 세팅 및 안내
-        appState.tracks = [
-          {
-            index: 1,
-            title: data.title || "Track 01",
-            start: 0,
-            end: data.duration || 0,
-            start_str: "00:00",
-            end_str: data.duration_str || "끝까지",
-            duration_str: data.duration_str || "-",
-            checked: true
-          }
-        ];
+        // 챕터/설명란/댓글 어디에도 타임라인이 없는 경우 -> 1곡으로 묶지 않고 자동으로 무음 구간 감지 탭으로 전환!
+        appState.tracks = [];
+        renderTracksTable();
         if (badgeSource) {
-          badgeSource.textContent = "ℹ️ 영상 내 챕터 없음 (댓글 붙여넣기 또는 무음 감지 가능)";
+          badgeSource.textContent = "🤖 타임라인 없음 → 무음 구간 자동 분할 모드 전환됨";
         }
+        switchTab("tab-silence");
         showStatus(
-          "💡 영상 설명란에 타임라인이 없습니다. 유튜브 고정 댓글의 타임라인을 [댓글 타임라인 붙여넣기] 탭에 붙여넣거나, [무음 구간 자동 감지] 탭으로 자동 분할할 수 있습니다!",
+          "💡 영상 설명란과 댓글에 타임라인이 없어서 자동으로 [🔇 무음 구간 자동 감지] 모드로 전환했습니다! 바로 아래 추출 시작 버튼을 누르면 노래 사이 정적을 찾아 한 곡씩 자동 분할합니다.",
           false
         );
-        renderTracksTable();
       }
     } catch (err) {
       showStatus("❌ 오류: " + (err && err.message ? err.message : String(err)), true);
@@ -430,12 +424,17 @@
     updateProgressUI(2, "서버에 MP3 분할 추출 작업을 요청하는 중...");
 
     try {
+      var sendMode = appState.activeMode;
+      if (sendMode === "timeline" && appState.explicitSingle && selectedTracks.length === 1) {
+        sendMode = "single";
+      }
+
       var res = await fetch("/api/start-job", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           url: url,
-          mode: appState.activeMode,
+          mode: sendMode,
           bitrate: bitrate,
           start_number: getStartNumber(),
           tracks: selectedTracks,
@@ -640,6 +639,7 @@
     var btnSingleTrack = document.getElementById("btn-single-track");
     if (btnSingleTrack) {
       btnSingleTrack.addEventListener("click", function () {
+        appState.explicitSingle = true;
         appState.tracks = [
           {
             index: 1,
