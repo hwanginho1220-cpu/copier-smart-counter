@@ -343,6 +343,11 @@
           </div>
         </div>
 
+        <!-- 월별 빠른 선택 칩 바 -->
+        <div id="month-quick-tabs" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1">
+          <!-- JS에서 월별 탭 버튼 동적 렌더링 -->
+        </div>
+
         <!-- 필터 하단 액션 & 요약 -->
         <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
           <div class="flex items-center gap-2">
@@ -413,6 +418,16 @@
           <div id="stat-category-list" class="space-y-2.5">
             <!-- JS 동적 렌더링 -->
           </div>
+        </div>
+      </div>
+
+      <!-- 월별 구매 추이 현황 -->
+      <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs">
+        <h3 class="text-sm font-extrabold text-slate-900 mb-3 flex items-center gap-1.5">
+          <span>📅</span> 월별 구매 건수 및 지출 합계 현황
+        </h3>
+        <div id="stat-monthly-list" class="space-y-2.5">
+          <!-- JS 동적 렌더링 -->
         </div>
       </div>
     </section>

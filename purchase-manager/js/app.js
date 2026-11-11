@@ -1168,11 +1168,67 @@
     });
   }
 
+  function formatMonthLabel(ym) {
+    if (!ym || ym.length < 7) return '날짜 미지정';
+    var parts = ym.split('-');
+    return parts[0] + '년 ' + parseInt(parts[1], 10) + '월';
+  }
+
+  function renderMonthQuickTabs() {
+    var tabBar = document.getElementById('month-quick-tabs');
+    var monthInput = document.getElementById('filter-month');
+    if (!tabBar) return;
+
+    var currentSelectedMonth = (monthInput && monthInput.value) ? monthInput.value : '';
+    var monthMap = {};
+
+    state.records.forEach(function (r) {
+      if (!r || !r.date || r.date.length < 7) return;
+      var ym = r.date.slice(0, 7);
+      if (!monthMap[ym]) monthMap[ym] = { count: 0, sum: 0 };
+      monthMap[ym].count += 1;
+      monthMap[ym].sum += Number(r.amount) || 0;
+    });
+
+    var sortedMonths = Object.keys(monthMap).sort(function (a, b) {
+      return b.localeCompare(a);
+    });
+
+    var html =
+      '<button type="button" data-ym="" class="month-quick-btn shrink-0 text-xs px-3 py-1.5 rounded-full font-bold border transition ' +
+        (currentSelectedMonth === ''
+          ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+          : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200') +
+      '">전체 월 보기 (' + state.records.length + '건)</button>';
+
+    sortedMonths.forEach(function (ym) {
+      var active = currentSelectedMonth === ym;
+      html +=
+        '<button type="button" data-ym="' + escapeHtml(ym) + '" class="month-quick-btn shrink-0 text-xs px-3 py-1.5 rounded-full font-bold border transition ' +
+          (active
+            ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+            : 'bg-blue-50/60 text-blue-800 border-blue-200 hover:bg-blue-100') +
+        '">📅 ' + escapeHtml(formatMonthLabel(ym)) + ' (' + monthMap[ym].count + '건 · ' + formatNumber(monthMap[ym].sum) + '원)</button>';
+    });
+
+    tabBar.innerHTML = html;
+
+    tabBar.querySelectorAll('.month-quick-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var ym = btn.getAttribute('data-ym') || '';
+        if (monthInput) monthInput.value = ym;
+        renderHistoryList();
+      });
+    });
+  }
+
   function renderHistoryList() {
     var container = document.getElementById('history-list-container');
     var countEl = document.getElementById('filtered-count');
     var sumEl = document.getElementById('filtered-sum');
     if (!container) return;
+
+    renderMonthQuickTabs();
 
     var filtered = getFilteredRecords();
     var totalSum = filtered.reduce(function (acc, cur) {
@@ -1190,7 +1246,40 @@
       return;
     }
 
-    container.innerHTML = filtered.map(createRecordCardHtml).join('');
+    // 월별(YYYY-MM)로 그룹핑하여 섹션 헤더와 월 소계를 명확히 구분하여 렌더링
+    var groups = [];
+    var groupMap = {};
+
+    filtered.forEach(function (r) {
+      var ym = (r && r.date && r.date.length >= 7) ? r.date.slice(0, 7) : '기타';
+      if (!groupMap[ym]) {
+        groupMap[ym] = { ym: ym, records: [], sum: 0 };
+        groups.push(groupMap[ym]);
+      }
+      groupMap[ym].records.push(r);
+      groupMap[ym].sum += Number(r.amount) || 0;
+    });
+
+    container.innerHTML = groups.map(function (g) {
+      return (
+        '<div class="space-y-2.5 pt-2 first:pt-0">' +
+          '<div class="flex items-center justify-between bg-slate-800 text-white px-4 py-2.5 rounded-xl shadow-xs">' +
+            '<div class="flex items-center gap-2">' +
+              '<span class="text-sm">🗓️</span>' +
+              '<span class="text-sm sm:text-base font-extrabold tracking-tight">' + escapeHtml(formatMonthLabel(g.ym)) + ' 구매내역</span>' +
+              '<span class="text-xs px-2 py-0.5 rounded-full bg-white/15 text-slate-200 font-bold">' + g.records.length + '건</span>' +
+            '</div>' +
+            '<div class="text-xs sm:text-sm font-bold text-slate-300">' +
+              '월 합계: <strong class="text-emerald-400 font-extrabold font-mono text-sm sm:text-base">' + formatNumber(g.sum) + '원</strong>' +
+            '</div>' +
+          '</div>' +
+          '<div class="space-y-2.5 pl-0 sm:pl-1">' +
+            g.records.map(createRecordCardHtml).join('') +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+
     bindCardActionEvents(container);
   }
 
@@ -1200,6 +1289,7 @@
     var pcAmount = 0;
     var vendorMap = {};
     var catMap = {};
+    var monthStatMap = {};
 
     state.records.forEach(function (r) {
       if (!r) return;
@@ -1217,6 +1307,13 @@
       if (!catMap[cName]) catMap[cName] = { count: 0, amount: 0 };
       catMap[cName].count += 1;
       catMap[cName].amount += amt;
+
+      var ym = (r.date && r.date.length >= 7) ? r.date.slice(0, 7) : '기타';
+      if (!monthStatMap[ym]) monthStatMap[ym] = { count: 0, amount: 0, copier: 0, pc: 0 };
+      monthStatMap[ym].count += 1;
+      monthStatMap[ym].amount += amt;
+      if (r.category === '복사기 부품') monthStatMap[ym].copier += amt;
+      if (r.category === '컴퓨터 부품') monthStatMap[ym].pc += amt;
     });
 
     var totalAmtEl = document.getElementById('stat-total-amount');
@@ -1286,6 +1383,43 @@
               '</div>' +
               '<div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">' +
                 '<div class="bg-indigo-600 h-full rounded-full" style="width:' + pct + '%"></div>' +
+              '</div>' +
+            '</div>'
+          );
+        }).join('');
+      }
+    }
+
+    // 월별 리스트
+    var monthlyListEl = document.getElementById('stat-monthly-list');
+    if (monthlyListEl) {
+      var monthEntries = Object.keys(monthStatMap).map(function (k) {
+        return {
+          ym: k,
+          count: monthStatMap[k].count,
+          amount: monthStatMap[k].amount,
+          copier: monthStatMap[k].copier,
+          pc: monthStatMap[k].pc
+        };
+      }).sort(function (a, b) { return b.ym.localeCompare(a.ym); });
+
+      if (monthEntries.length === 0) {
+        monthlyListEl.innerHTML = '<div class="text-xs text-slate-400 py-4 text-center">데이터가 없습니다.</div>';
+      } else {
+        monthlyListEl.innerHTML = monthEntries.map(function (m) {
+          var pct = totalAmount > 0 ? Math.max(4, Math.round((m.amount / totalAmount) * 100)) : 0;
+          return (
+            '<div class="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">' +
+              '<div class="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">' +
+                '<span class="font-extrabold text-slate-900">🗓️ ' + escapeHtml(formatMonthLabel(m.ym)) + ' <span class="text-xs text-slate-500 font-semibold">(' + m.count + '건)</span></span>' +
+                '<span class="font-extrabold text-blue-700 font-mono text-sm sm:text-base">' + formatNumber(m.amount) + '원</span>' +
+              '</div>' +
+              '<div class="flex flex-wrap gap-3 text-[11px] text-slate-500">' +
+                '<span>🖨️ 복사기 부품: <strong class="text-slate-700">' + formatNumber(m.copier) + '원</strong></span>' +
+                '<span>💻 컴퓨터 부품: <strong class="text-slate-700">' + formatNumber(m.pc) + '원</strong></span>' +
+              '</div>' +
+              '<div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">' +
+                '<div class="bg-emerald-600 h-full rounded-full" style="width:' + pct + '%"></div>' +
               '</div>' +
             '</div>'
           );
