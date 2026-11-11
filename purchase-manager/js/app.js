@@ -145,13 +145,13 @@
     renderVendorChips();
   }
 
-  // ==================== 이미지 리사이즈/압축 (모바일 사진 용량 최적화) ====================
+  // ==================== 이미지 리사이즈/압축 (모바일 사진 용량 및 AI 전송 속도 최적화) ====================
   function compressImageFile(file, callback) {
     var reader = new FileReader();
     reader.onload = function (event) {
       var img = new Image();
       img.onload = function () {
-        var maxDim = 1280;
+        var maxDim = 1024;
         var w = img.width;
         var h = img.height;
         if (w > maxDim || h > maxDim) {
@@ -168,7 +168,7 @@
         canvas.height = h;
         var ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, w, h);
-        var compressedDataUrl = canvas.toDataURL('image/jpeg', 0.78);
+        var compressedDataUrl = canvas.toDataURL('image/jpeg', 0.72);
         callback(null, compressedDataUrl, w, h);
       };
       img.onerror = function () {
@@ -182,22 +182,28 @@
     reader.readAsDataURL(file);
   }
 
-  // ==================== Gemini Vision AI 거래명세서 자동 스캔 (동적 모델 감지 + 다중 폴백) ====================
-  var DEFAULT_GEMINI_MODELS = [
-    'gemini-2.5-flash',
+  // ==================== Gemini Vision AI 거래명세서 초고속 스캔 (Non-Thinking Flash 우선 + 타임아웃) ====================
+  // 주의: gemini-2.5-flash는 기본 thinking(심층추론)이 켜져 있어 15~30초 이상 걸리므로,
+  // 추론 지연이 없는 초고속 비전 모델(2.0-flash / 2.0-flash-lite / 1.5-flash)을 최우선으로 호출합니다.
+  var FAST_GEMINI_MODELS = [
     'gemini-2.0-flash',
     'gemini-2.0-flash-lite',
-    'gemini-1.5-flash-latest',
-    'gemini-1.5-flash'
+    'gemini-1.5-flash',
+    'gemini-2.5-flash'
   ];
 
+  var cachedModelList = null;
+
   function resolveAvailableModels(cleanKey) {
+    if (cachedModelList && cachedModelList.length > 0) {
+      return Promise.resolve(cachedModelList.slice());
+    }
     var listUrl = 'https://generativelanguage.googleapis.com/v1beta/models?key=' + encodeURIComponent(cleanKey);
     return fetch(listUrl)
       .then(function (res) {
-        if (!res.ok) return DEFAULT_GEMINI_MODELS.slice();
+        if (!res.ok) return FAST_GEMINI_MODELS.slice();
         return res.json().then(function (data) {
-          if (!data || !Array.isArray(data.models)) return DEFAULT_GEMINI_MODELS.slice();
+          if (!data || !Array.isArray(data.models)) return FAST_GEMINI_MODELS.slice();
           var supported = data.models
             .filter(function (m) {
               return m && m.name && Array.isArray(m.supportedGenerationMethods) &&
@@ -211,15 +217,14 @@
               return m.name.replace(/^models\//, '');
             });
 
-          // flash 계열 우선 정렬
           var ordered = [];
-          DEFAULT_GEMINI_MODELS.forEach(function (pref) {
+          FAST_GEMINI_MODELS.forEach(function (pref) {
             if (supported.indexOf(pref) !== -1 && ordered.indexOf(pref) === -1) {
               ordered.push(pref);
             }
           });
           supported.forEach(function (s) {
-            if (s.indexOf('flash') !== -1 && ordered.indexOf(s) === -1) {
+            if (s.indexOf('flash') !== -1 && s.indexOf('2.5') === -1 && ordered.indexOf(s) === -1) {
               ordered.push(s);
             }
           });
@@ -228,11 +233,12 @@
               ordered.push(s);
             }
           });
-          return ordered.length > 0 ? ordered : DEFAULT_GEMINI_MODELS.slice();
+          cachedModelList = ordered.length > 0 ? ordered : FAST_GEMINI_MODELS.slice();
+          return cachedModelList.slice();
         });
       })
       .catch(function () {
-        return DEFAULT_GEMINI_MODELS.slice();
+        return FAST_GEMINI_MODELS.slice();
       });
   }
 
@@ -241,11 +247,23 @@
     var modelName = modelList[currentIdx];
     var apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + modelName + ':generateContent?key=' + encodeURIComponent(cleanKey);
 
+    // gemini-2.5 계열인 경우 thinkingBudget: 0 설정으로 추론 지연을 완전히 끔
+    var payload = JSON.parse(JSON.stringify(requestBody));
+    if (modelName.indexOf('2.5') !== -1) {
+      payload.generationConfig = payload.generationConfig || {};
+      payload.generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    }
+
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timeoutId = controller ? setTimeout(function () { controller.abort(); }, 12000) : null;
+
     return fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(payload),
+      signal: controller ? controller.signal : undefined
     }).then(function (res) {
+      if (timeoutId) clearTimeout(timeoutId);
       if (res.ok) {
         return res.json();
       }
@@ -257,13 +275,19 @@
         }
         throw new Error('API 오류 (' + res.status + '): ' + detailMsg);
       });
+    }).catch(function (err) {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (err && err.name === 'AbortError' && currentIdx + 1 < modelList.length) {
+        console.warn('Model ' + modelName + ' timed out (12s), switching to ' + modelList[currentIdx + 1]);
+        return callGeminiWithModels(cleanKey, requestBody, modelList, currentIdx + 1);
+      }
+      throw err;
     });
   }
 
   function callGeminiModelWithFallback(cleanKey, requestBody) {
-    return resolveAvailableModels(cleanKey).then(function (models) {
-      return callGeminiWithModels(cleanKey, requestBody, models, 0);
-    });
+    // 1단계: 모델 목록 조회 없이 가장 빠른 첫 번째 모델(gemini-2.0-flash)로 즉시 직행 호출!
+    return callGeminiWithModels(cleanKey, requestBody, FAST_GEMINI_MODELS, 0);
   }
 
   function analyzeInvoiceWithGemini() {
@@ -283,12 +307,19 @@
     var statusMsg = document.getElementById('ai-ocr-status-msg');
     var originalBtnHtml = btn ? btn.innerHTML : '';
 
+    var elapsedSec = 0;
+    var timerInterval = null;
+
     if (btn) {
       btn.disabled = true;
-      btn.innerHTML = '<span>⏳</span><span>AI가 거래명세서의 거래처·품목·금액을 읽는 중...</span>';
+      btn.innerHTML = '<span>⚡</span><span>초고속 AI 스캔 중... (0초)</span>';
+      timerInterval = setInterval(function () {
+        elapsedSec += 1;
+        btn.innerHTML = '<span>⚡</span><span>초고속 AI 스캔 중... (' + elapsedSec + '초)</span>';
+      }, 1000);
     }
     if (statusMsg) {
-      statusMsg.innerHTML = '🔍 <strong>Gemini Vision AI</strong>가 이미지에서 공급자(구매처), 날짜, 세부 품목, 합계금액을 추출하고 있습니다...';
+      statusMsg.innerHTML = '⚡ <strong>초고속 AI 스캔 중...</strong> 거래처, 품목, 수량, 단가, 합계금액을 즉시 추출하고 있습니다 (보통 2~4초 소요)';
     }
 
     var base64Data = state.currentPhotoDataUrl.split(',')[1];
@@ -296,19 +327,8 @@
     var mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
     var promptText = [
-      '당신은 한국의 거래명세서, 세금계산서, 영수증, 그리고 복사기/컴퓨터 부품 라벨을 분석하는 전문 회계/자재 AI입니다.',
-      '첨부된 이미지를 분석하여 반드시 아래 JSON 형식으로만 응답하세요 (마크다운 코드블록 없이 순수 JSON만 반환):',
-      '{',
-      '  "date": "YYYY-MM-DD (인식 안되면 빈 문자열)",',
-      '  "vendor": "공급자 상호/구매처 이름 (예: 대원오피스, 컴퓨존 등)",',
-      '  "category": "복사기 부품 | 컴퓨터 부품 | 프린터/소모품 | 공구/자재 | 기타 중 가장 알맞은 1개",',
-      '  "summary": "대표 구매내용 한줄 요약 (예: 캐논 드럼유닛 외 2건)",',
-      '  "totalAmount": 숫자만(총 합계금액, 부가세 포함 총액 우선),',
-      '  "paymentMethod": "세금계산서(월결제) | 법인/사업자카드 | 계좌이체/현금 | 온라인결제 중 추정",',
-      '  "items": [',
-      '    { "name": "품목명 및 규격", "qty": 숫자수량, "unitPrice": 숫자단가, "amount": 숫자금액 }',
-      '  ]',
-      '}'
+      '한국 거래명세서/영수증/부품사진입니다. 순수 JSON만 출력하세요:',
+      '{"date":"YYYY-MM-DD","vendor":"구매처상호","category":"복사기 부품|컴퓨터 부품|프린터/소모품|공구/자재|기타","summary":"대표품목 요약","totalAmount":숫자총액,"paymentMethod":"세금계산서(월결제)|법인/사업자카드|계좌이체/현금|온라인결제","items":[{"name":"품목명","qty":수량,"unitPrice":단가,"amount":금액}]}'
     ].join('\n');
 
     var requestBody = {
@@ -319,11 +339,12 @@
         ]
       }],
       generationConfig: {
-        temperature: 0.1
+        temperature: 0.1,
+        maxOutputTokens: 1024
       }
     };
 
-    callGeminiModelWithFallback(cleanKey, requestBody, 0)
+    callGeminiModelWithFallback(cleanKey, requestBody)
       .then(function (data) {
         var rawText = '';
         if (
@@ -345,9 +366,9 @@
         var parsed = JSON.parse(rawText);
         applyAiResultToForm(parsed);
         if (statusMsg) {
-          statusMsg.innerHTML = '✅ <strong>AI 자동 인식 완료!</strong> 아래 입력칸에 채워진 내용을 확인 후 [구매이력 저장하기]를 눌러주세요.';
+          statusMsg.innerHTML = '✅ <strong>AI 자동 인식 완료! (' + elapsedSec + '초 소요)</strong> 아래 채워진 내용을 확인 후 [구매이력 저장하기]를 눌러주세요.';
         }
-        showToast('✨ 거래명세서 내용을 자동으로 입력했습니다!', 'info');
+        showToast('✨ ' + elapsedSec + '초 만에 거래명세서 내용을 자동 입력했습니다!', 'info');
       })
       .catch(function (err) {
         console.error('Gemini OCR Error:', err);
@@ -357,6 +378,7 @@
         showToast('AI 인식 오류: ' + err.message, 'error');
       })
       .finally(function () {
+        if (timerInterval) clearInterval(timerInterval);
         if (btn) {
           btn.disabled = false;
           btn.innerHTML = originalBtnHtml;
