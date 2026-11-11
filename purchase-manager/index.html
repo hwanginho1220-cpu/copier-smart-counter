@@ -72,9 +72,6 @@
           <span class="text-slate-500">|</span>
           <span class="text-slate-300">합계: <strong id="header-month-total" class="text-emerald-400 font-bold">0원</strong></span>
         </div>
-        <button id="btn-seed-demo" type="button" class="text-[11px] text-blue-300 hover:text-blue-200 underline font-medium">
-          샘플 데이터 넣기
-        </button>
       </div>
     </div>
 
@@ -318,6 +315,7 @@
 
       <!-- 검색 & 필터 바 -->
       <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-3">
+        <!-- 1행: 키워드 & 카테고리 & 월별 선택 -->
         <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
           <!-- 키워드 검색 -->
           <div class="sm:col-span-2 relative">
@@ -339,7 +337,30 @@
 
           <!-- 월별 필터 -->
           <div>
-            <input id="filter-month" type="month" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white font-medium outline-none">
+            <input id="filter-month" type="month" title="특정 월 선택" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white font-medium outline-none">
+          </div>
+        </div>
+
+        <!-- 2행: 기간 지정 (시작일 ~ 종료일) 및 빠른 기간 프리셋 버튼 -->
+        <div class="bg-slate-50 rounded-xl p-3 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <span class="text-xs font-extrabold text-slate-700 flex items-center gap-1 mr-1">
+              <span>📆</span> <span>기간 지정:</span>
+            </span>
+            <input id="filter-start-date" type="date" class="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs sm:text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none">
+            <span class="text-xs font-bold text-slate-400">~</span>
+            <input id="filter-end-date" type="date" class="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs sm:text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+
+          <!-- 빠른 기간 선택 칩 -->
+          <div class="flex flex-wrap items-center gap-1">
+            <button type="button" data-range="today" class="btn-quick-date-range text-[11px] px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 font-bold transition">오늘</button>
+            <button type="button" data-range="7days" class="btn-quick-date-range text-[11px] px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 font-bold transition">최근 7일</button>
+            <button type="button" data-range="1month" class="btn-quick-date-range text-[11px] px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 font-bold transition">최근 1개월</button>
+            <button type="button" data-range="3months" class="btn-quick-date-range text-[11px] px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 font-bold transition">최근 3개월</button>
+            <button type="button" data-range="thisMonth" class="btn-quick-date-range text-[11px] px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 font-bold transition">이번 달</button>
+            <button type="button" data-range="lastMonth" class="btn-quick-date-range text-[11px] px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 font-bold transition">지난달</button>
+            <button type="button" data-range="thisYear" class="btn-quick-date-range text-[11px] px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 font-bold transition">올해 전체</button>
           </div>
         </div>
 

@@ -1135,7 +1135,7 @@
     if (sorted.length === 0) {
       container.innerHTML =
         '<div class="text-center py-8 text-xs sm:text-sm text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">' +
-          '아직 등록된 구매이력이 없습니다.<br>위에서 거래명세서 사진을 찍거나 구매내역을 입력해보세요! (우측 상단 <strong>[샘플 데이터 넣기]</strong>로 체험 가능)' +
+          '아직 등록된 구매이력이 없습니다.<br>위에서 거래명세서 사진을 찍거나 구매내역을 입력해보세요!' +
         '</div>';
       return;
     }
@@ -1144,19 +1144,88 @@
     bindCardActionEvents(container);
   }
 
+  function formatDateObj(d) {
+    var yyyy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    return yyyy + '-' + mm + '-' + dd;
+  }
+
+  function applyQuickDateRange(rangeKey) {
+    var startEl = document.getElementById('filter-start-date');
+    var endEl = document.getElementById('filter-end-date');
+    var monthEl = document.getElementById('filter-month');
+    if (!startEl || !endEl) return;
+
+    if (monthEl) monthEl.value = '';
+
+    var now = new Date();
+    var endStr = formatDateObj(now);
+    var startStr = endStr;
+
+    if (rangeKey === 'today') {
+      startStr = endStr;
+    } else if (rangeKey === '7days') {
+      var d7 = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+      startStr = formatDateObj(d7);
+    } else if (rangeKey === '1month') {
+      var d30 = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+      startStr = formatDateObj(d30);
+    } else if (rangeKey === '3months') {
+      var d90 = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+      startStr = formatDateObj(d90);
+    } else if (rangeKey === 'thisMonth') {
+      var firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
+      startStr = formatDateObj(firstThis);
+    } else if (rangeKey === 'lastMonth') {
+      var firstLast = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      var lastLast = new Date(now.getFullYear(), now.getMonth(), 0);
+      startStr = formatDateObj(firstLast);
+      endStr = formatDateObj(lastLast);
+    } else if (rangeKey === 'thisYear') {
+      startStr = now.getFullYear() + '-01-01';
+      endStr = now.getFullYear() + '-12-31';
+    }
+
+    startEl.value = startStr;
+    endEl.value = endStr;
+
+    document.querySelectorAll('.btn-quick-date-range').forEach(function (btn) {
+      if (btn.getAttribute('data-range') === rangeKey) {
+        btn.className = 'btn-quick-date-range text-[11px] px-2.5 py-1 rounded-lg bg-blue-600 text-white border border-blue-600 font-bold transition shadow-2xs';
+      } else {
+        btn.className = 'btn-quick-date-range text-[11px] px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 font-bold transition';
+      }
+    });
+
+    renderHistoryList();
+  }
+
+  function clearQuickDateRangeHighlight() {
+    document.querySelectorAll('.btn-quick-date-range').forEach(function (btn) {
+      btn.className = 'btn-quick-date-range text-[11px] px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 hover:text-blue-700 text-slate-700 border border-slate-200 font-bold transition';
+    });
+  }
+
   function getFilteredRecords() {
     var kwEl = document.getElementById('filter-keyword');
     var catEl = document.getElementById('filter-category');
     var monthEl = document.getElementById('filter-month');
+    var startEl = document.getElementById('filter-start-date');
+    var endEl = document.getElementById('filter-end-date');
 
     var kw = (kwEl && kwEl.value.trim()) ? kwEl.value.trim().toLowerCase() : '';
     var cat = (catEl && catEl.value) ? catEl.value : 'ALL';
     var month = (monthEl && monthEl.value) ? monthEl.value : '';
+    var startDate = (startEl && startEl.value) ? startEl.value : '';
+    var endDate = (endEl && endEl.value) ? endEl.value : '';
 
     return getSortedRecords().filter(function (r) {
       if (!r) return false;
       if (cat !== 'ALL' && r.category !== cat) return false;
       if (month && (!r.date || r.date.slice(0, 7) !== month)) return false;
+      if (startDate && (!r.date || r.date < startDate)) return false;
+      if (endDate && (!r.date || r.date > endDate)) return false;
       if (kw) {
         var lineText = Array.isArray(r.lineItems)
           ? r.lineItems.map(function (li) { return li.name || ''; }).join(' ')
@@ -1217,6 +1286,11 @@
       btn.addEventListener('click', function () {
         var ym = btn.getAttribute('data-ym') || '';
         if (monthInput) monthInput.value = ym;
+        var startEl = document.getElementById('filter-start-date');
+        var endEl = document.getElementById('filter-end-date');
+        if (startEl) startEl.value = '';
+        if (endEl) endEl.value = '';
+        clearQuickDateRangeHighlight();
         renderHistoryList();
       });
     });
@@ -2021,19 +2095,46 @@
         btnResetForm.addEventListener('click', resetPurchaseForm);
       }
 
-      // 샘플 데이터 버튼
-      var btnSeedDemo = document.getElementById('btn-seed-demo');
-      if (btnSeedDemo) {
-        btnSeedDemo.addEventListener('click', seedSampleData);
-      }
-
-      // 검색 필터 이벤트
+      // 검색 필터 및 기간 지정 이벤트
       var filterKw = document.getElementById('filter-keyword');
       var filterCat = document.getElementById('filter-category');
       var filterMonth = document.getElementById('filter-month');
+      var filterStartDate = document.getElementById('filter-start-date');
+      var filterEndDate = document.getElementById('filter-end-date');
+
       if (filterKw) filterKw.addEventListener('input', renderHistoryList);
       if (filterCat) filterCat.addEventListener('change', renderHistoryList);
-      if (filterMonth) filterMonth.addEventListener('change', renderHistoryList);
+      if (filterMonth) {
+        filterMonth.addEventListener('change', function () {
+          if (filterMonth.value) {
+            if (filterStartDate) filterStartDate.value = '';
+            if (filterEndDate) filterEndDate.value = '';
+            clearQuickDateRangeHighlight();
+          }
+          renderHistoryList();
+        });
+      }
+      if (filterStartDate) {
+        filterStartDate.addEventListener('change', function () {
+          if (filterStartDate.value && filterMonth) filterMonth.value = '';
+          clearQuickDateRangeHighlight();
+          renderHistoryList();
+        });
+      }
+      if (filterEndDate) {
+        filterEndDate.addEventListener('change', function () {
+          if (filterEndDate.value && filterMonth) filterMonth.value = '';
+          clearQuickDateRangeHighlight();
+          renderHistoryList();
+        });
+      }
+
+      document.querySelectorAll('.btn-quick-date-range').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var rangeKey = btn.getAttribute('data-range');
+          if (rangeKey) applyQuickDateRange(rangeKey);
+        });
+      });
 
       var btnClearFilters = document.getElementById('btn-clear-filters');
       if (btnClearFilters) {
@@ -2041,6 +2142,9 @@
           if (filterKw) filterKw.value = '';
           if (filterCat) filterCat.value = 'ALL';
           if (filterMonth) filterMonth.value = '';
+          if (filterStartDate) filterStartDate.value = '';
+          if (filterEndDate) filterEndDate.value = '';
+          clearQuickDateRangeHighlight();
           renderHistoryList();
         });
       }
