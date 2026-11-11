@@ -33,6 +33,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
+  <!-- PDF.js CDN (다중 페이지 PDF 명세서 분리 및 이미지 변환용) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -109,21 +112,71 @@
           </span>
         </div>
 
-        <!-- 촬영 모드 선택 버튼 2개 (모바일 친화적 큼직한 버튼) -->
-        <div class="grid grid-cols-2 gap-3 mb-3">
-          <label for="input-camera-photo" class="cursor-pointer flex flex-col items-center justify-center p-4 rounded-xl border-2 border-dashed border-blue-400 bg-blue-50/50 hover:bg-blue-50 active:scale-[0.99] transition text-center">
-            <span class="text-2xl sm:text-3xl mb-1">📄</span>
+        <!-- 촬영 및 업로드 모드 선택 버튼 3개 -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-3">
+          <label for="input-camera-photo" class="cursor-pointer flex flex-col items-center justify-center p-3.5 rounded-xl border-2 border-dashed border-blue-400 bg-blue-50/50 hover:bg-blue-50 active:scale-[0.99] transition text-center">
+            <span class="text-2xl mb-1">📄</span>
             <span class="text-xs sm:text-sm font-bold text-blue-800">카메라로 바로 촬영</span>
             <span class="text-[11px] text-blue-600 mt-0.5">거래명세서 · 영수증 · 부품</span>
             <input id="input-camera-photo" type="file" accept="image/*" capture="environment" class="hidden">
           </label>
 
-          <label for="input-gallery-photo" class="cursor-pointer flex flex-col items-center justify-center p-4 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 active:scale-[0.99] transition text-center">
-            <span class="text-2xl sm:text-3xl mb-1">🖼️</span>
-            <span class="text-xs sm:text-sm font-bold text-slate-700">앨범/PC에서 사진 선택</span>
-            <span class="text-[11px] text-slate-500 mt-0.5">카톡 받은 명세서 · 캡처 이미지</span>
-            <input id="input-gallery-photo" type="file" accept="image/*" class="hidden">
+          <label for="input-gallery-photo" class="cursor-pointer flex flex-col items-center justify-center p-3.5 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 active:scale-[0.99] transition text-center">
+            <span class="text-2xl mb-1">🖼️</span>
+            <span class="text-xs sm:text-sm font-bold text-slate-700">사진/PDF 1건 등록</span>
+            <span class="text-[11px] text-slate-500 mt-0.5">낱장 명세서 · 캡처 이미지</span>
+            <input id="input-gallery-photo" type="file" accept="image/*,application/pdf" class="hidden">
           </label>
+
+          <label for="input-batch-files" class="cursor-pointer flex flex-col items-center justify-center p-3.5 rounded-xl border-2 border-dashed border-indigo-400 bg-indigo-50/50 hover:bg-indigo-100/70 active:scale-[0.99] transition text-center">
+            <span class="text-2xl mb-1">📚</span>
+            <span class="text-xs sm:text-sm font-bold text-indigo-900">다량 PDF(50장+) · 여러 사진 일괄등록</span>
+            <span class="text-[11px] text-indigo-700 mt-0.5">페이지별 자동 분리 & AI 연속 스캔</span>
+            <input id="input-batch-files" type="file" accept="application/pdf,image/*" multiple class="hidden">
+          </label>
+        </div>
+
+        <!-- ==================== [다량 PDF / 다중 이미지 일괄 자동등록 큐 패널] ==================== -->
+        <div id="batch-processor-panel" class="hidden bg-indigo-950 text-white rounded-2xl p-4 mb-3 border border-indigo-700 shadow-lg space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 class="text-sm sm:text-base font-extrabold flex items-center gap-1.5">
+                <span>📚</span> <span id="batch-panel-title">다량 거래명세서 일괄 AI 스캔 및 자동 저장</span>
+              </h3>
+              <p id="batch-panel-subtitle" class="text-xs text-indigo-200 mt-0.5">
+                PDF 각 페이지(또는 여러 장의 사진)를 한 장씩 분리하여 AI가 읽고 구매이력에 연속으로 자동 등록합니다.
+              </p>
+            </div>
+            <button id="btn-close-batch-panel" type="button" class="text-xs px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-indigo-100 font-bold">
+              닫기 ✕
+            </button>
+          </div>
+
+          <!-- 진행률 바 -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs font-bold">
+              <span id="batch-progress-text" class="text-indigo-200">대기 중 (총 0장)</span>
+              <span id="batch-progress-percent" class="text-emerald-300 font-mono">0%</span>
+            </div>
+            <div class="w-full bg-indigo-900 h-2.5 rounded-full overflow-hidden">
+              <div id="batch-progress-bar" class="bg-gradient-to-r from-emerald-400 to-cyan-400 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+          </div>
+
+          <!-- 컨트롤 버튼 -->
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="btn-start-batch-ocr" type="button" class="flex-1 py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-xs sm:text-sm shadow flex items-center justify-center gap-1.5 transition">
+              <span>🚀</span> <span>전체 페이지 AI 자동 스캔 & 일괄 저장 시작</span>
+            </button>
+            <button id="btn-stop-batch-ocr" type="button" class="hidden py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs sm:text-sm shadow transition">
+              ⏸️ 일시정지
+            </button>
+          </div>
+
+          <!-- 페이지별 처리 상태 리스트 (스크롤) -->
+          <div id="batch-items-list" class="max-h-60 overflow-y-auto space-y-1.5 pr-1 text-xs bg-indigo-900/50 rounded-xl p-2.5 border border-indigo-800/80">
+            <!-- JS 동적 렌더링 -->
+          </div>
         </div>
 
         <!-- 사진 미리보기 및 AI 분석 컨트롤 영역 (사진 첨부 시 표시) -->

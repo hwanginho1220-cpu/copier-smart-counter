@@ -540,6 +540,413 @@
     }
   }
 
+  // ==================== 다량 PDF(50장+) 및 다중 이미지 일괄 처리 엔진 ====================
+  var batchState = {
+    queue: [], // [{ id, label, dataUrl, status: 'pending'|'running'|'done'|'error', resultText: '' }]
+    isRunning: false,
+    stopRequested: false
+  };
+
+  function ensurePdfJsWorker() {
+    if (typeof pdfjsLib !== 'undefined' && pdfjsLib.GlobalWorkerOptions && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  }
+
+  function extractPagesFromPdfFile(file, onPageExtracted) {
+    ensurePdfJsWorker();
+    if (typeof pdfjsLib === 'undefined') {
+      return Promise.reject(new Error('PDF 변환 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해주세요.'));
+    }
+
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var typedArray = new Uint8Array(e.target.result);
+        pdfjsLib.getDocument({ data: typedArray }).promise
+          .then(function (pdfDoc) {
+            var totalPages = pdfDoc.numPages;
+            var currentPage = 1;
+
+            function processNextPage() {
+              if (currentPage > totalPages) {
+                resolve(totalPages);
+                return;
+              }
+              var pageNum = currentPage;
+              currentPage += 1;
+
+              pdfDoc.getPage(pageNum).then(function (page) {
+                var unscaledViewport = page.getViewport({ scale: 1 });
+                var maxDim = 1150;
+                var scale = maxDim / Math.max(unscaledViewport.width, unscaledViewport.height);
+                if (scale < 1.1) scale = 1.1;
+                var viewport = page.getViewport({ scale: scale });
+
+                var rawCanvas = document.createElement('canvas');
+                rawCanvas.width = Math.round(viewport.width);
+                rawCanvas.height = Math.round(viewport.height);
+                var rawCtx = rawCanvas.getContext('2d');
+
+                page.render({ canvasContext: rawCtx, viewport: viewport }).promise
+                  .then(function () {
+                    var w = rawCanvas.width;
+                    var h = rawCanvas.height;
+                    var finalDataUrl = '';
+
+                    // 세로로 스캔된 가로 명세서인 경우 가로 방향으로 자동 90도 회전
+                    if (h > w) {
+                      var rotCanvas = document.createElement('canvas');
+                      rotCanvas.width = h;
+                      rotCanvas.height = w;
+                      var rotCtx = rotCanvas.getContext('2d');
+                      rotCtx.translate(rotCanvas.width / 2, rotCanvas.height / 2);
+                      rotCtx.rotate(-Math.PI / 2);
+                      rotCtx.drawImage(rawCanvas, -w / 2, -h / 2, w, h);
+                      finalDataUrl = rotCanvas.toDataURL('image/jpeg', 0.72);
+                    } else {
+                      finalDataUrl = rawCanvas.toDataURL('image/jpeg', 0.72);
+                    }
+
+                    onPageExtracted(pageNum, totalPages, finalDataUrl);
+                    processNextPage();
+                  })
+                  .catch(reject);
+              }).catch(reject);
+            }
+
+            processNextPage();
+          })
+          .catch(reject);
+      };
+      reader.onerror = function () {
+        reject(new Error('PDF 파일을 읽을 수 없습니다.'));
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function renderBatchPanelUI() {
+    var panel = document.getElementById('batch-processor-panel');
+    var listEl = document.getElementById('batch-items-list');
+    var progText = document.getElementById('batch-progress-text');
+    var progPct = document.getElementById('batch-progress-percent');
+    var progBar = document.getElementById('batch-progress-bar');
+    var btnStart = document.getElementById('btn-start-batch-ocr');
+    var btnStop = document.getElementById('btn-stop-batch-ocr');
+
+    if (!panel || !listEl) return;
+
+    if (batchState.queue.length === 0) {
+      panel.classList.add('hidden');
+      return;
+    }
+
+    panel.classList.remove('hidden');
+
+    var total = batchState.queue.length;
+    var doneCount = batchState.queue.filter(function (q) { return q.status === 'done'; }).length;
+    var errCount = batchState.queue.filter(function (q) { return q.status === 'error'; }).length;
+    var finishedCount = doneCount + errCount;
+    var pct = total > 0 ? Math.round((finishedCount / total) * 100) : 0;
+
+    if (progText) {
+      progText.textContent = '총 ' + total + '장 중 ' + doneCount + '장 저장 완료' + (errCount > 0 ? ' (실패 ' + errCount + '장)' : '');
+    }
+    if (progPct) progPct.textContent = pct + '%';
+    if (progBar) progBar.style.width = pct + '%';
+
+    if (btnStart && btnStop) {
+      if (batchState.isRunning) {
+        btnStart.classList.add('hidden');
+        btnStop.classList.remove('hidden');
+      } else {
+        btnStart.classList.remove('hidden');
+        btnStop.classList.add('hidden');
+        var pendingCount = batchState.queue.filter(function (q) { return q.status === 'pending' || q.status === 'error'; }).length;
+        if (pendingCount === 0) {
+          btnStart.innerHTML = '<span>✅</span> <span>모든 명세서(' + doneCount + '건) 자동 등록 완료!</span>';
+          btnStart.disabled = true;
+        } else {
+          btnStart.disabled = false;
+          btnStart.innerHTML = '<span>🚀</span> <span>대기 중인 ' + pendingCount + '장 AI 자동 스캔 & 일괄 저장 시작</span>';
+        }
+      }
+    }
+
+    listEl.innerHTML = batchState.queue.map(function (item, idx) {
+      var badge = '';
+      if (item.status === 'pending') {
+        badge = '<span class="px-2 py-0.5 rounded bg-indigo-800 text-indigo-200 font-semibold">대기</span>';
+      } else if (item.status === 'running') {
+        badge = '<span class="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-extrabold animate-pulse">⚡ AI 분석중...</span>';
+      } else if (item.status === 'done') {
+        badge = '<span class="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-extrabold">✅ 저장됨</span>';
+      } else if (item.status === 'error') {
+        badge = '<span class="px-2 py-0.5 rounded bg-red-500 text-white font-bold">⚠️ 실패</span>';
+      }
+
+      return (
+        '<div class="flex items-center justify-between gap-2 bg-indigo-950/80 px-3 py-2 rounded-lg border border-indigo-800/60">' +
+          '<div class="flex items-center gap-2 min-w-0 flex-1">' +
+            '<span class="text-indigo-400 font-mono text-[11px] shrink-0">#' + (idx + 1) + '</span>' +
+            '<span class="font-bold text-white truncate">' + escapeHtml(item.label) + '</span>' +
+            (item.resultText ? '<span class="text-emerald-300 truncate text-[11px]">→ ' + escapeHtml(item.resultText) + '</span>' : '') +
+          '</div>' +
+          '<div class="shrink-0">' + badge + '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function handleBatchFilesSelected(fileList) {
+    if (!fileList || fileList.length === 0) return;
+    var files = Array.prototype.slice.call(fileList);
+
+    batchState.queue = [];
+    batchState.isRunning = false;
+    batchState.stopRequested = false;
+
+    var panel = document.getElementById('batch-processor-panel');
+    var progText = document.getElementById('batch-progress-text');
+    if (panel) panel.classList.remove('hidden');
+    if (progText) progText.textContent = '⏳ 파일에서 명세서 페이지를 분리하고 있습니다...';
+
+    var seq = Promise.resolve();
+
+    files.forEach(function (file) {
+      var isPdf = (file.type === 'application/pdf') || /\.pdf$/i.test(file.name);
+      if (isPdf) {
+        seq = seq.then(function () {
+          return extractPagesFromPdfFile(file, function (pageNum, totalPages, pageDataUrl) {
+            batchState.queue.push({
+              id: 'batch_' + Date.now() + '_' + pageNum + '_' + Math.random().toString(36).substring(2, 6),
+              label: file.name + ' - ' + pageNum + '/' + totalPages + '쪽',
+              dataUrl: pageDataUrl,
+              status: 'pending',
+              resultText: ''
+            });
+            renderBatchPanelUI();
+          });
+        });
+      } else if (file.type.indexOf('image/') === 0) {
+        seq = seq.then(function () {
+          return new Promise(function (resolve) {
+            compressImageFile(file, function (err, dataUrl) {
+              if (!err && dataUrl) {
+                batchState.queue.push({
+                  id: 'batch_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+                  label: file.name,
+                  dataUrl: dataUrl,
+                  status: 'pending',
+                  resultText: ''
+                });
+                renderBatchPanelUI();
+              }
+              resolve();
+            });
+          });
+        });
+      }
+    });
+
+    seq.then(function () {
+      renderBatchPanelUI();
+      showToast('📚 총 ' + batchState.queue.length + '장의 명세서가 준비되었습니다! [일괄 저장 시작]을 눌러주세요.', 'info');
+    }).catch(function (err) {
+      showToast('파일 준비 중 오류: ' + err.message, 'error');
+    });
+  }
+
+  function createThumbnailForBatchStorage(dataUrl, callback) {
+    // 50장 이상의 대량 명세서를 브라우저 로컬 스토리지(5MB 한도)에도 무리 없이 저장하기 위해
+    // 일괄 등록 시에는 보관용 이미지를 720px / 55% 품질(약 35~50KB)로 경량화합니다.
+    var img = new Image();
+    img.onload = function () {
+      var maxDim = 720;
+      var w = img.width;
+      var h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      callback(canvas.toDataURL('image/jpeg', 0.55));
+    };
+    img.onerror = function () {
+      callback(dataUrl);
+    };
+    img.src = dataUrl;
+  }
+
+  function processSingleBatchItemWithAi(item, cleanKey) {
+    var base64Data = item.dataUrl.split(',')[1];
+    var catListStr = state.categories.length > 0 ? state.categories.join('|') : '복사기 부품|컴퓨터 부품|프린터/소모품|공구/자재|기타';
+
+    // 한 페이지 안에 1개 또는 여러 개의 명세서가 있을 수 있으므로 invoices 배열 형태로도 수용
+    var promptText = [
+      '한국 거래명세서/영수증 이미지입니다. 이미지 안의 거래명세서를 분석하여 순수 JSON만 출력하세요.',
+      '만약 한 페이지에 여러 건의 독립된 명세서가 있다면 invoices 배열에 각각 넣고, 1건이면 1개만 넣으세요:',
+      '{"rotationNeeded":0또는90또는180또는270,"invoices":[{"date":"YYYY-MM-DD","vendor":"구매처상호","category":"' + catListStr + ' 중 1개","summary":"대표품목 요약","totalAmount":숫자총액,"paymentMethod":"세금계산서(월결제)|법인/사업자카드|계좌이체/현금|온라인결제","items":[{"name":"품목명","qty":수량,"unitPrice":단가,"amount":금액}]}]}'
+    ].join('\n');
+
+    var requestBody = {
+      contents: [{
+        parts: [
+          { text: promptText },
+          { inline_data: { mime_type: 'image/jpeg', data: base64Data } }
+        ]
+      }],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 1536
+      }
+    };
+
+    return callGeminiModelWithFallback(cleanKey, requestBody).then(function (data) {
+      var rawText = '';
+      if (
+        data &&
+        data.candidates &&
+        data.candidates[0] &&
+        data.candidates[0].content &&
+        data.candidates[0].content.parts &&
+        data.candidates[0].content.parts[0]
+      ) {
+        rawText = data.candidates[0].content.parts[0].text || '';
+      }
+      rawText = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+      var jsonStart = rawText.indexOf('{');
+      var jsonEnd = rawText.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+        rawText = rawText.substring(jsonStart, jsonEnd + 1);
+      }
+      var parsed = JSON.parse(rawText);
+      var invoices = Array.isArray(parsed.invoices) ? parsed.invoices : [parsed];
+      var rot = Number(parsed.rotationNeeded) || 0;
+
+      return new Promise(function (resolve) {
+        var finalizeSave = function (finalPhotoUrl) {
+          createThumbnailForBatchStorage(finalPhotoUrl, function (lightPhotoUrl) {
+            var savedSummaries = [];
+            invoices.forEach(function (inv, subIdx) {
+              if (!inv || typeof inv !== 'object') return;
+              var dateVal = (inv.date && /^\d{4}-\d{2}-\d{2}$/.test(inv.date)) ? inv.date : getTodayStr();
+              var catVal = (inv.category && state.categories.indexOf(inv.category) !== -1) ? inv.category : (state.categories[0] || '복사기 부품');
+              var vendorVal = (inv.vendor && String(inv.vendor).trim()) ? String(inv.vendor).trim() : '미상(명세서스캔)';
+              var summaryVal = (inv.summary && String(inv.summary).trim()) ? String(inv.summary).trim() : item.label;
+              var lineItems = Array.isArray(inv.items) ? inv.items.map(function (li) {
+                var q = Number(li.qty) || 1;
+                var up = parseAmount(li.unitPrice);
+                var amt = parseAmount(li.amount) || (q * up);
+                return { name: li.name || '', qty: q, unitPrice: up, amount: amt };
+              }) : [];
+              var totalAmt = parseAmount(inv.totalAmount);
+              if (!totalAmt && lineItems.length > 0) {
+                totalAmt = lineItems.reduce(function (a, c) { return a + (Number(c.amount) || 0); }, 0);
+              }
+
+              var recObj = {
+                id: 'pm_' + Date.now() + '_' + subIdx + '_' + Math.random().toString(36).substring(2, 6),
+                date: dateVal,
+                category: catVal,
+                vendor: vendorVal,
+                summary: summaryVal,
+                amount: totalAmt,
+                payment: inv.paymentMethod || '세금계산서(월결제)',
+                memo: '일괄스캔 (' + item.label + ')',
+                lineItems: lineItems,
+                photoDataUrl: lightPhotoUrl,
+                updatedAt: new Date().toISOString()
+              };
+
+              state.records.unshift(recObj);
+              rememberVendor(vendorVal);
+              syncRecordToCloud(recObj);
+              savedSummaries.push(vendorVal + ' ' + formatNumber(totalAmt) + '원');
+            });
+
+            saveLocalRecords();
+            renderAllViews();
+            resolve(savedSummaries.join(' / '));
+          });
+        };
+
+        if (rot === 90 || rot === 180 || rot === 270) {
+          rotateDataUrlImage(item.dataUrl, rot, function (rotatedUrl) {
+            finalizeSave(rotatedUrl);
+          });
+        } else {
+          finalizeSave(item.dataUrl);
+        }
+      });
+    });
+  }
+
+  function startBatchOcrProcess() {
+    var cleanKey = String(state.geminiApiKey || '').replace(/\s+/g, '');
+    if (!cleanKey) {
+      showToast('일괄 AI 스캔을 위해 먼저 우측 상단 [설정/연동]에서 Gemini API 키를 입력해주세요.', 'info');
+      openSettingsModal();
+      return;
+    }
+
+    if (batchState.isRunning) return;
+    batchState.isRunning = true;
+    batchState.stopRequested = false;
+    renderBatchPanelUI();
+
+    function nextStep() {
+      if (batchState.stopRequested) {
+        batchState.isRunning = false;
+        renderBatchPanelUI();
+        showToast('⏸️ 일괄 스캔이 일시정지되었습니다.');
+        return;
+      }
+
+      var nextItem = batchState.queue.find(function (q) {
+        return q.status === 'pending' || q.status === 'error';
+      });
+
+      if (!nextItem) {
+        batchState.isRunning = false;
+        renderBatchPanelUI();
+        showToast('🎉 모든 거래명세서 일괄 스캔 및 구매이력 저장이 완료되었습니다!', 'info');
+        return;
+      }
+
+      nextItem.status = 'running';
+      renderBatchPanelUI();
+
+      processSingleBatchItemWithAi(nextItem, cleanKey)
+        .then(function (summaryStr) {
+          nextItem.status = 'done';
+          nextItem.resultText = summaryStr;
+          renderBatchPanelUI();
+          // API 무료 등급 속도 제한(RPM)을 피하기 위해 페이지 간 1.2초 안전 간격 후 다음 장 진행
+          setTimeout(nextStep, 1200);
+        })
+        .catch(function (err) {
+          console.error('Batch item error:', err);
+          nextItem.status = 'error';
+          nextItem.resultText = err.message || '오류';
+          renderBatchPanelUI();
+          setTimeout(nextStep, 2000);
+        });
+    }
+
+    nextStep();
+  }
+
   // ==================== 세부 품목(거래명세서 행) 렌더링 ====================
   function renderLineItems() {
     var wrapper = document.getElementById('line-items-wrapper');
@@ -1976,10 +2383,19 @@
         });
       }
 
-      // 사진 촬영 / 갤러리 선택 이벤트 (세로 사진은 자동으로 가로 회전)
+      // 사진 촬영 / 갤러리 선택 이벤트 (세로 사진은 자동으로 가로 회전, 다중 페이지 PDF는 자동으로 일괄 큐로 연결)
       var handleFileSelect = function (e) {
-        var file = e.target.files && e.target.files[0];
-        if (!file) return;
+        var files = e.target.files;
+        if (!files || files.length === 0) return;
+        var file = files[0];
+        var isPdf = (file.type === 'application/pdf') || /\.pdf$/i.test(file.name);
+
+        if (isPdf || files.length > 1) {
+          handleBatchFilesSelected(files);
+          e.target.value = '';
+          return;
+        }
+
         compressImageFile(file, function (err, dataUrl, w, h, wasRotated) {
           if (err) {
             showToast(err.message, 'error');
@@ -2002,8 +2418,38 @@
 
       var camInput = document.getElementById('input-camera-photo');
       var galInput = document.getElementById('input-gallery-photo');
+      var batchInput = document.getElementById('input-batch-files');
       if (camInput) camInput.addEventListener('change', handleFileSelect);
       if (galInput) galInput.addEventListener('change', handleFileSelect);
+      if (batchInput) {
+        batchInput.addEventListener('change', function (e) {
+          if (e.target.files && e.target.files.length > 0) {
+            handleBatchFilesSelected(e.target.files);
+            e.target.value = '';
+          }
+        });
+      }
+
+      var btnStartBatchOcr = document.getElementById('btn-start-batch-ocr');
+      var btnStopBatchOcr = document.getElementById('btn-stop-batch-ocr');
+      var btnCloseBatchPanel = document.getElementById('btn-close-batch-panel');
+
+      if (btnStartBatchOcr) {
+        btnStartBatchOcr.addEventListener('click', startBatchOcrProcess);
+      }
+      if (btnStopBatchOcr) {
+        btnStopBatchOcr.addEventListener('click', function () {
+          batchState.stopRequested = true;
+        });
+      }
+      if (btnCloseBatchPanel) {
+        btnCloseBatchPanel.addEventListener('click', function () {
+          batchState.stopRequested = true;
+          batchState.isRunning = false;
+          batchState.queue = [];
+          renderBatchPanelUI();
+        });
+      }
 
       var previewImg = document.getElementById('photo-preview-img');
       if (previewImg) {
