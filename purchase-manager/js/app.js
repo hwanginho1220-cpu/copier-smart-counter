@@ -182,14 +182,98 @@
     reader.readAsDataURL(file);
   }
 
-  // ==================== Gemini Vision AI 거래명세서 자동 스캔 ====================
+  // ==================== Gemini Vision AI 거래명세서 자동 스캔 (동적 모델 감지 + 다중 폴백) ====================
+  var DEFAULT_GEMINI_MODELS = [
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-flash-latest',
+    'gemini-1.5-flash'
+  ];
+
+  function resolveAvailableModels(cleanKey) {
+    var listUrl = 'https://generativelanguage.googleapis.com/v1beta/models?key=' + encodeURIComponent(cleanKey);
+    return fetch(listUrl)
+      .then(function (res) {
+        if (!res.ok) return DEFAULT_GEMINI_MODELS.slice();
+        return res.json().then(function (data) {
+          if (!data || !Array.isArray(data.models)) return DEFAULT_GEMINI_MODELS.slice();
+          var supported = data.models
+            .filter(function (m) {
+              return m && m.name && Array.isArray(m.supportedGenerationMethods) &&
+                m.supportedGenerationMethods.indexOf('generateContent') !== -1 &&
+                m.name.indexOf('gemini') !== -1 &&
+                m.name.indexOf('embedding') === -1 &&
+                m.name.indexOf('tts') === -1 &&
+                m.name.indexOf('image-generation') === -1;
+            })
+            .map(function (m) {
+              return m.name.replace(/^models\//, '');
+            });
+
+          // flash 계열 우선 정렬
+          var ordered = [];
+          DEFAULT_GEMINI_MODELS.forEach(function (pref) {
+            if (supported.indexOf(pref) !== -1 && ordered.indexOf(pref) === -1) {
+              ordered.push(pref);
+            }
+          });
+          supported.forEach(function (s) {
+            if (s.indexOf('flash') !== -1 && ordered.indexOf(s) === -1) {
+              ordered.push(s);
+            }
+          });
+          supported.forEach(function (s) {
+            if (ordered.indexOf(s) === -1) {
+              ordered.push(s);
+            }
+          });
+          return ordered.length > 0 ? ordered : DEFAULT_GEMINI_MODELS.slice();
+        });
+      })
+      .catch(function () {
+        return DEFAULT_GEMINI_MODELS.slice();
+      });
+  }
+
+  function callGeminiWithModels(cleanKey, requestBody, modelList, idx) {
+    var currentIdx = idx || 0;
+    var modelName = modelList[currentIdx];
+    var apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + modelName + ':generateContent?key=' + encodeURIComponent(cleanKey);
+
+    return fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    }).then(function (res) {
+      if (res.ok) {
+        return res.json();
+      }
+      return res.json().catch(function () { return {}; }).then(function (errJson) {
+        var detailMsg = (errJson && errJson.error && errJson.error.message) ? errJson.error.message : ('HTTP ' + res.status);
+        if (currentIdx + 1 < modelList.length && (res.status === 404 || res.status === 429 || res.status === 503 || res.status === 400)) {
+          console.warn('Model ' + modelName + ' failed (' + res.status + '), retrying with ' + modelList[currentIdx + 1]);
+          return callGeminiWithModels(cleanKey, requestBody, modelList, currentIdx + 1);
+        }
+        throw new Error('API 오류 (' + res.status + '): ' + detailMsg);
+      });
+    });
+  }
+
+  function callGeminiModelWithFallback(cleanKey, requestBody) {
+    return resolveAvailableModels(cleanKey).then(function (models) {
+      return callGeminiWithModels(cleanKey, requestBody, models, 0);
+    });
+  }
+
   function analyzeInvoiceWithGemini() {
     if (!state.currentPhotoDataUrl) {
       showToast('먼저 거래명세서나 영수증 사진을 첨부해주세요.', 'error');
       return;
     }
 
-    if (!state.geminiApiKey) {
+    var cleanKey = String(state.geminiApiKey || '').replace(/\s+/g, '');
+    if (!cleanKey) {
       showToast('AI 자동 인식을 위해 우측 상단 [설정/연동]에서 Gemini API 키를 입력해주세요.', 'info');
       openSettingsModal();
       return;
@@ -213,9 +297,9 @@
 
     var promptText = [
       '당신은 한국의 거래명세서, 세금계산서, 영수증, 그리고 복사기/컴퓨터 부품 라벨을 분석하는 전문 회계/자재 AI입니다.',
-      '첨부된 이미지를 분석하여 반드시 아래 JSON 형식으로만 응답하세요 (마크다운 코드블록 없이 순수 JSON 반환):',
+      '첨부된 이미지를 분석하여 반드시 아래 JSON 형식으로만 응답하세요 (마크다운 코드블록 없이 순수 JSON만 반환):',
       '{',
-      '  "date": "YYYY-MM-DD (인식 안되면 오늘 날짜 또는 빈 문자열)",',
+      '  "date": "YYYY-MM-DD (인식 안되면 빈 문자열)",',
       '  "vendor": "공급자 상호/구매처 이름 (예: 대원오피스, 컴퓨존 등)",',
       '  "category": "복사기 부품 | 컴퓨터 부품 | 프린터/소모품 | 공구/자재 | 기타 중 가장 알맞은 1개",',
       '  "summary": "대표 구매내용 한줄 요약 (예: 캐논 드럼유닛 외 2건)",',
@@ -227,30 +311,19 @@
       '}'
     ].join('\n');
 
-    var apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + encodeURIComponent(state.geminiApiKey);
+    var requestBody = {
+      contents: [{
+        parts: [
+          { text: promptText },
+          { inline_data: { mime_type: mimeType, data: base64Data } }
+        ]
+      }],
+      generationConfig: {
+        temperature: 0.1
+      }
+    };
 
-    fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: promptText },
-            { inline_data: { mime_type: mimeType, data: base64Data } }
-          ]
-        }],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: 'application/json'
-        }
-      })
-    })
-      .then(function (res) {
-        if (!res.ok) {
-          throw new Error('API 응답 오류 (' + res.status + '). API 키를 확인해주세요.');
-        }
-        return res.json();
-      })
+    callGeminiModelWithFallback(cleanKey, requestBody, 0)
       .then(function (data) {
         var rawText = '';
         if (
@@ -263,7 +336,12 @@
         ) {
           rawText = data.candidates[0].content.parts[0].text || '';
         }
-        rawText = rawText.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+        rawText = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+        var jsonStart = rawText.indexOf('{');
+        var jsonEnd = rawText.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+          rawText = rawText.substring(jsonStart, jsonEnd + 1);
+        }
         var parsed = JSON.parse(rawText);
         applyAiResultToForm(parsed);
         if (statusMsg) {
@@ -274,9 +352,9 @@
       .catch(function (err) {
         console.error('Gemini OCR Error:', err);
         if (statusMsg) {
-          statusMsg.innerHTML = '⚠️ AI 자동 인식 실패: ' + escapeHtml(err.message) + ' (직접 입력하거나 [사진만 바로 저장]을 이용해주세요)';
+          statusMsg.innerHTML = '⚠️ AI 자동 인식 실패: ' + escapeHtml(err.message) + ' (우측 상단 [설정/연동]에서 API 키를 확인해주세요)';
         }
-        showToast('AI 인식 중 오류가 발생했습니다: ' + err.message, 'error');
+        showToast('AI 인식 오류: ' + err.message, 'error');
       })
       .finally(function () {
         if (btn) {
@@ -1473,13 +1551,72 @@
         });
       }
 
+      // API 키 연결 테스트 버튼
+      var btnTestGeminiKey = document.getElementById('btn-test-gemini-key');
+      if (btnTestGeminiKey) {
+        btnTestGeminiKey.addEventListener('click', function () {
+          var keyInput = document.getElementById('input-gemini-key');
+          var resultBox = document.getElementById('gemini-key-test-result');
+          var rawKey = keyInput ? keyInput.value : '';
+          var cleanKey = String(rawKey || '').replace(/\s+/g, '');
+          if (keyInput) keyInput.value = cleanKey;
+
+          if (!cleanKey) {
+            if (resultBox) {
+              resultBox.className = 'text-xs px-3 py-2 rounded-lg border bg-red-50 border-red-200 text-red-700 font-bold';
+              resultBox.textContent = '❌ 먼저 AIzaSy... 로 시작하는 API 키를 입력해주세요.';
+              resultBox.classList.remove('hidden');
+            }
+            return;
+          }
+
+          btnTestGeminiKey.disabled = true;
+          btnTestGeminiKey.textContent = '⏳ 확인 중...';
+          if (resultBox) {
+            resultBox.className = 'text-xs px-3 py-2 rounded-lg border bg-slate-50 border-slate-200 text-slate-600';
+            resultBox.textContent = '구글 Gemini 서버와 통신하여 사용 가능한 AI 모델을 확인하고 있습니다...';
+            resultBox.classList.remove('hidden');
+          }
+
+          resolveAvailableModels(cleanKey)
+            .then(function (models) {
+              var testReq = {
+                contents: [{ parts: [{ text: 'OK' }] }]
+              };
+              return callGeminiWithModels(cleanKey, testReq, models, 0).then(function () {
+                return models[0];
+              });
+            })
+            .then(function (activeModel) {
+              state.geminiApiKey = cleanKey;
+              try { localStorage.setItem(STORAGE_KEYS.GEMINI_KEY, cleanKey); } catch (e) {}
+              updateSyncBadge(state.isCloudConnected, state.isCloudConnected ? '클라우드 연동중' : '로컬 저장됨');
+              if (resultBox) {
+                resultBox.className = 'text-xs px-3 py-2 rounded-lg border bg-emerald-50 border-emerald-200 text-emerald-800 font-bold';
+                resultBox.textContent = '✅ 연결 성공! (' + activeModel + ' 모델 활성화됨 & 자동 저장 완료)';
+              }
+              showToast('✅ Gemini API 키 연결 테스트 성공!', 'info');
+            })
+            .catch(function (err) {
+              if (resultBox) {
+                resultBox.className = 'text-xs px-3 py-2 rounded-lg border bg-red-50 border-red-200 text-red-700 font-bold';
+                resultBox.textContent = '❌ ' + err.message + ' (키에 오타나 공백이 없는지, AI Studio에서 발급된 키인지 확인해주세요)';
+              }
+            })
+            .finally(function () {
+              btnTestGeminiKey.disabled = false;
+              btnTestGeminiKey.textContent = '🔍 키 연결 테스트';
+            });
+        });
+      }
+
       // 설정 저장 버튼
       var btnSaveSettings = document.getElementById('btn-save-settings');
       if (btnSaveSettings) {
         btnSaveSettings.addEventListener('click', function () {
           var keyInput = document.getElementById('input-gemini-key');
           var wsInput = document.getElementById('input-workspace-code');
-          state.geminiApiKey = keyInput ? keyInput.value.trim() : '';
+          state.geminiApiKey = keyInput ? String(keyInput.value || '').replace(/\s+/g, '') : '';
           state.workspaceCode = (wsInput && wsInput.value.trim()) ? wsInput.value.trim() : 'default-parts-room';
 
           try {
