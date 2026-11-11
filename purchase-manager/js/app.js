@@ -182,20 +182,19 @@
     reader.readAsDataURL(file);
   }
 
-  // ==================== Gemini Vision AI 거래명세서 초고속 스캔 (Non-Thinking Flash 우선 + 타임아웃) ====================
-  // 주의: gemini-2.5-flash는 기본 thinking(심층추론)이 켜져 있어 15~30초 이상 걸리므로,
-  // 추론 지연이 없는 초고속 비전 모델(2.0-flash / 2.0-flash-lite / 1.5-flash)을 최우선으로 호출합니다.
+  // ==================== Gemini Vision AI 거래명세서 초고속 스캔 (동적 모델 캐싱 + thinkingBudget:0) ====================
   var FAST_GEMINI_MODELS = [
+    'gemini-2.5-flash-lite',
+    'gemini-2.5-flash',
     'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-flash',
-    'gemini-2.5-flash'
+    'gemini-1.5-flash'
   ];
 
   var cachedModelList = null;
+  var cachedKeyForModels = '';
 
   function resolveAvailableModels(cleanKey) {
-    if (cachedModelList && cachedModelList.length > 0) {
+    if (cachedModelList && cachedModelList.length > 0 && cachedKeyForModels === cleanKey) {
       return Promise.resolve(cachedModelList.slice());
     }
     var listUrl = 'https://generativelanguage.googleapis.com/v1beta/models?key=' + encodeURIComponent(cleanKey);
@@ -211,30 +210,47 @@
                 m.name.indexOf('gemini') !== -1 &&
                 m.name.indexOf('embedding') === -1 &&
                 m.name.indexOf('tts') === -1 &&
-                m.name.indexOf('image-generation') === -1;
+                m.name.indexOf('image-generation') === -1 &&
+                m.name.indexOf('audio') === -1 &&
+                m.name.indexOf('robotics') === -1 &&
+                m.name.indexOf('computer-use') === -1;
             })
             .map(function (m) {
               return m.name.replace(/^models\//, '');
             });
 
           var ordered = [];
+          // 1순위: FAST_GEMINI_MODELS에 있으면서 실제 키가 지원하는 모델
           FAST_GEMINI_MODELS.forEach(function (pref) {
             if (supported.indexOf(pref) !== -1 && ordered.indexOf(pref) === -1) {
               ordered.push(pref);
             }
           });
+          // 2순위: 이름에 flash-lite가 들어간 모델 (가장 빠름)
           supported.forEach(function (s) {
-            if (s.indexOf('flash') !== -1 && s.indexOf('2.5') === -1 && ordered.indexOf(s) === -1) {
+            if (s.indexOf('flash-lite') !== -1 && ordered.indexOf(s) === -1) {
               ordered.push(s);
             }
           });
+          // 3순위: 이름에 flash가 들어간 모델
+          supported.forEach(function (s) {
+            if (s.indexOf('flash') !== -1 && ordered.indexOf(s) === -1) {
+              ordered.push(s);
+            }
+          });
+          // 4순위: 나머지 지원 모델
           supported.forEach(function (s) {
             if (ordered.indexOf(s) === -1) {
               ordered.push(s);
             }
           });
-          cachedModelList = ordered.length > 0 ? ordered : FAST_GEMINI_MODELS.slice();
-          return cachedModelList.slice();
+
+          if (ordered.length > 0) {
+            cachedModelList = ordered;
+            cachedKeyForModels = cleanKey;
+            return ordered.slice();
+          }
+          return FAST_GEMINI_MODELS.slice();
         });
       })
       .catch(function () {
@@ -242,25 +258,21 @@
       });
   }
 
-  function callGeminiWithModels(cleanKey, requestBody, modelList, idx) {
-    var currentIdx = idx || 0;
-    var modelName = modelList[currentIdx];
+  function sendSingleGeminiRequest(cleanKey, modelName, payload, useNoThinking) {
     var apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + modelName + ':generateContent?key=' + encodeURIComponent(cleanKey);
-
-    // gemini-2.5 계열인 경우 thinkingBudget: 0 설정으로 추론 지연을 완전히 끔
-    var payload = JSON.parse(JSON.stringify(requestBody));
-    if (modelName.indexOf('2.5') !== -1) {
-      payload.generationConfig = payload.generationConfig || {};
-      payload.generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    var bodyCopy = JSON.parse(JSON.stringify(payload));
+    if (useNoThinking) {
+      bodyCopy.generationConfig = bodyCopy.generationConfig || {};
+      bodyCopy.generationConfig.thinkingConfig = { thinkingBudget: 0 };
     }
 
     var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    var timeoutId = controller ? setTimeout(function () { controller.abort(); }, 12000) : null;
+    var timeoutId = controller ? setTimeout(function () { controller.abort(); }, 18000) : null;
 
     return fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(bodyCopy),
       signal: controller ? controller.signal : undefined
     }).then(function (res) {
       if (timeoutId) clearTimeout(timeoutId);
@@ -269,25 +281,43 @@
       }
       return res.json().catch(function () { return {}; }).then(function (errJson) {
         var detailMsg = (errJson && errJson.error && errJson.error.message) ? errJson.error.message : ('HTTP ' + res.status);
-        if (currentIdx + 1 < modelList.length && (res.status === 404 || res.status === 429 || res.status === 503 || res.status === 400)) {
-          console.warn('Model ' + modelName + ' failed (' + res.status + '), retrying with ' + modelList[currentIdx + 1]);
-          return callGeminiWithModels(cleanKey, requestBody, modelList, currentIdx + 1);
+        // 만약 thinkingConfig 파라미터 자체를 지원하지 않는 모델이어서 400이 났다면, thinkingConfig 없이 즉시 재호출
+        if (useNoThinking && res.status === 400 && detailMsg.toLowerCase().indexOf('thinking') !== -1) {
+          return sendSingleGeminiRequest(cleanKey, modelName, payload, false);
         }
-        throw new Error('API 오류 (' + res.status + '): ' + detailMsg);
+        var err = new Error('API 오류 (' + res.status + '): ' + detailMsg);
+        err.status = res.status;
+        throw err;
       });
     }).catch(function (err) {
       if (timeoutId) clearTimeout(timeoutId);
-      if (err && err.name === 'AbortError' && currentIdx + 1 < modelList.length) {
-        console.warn('Model ' + modelName + ' timed out (12s), switching to ' + modelList[currentIdx + 1]);
-        return callGeminiWithModels(cleanKey, requestBody, modelList, currentIdx + 1);
-      }
       throw err;
     });
   }
 
+  function callGeminiWithModels(cleanKey, requestBody, modelList, idx) {
+    var currentIdx = idx || 0;
+    var modelName = modelList[currentIdx];
+    // 2.5 또는 3 계열 모델이면 기본적으로 thinkingBudget: 0 (생각 시간 0초)을 켜서 2~3초 내 즉시 응답 유도
+    var shouldDisableThinking = (modelName.indexOf('2.5') !== -1 || modelName.indexOf('3') !== -1);
+
+    return sendSingleGeminiRequest(cleanKey, modelName, requestBody, shouldDisableThinking)
+      .catch(function (err) {
+        var st = err && err.status;
+        var isTimeout = err && err.name === 'AbortError';
+        if (currentIdx + 1 < modelList.length && (isTimeout || st === 404 || st === 429 || st === 503 || st === 400)) {
+          console.warn('Model ' + modelName + ' failed, switching to ' + modelList[currentIdx + 1]);
+          return callGeminiWithModels(cleanKey, requestBody, modelList, currentIdx + 1);
+        }
+        throw err;
+      });
+  }
+
   function callGeminiModelWithFallback(cleanKey, requestBody) {
-    // 1단계: 모델 목록 조회 없이 가장 빠른 첫 번째 모델(gemini-2.0-flash)로 즉시 직행 호출!
-    return callGeminiWithModels(cleanKey, requestBody, FAST_GEMINI_MODELS, 0);
+    // 실제 API 키가 지원하는 모델 목록을 조회(1회 조회 후 메모리에 캐싱되어 0초 소요)한 뒤 호출하여 404 원천 차단!
+    return resolveAvailableModels(cleanKey).then(function (models) {
+      return callGeminiWithModels(cleanKey, requestBody, models, 0);
+    });
   }
 
   function analyzeInvoiceWithGemini() {
