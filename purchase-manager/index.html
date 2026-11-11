@@ -132,8 +132,17 @@
         <!-- 사진 미리보기 및 AI 분석 컨트롤 영역 (사진 첨부 시 표시) -->
         <div id="photo-preview-container" class="hidden bg-slate-50 rounded-xl p-3 border border-slate-200">
           <div class="flex flex-col sm:flex-row items-center gap-3">
-            <div class="relative w-full sm:w-40 h-40 rounded-lg overflow-hidden bg-slate-900 border border-slate-300 shrink-0 flex items-center justify-center">
+            <div class="relative w-full sm:w-44 h-44 rounded-lg overflow-hidden bg-slate-900 border border-slate-300 shrink-0 flex items-center justify-center">
               <img id="photo-preview-img" src="" alt="첨부 사진 미리보기" class="max-w-full max-h-full object-contain cursor-pointer" title="클릭하여 원본 크게 보기">
+              <!-- 좌하단 회전 컨트롤 버튼 -->
+              <div class="absolute bottom-1.5 left-1.5 flex items-center gap-1">
+                <button id="btn-rotate-left" type="button" class="px-2 py-1 rounded-md bg-black/70 hover:bg-black text-white text-[11px] font-bold shadow flex items-center gap-0.5" title="왼쪽 90도 회전">
+                  ↺ 좌회전
+                </button>
+                <button id="btn-rotate-right" type="button" class="px-2 py-1 rounded-md bg-black/70 hover:bg-black text-white text-[11px] font-bold shadow flex items-center gap-0.5" title="오른쪽 90도 회전">
+                  ↻ 우회전
+                </button>
+              </div>
               <button id="btn-remove-photo" type="button" class="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-red-600 text-white text-xs font-bold shadow flex items-center justify-center hover:bg-red-700" title="사진 삭제">
                 ✕
               </button>
@@ -411,11 +420,19 @@
 
   <!-- ==================== [모달 1: 사진/명세서 원본 확대 뷰어] ==================== -->
   <div id="modal-photo-viewer" class="fixed inset-0 z-50 hidden bg-black/85 flex flex-col items-center justify-center p-4">
-    <div class="w-full max-w-3xl flex items-center justify-between text-white mb-2">
-      <div id="modal-photo-caption" class="text-sm font-bold truncate pr-4">거래명세서/부품 사진</div>
-      <button id="btn-close-photo-modal" type="button" class="px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-sm font-bold">
-        닫기 ✕
-      </button>
+    <div class="w-full max-w-3xl flex items-center justify-between text-white mb-2 gap-2">
+      <div id="modal-photo-caption" class="text-sm font-bold truncate pr-2">거래명세서/부품 사진</div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button id="btn-modal-rotate-left" type="button" class="px-2.5 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-bold">
+          ↺ 왼쪽 회전
+        </button>
+        <button id="btn-modal-rotate-right" type="button" class="px-2.5 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-bold">
+          ↻ 오른쪽 회전
+        </button>
+        <button id="btn-close-photo-modal" type="button" class="px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-sm font-bold">
+          닫기 ✕
+        </button>
+      </div>
     </div>
     <div class="w-full max-w-3xl max-h-[82vh] overflow-auto rounded-xl bg-slate-900 flex items-center justify-center p-2">
       <img id="modal-photo-img" src="" alt="확대 이미지" class="max-w-full max-h-[78vh] object-contain">

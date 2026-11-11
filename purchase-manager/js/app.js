@@ -145,31 +145,46 @@
     renderVendorChips();
   }
 
-  // ==================== 이미지 리사이즈/압축 (모바일 사진 용량 및 AI 전송 속도 최적화) ====================
+  // ==================== 이미지 리사이즈/압축 및 가로 방향 자동 회전 ====================
   function compressImageFile(file, callback) {
     var reader = new FileReader();
     reader.onload = function (event) {
       var img = new Image();
       img.onload = function () {
+        var origW = img.width;
+        var origH = img.height;
+        // 세로로 찍힌 사진(높이 > 너비)이면 거래명세서 가로 보기에 맞춰 자동으로 90도 가로 회전!
+        var autoRotateToLandscape = origH > origW;
+        var targetW = autoRotateToLandscape ? origH : origW;
+        var targetH = autoRotateToLandscape ? origW : origH;
+
         var maxDim = 1024;
-        var w = img.width;
-        var h = img.height;
-        if (w > maxDim || h > maxDim) {
-          if (w > h) {
-            h = Math.round((h * maxDim) / w);
-            w = maxDim;
+        if (targetW > maxDim || targetH > maxDim) {
+          if (targetW > targetH) {
+            targetH = Math.round((targetH * maxDim) / targetW);
+            targetW = maxDim;
           } else {
-            w = Math.round((w * maxDim) / h);
-            h = maxDim;
+            targetW = Math.round((targetW * maxDim) / targetH);
+            targetH = maxDim;
           }
         }
+
         var canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
+        canvas.width = targetW;
+        canvas.height = targetH;
         var ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        var compressedDataUrl = canvas.toDataURL('image/jpeg', 0.72);
-        callback(null, compressedDataUrl, w, h);
+
+        if (autoRotateToLandscape) {
+          // 반시계 방향(-90도) 회전하여 세로로 찍은 가로 명세서를 똑바로 눕힘
+          ctx.translate(targetW / 2, targetH / 2);
+          ctx.rotate(-Math.PI / 2);
+          ctx.drawImage(img, -targetH / 2, -targetW / 2, targetH, targetW);
+        } else {
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+        }
+
+        var compressedDataUrl = canvas.toDataURL('image/jpeg', 0.75);
+        callback(null, compressedDataUrl, targetW, targetH, autoRotateToLandscape);
       };
       img.onerror = function () {
         callback(new Error('이미지를 불러올 수 없습니다.'));
@@ -180,6 +195,38 @@
       callback(new Error('파일 읽기에 실패했습니다.'));
     };
     reader.readAsDataURL(file);
+  }
+
+  // 기존 DataURL 이미지를 지정 각도(90 또는 -90 또는 180)만큼 회전하는 함수
+  function rotateDataUrlImage(dataUrl, degree, callback) {
+    if (!dataUrl || !degree) {
+      if (callback) callback(dataUrl);
+      return;
+    }
+    var img = new Image();
+    img.onload = function () {
+      var w = img.width;
+      var h = img.height;
+      var canvas = document.createElement('canvas');
+      var normDeg = ((degree % 360) + 360) % 360;
+
+      if (normDeg === 90 || normDeg === 270) {
+        canvas.width = h;
+        canvas.height = w;
+      } else {
+        canvas.width = w;
+        canvas.height = h;
+      }
+
+      var ctx = canvas.getContext('2d');
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((normDeg * Math.PI) / 180);
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+
+      var rotatedUrl = canvas.toDataURL('image/jpeg', 0.78);
+      if (callback) callback(rotatedUrl, canvas.width, canvas.height);
+    };
+    img.src = dataUrl;
   }
 
   // ==================== Gemini Vision AI 거래명세서 초고속 스캔 (동적 모델 캐싱 + thinkingBudget:0) ====================
@@ -358,7 +405,7 @@
 
     var promptText = [
       '한국 거래명세서/영수증/부품사진입니다. 순수 JSON만 출력하세요:',
-      '{"date":"YYYY-MM-DD","vendor":"구매처상호","category":"복사기 부품|컴퓨터 부품|프린터/소모품|공구/자재|기타","summary":"대표품목 요약","totalAmount":숫자총액,"paymentMethod":"세금계산서(월결제)|법인/사업자카드|계좌이체/현금|온라인결제","items":[{"name":"품목명","qty":수량,"unitPrice":단가,"amount":금액}]}'
+      '{"date":"YYYY-MM-DD","vendor":"구매처상호","category":"복사기 부품|컴퓨터 부품|프린터/소모품|공구/자재|기타","summary":"대표품목 요약","totalAmount":숫자총액,"paymentMethod":"세금계산서(월결제)|법인/사업자카드|계좌이체/현금|온라인결제","rotationNeeded":0또는90또는180또는270(글씨가똑바로보이려면시계방향으로몇도회전해야하는지),"items":[{"name":"품목명","qty":수량,"unitPrice":단가,"amount":금액}]}'
     ].join('\n');
 
     var requestBody = {
@@ -461,6 +508,15 @@
         };
       });
       renderLineItems();
+    }
+
+    // AI가 이미지 상하좌우 뒤집힘(90, 180, 270도)을 감지한 경우 자동으로 정방향 회전
+    var rot = Number(parsed.rotationNeeded) || 0;
+    if ((rot === 90 || rot === 180 || rot === 270) && state.currentPhotoDataUrl) {
+      rotateDataUrlImage(state.currentPhotoDataUrl, rot, function (rotatedUrl) {
+        state.currentPhotoDataUrl = rotatedUrl;
+        updatePhotoPreviewUI();
+      });
     }
   }
 
@@ -767,8 +823,11 @@
     showToast('구매내역이 삭제되었습니다.');
   }
 
-  function openPhotoViewer(dataUrl, caption) {
+  var currentViewingRecordId = null;
+
+  function openPhotoViewer(dataUrl, caption, recordId) {
     if (!dataUrl) return;
+    currentViewingRecordId = recordId || null;
     var modal = document.getElementById('modal-photo-viewer');
     var img = document.getElementById('modal-photo-img');
     var cap = document.getElementById('modal-photo-caption');
@@ -852,7 +911,7 @@
         var id = el.getAttribute('data-id');
         var rec = state.records.find(function (r) { return r && r.id === id; });
         if (rec && rec.photoDataUrl) {
-          openPhotoViewer(rec.photoDataUrl, '[' + rec.date + '] ' + rec.vendor + ' - ' + rec.summary);
+          openPhotoViewer(rec.photoDataUrl, '[' + rec.date + '] ' + rec.vendor + ' - ' + rec.summary, rec.id);
         }
       });
     });
@@ -1474,11 +1533,11 @@
         });
       }
 
-      // 사진 촬영 / 갤러리 선택 이벤트
+      // 사진 촬영 / 갤러리 선택 이벤트 (세로 사진은 자동으로 가로 회전)
       var handleFileSelect = function (e) {
         var file = e.target.files && e.target.files[0];
         if (!file) return;
-        compressImageFile(file, function (err, dataUrl, w, h) {
+        compressImageFile(file, function (err, dataUrl, w, h, wasRotated) {
           if (err) {
             showToast(err.message, 'error');
             return;
@@ -1488,9 +1547,13 @@
           var sizeInfo = document.getElementById('photo-size-info');
           if (sizeInfo) {
             var kb = Math.round((dataUrl.length * 3) / 4 / 1024);
-            sizeInfo.textContent = w + 'x' + h + 'px (' + kb + 'KB 최적화됨)';
+            sizeInfo.textContent = w + 'x' + h + 'px (' + kb + 'KB' + (wasRotated ? ' · 가로 자동회전됨' : ' 최적화됨') + ')';
           }
-          showToast('📸 사진이 첨부되었습니다. [AI 자동 입력] 또는 [사진만 바로 저장]을 선택하세요.');
+          if (wasRotated) {
+            showToast('📸 명세서 사진을 보기 편하게 가로 방향으로 자동 회전했습니다!');
+          } else {
+            showToast('📸 사진이 첨부되었습니다. [AI 자동 입력] 또는 [사진만 바로 저장]을 선택하세요.');
+          }
         });
       };
 
@@ -1502,9 +1565,55 @@
       var previewImg = document.getElementById('photo-preview-img');
       if (previewImg) {
         previewImg.addEventListener('click', function () {
-          openPhotoViewer(state.currentPhotoDataUrl, '첨부된 거래명세서/부품 사진');
+          openPhotoViewer(state.currentPhotoDataUrl, '첨부된 거래명세서/부품 사진', null);
         });
       }
+
+      // 미리보기 좌/우 회전 버튼
+      var handlePreviewRotate = function (deg) {
+        if (!state.currentPhotoDataUrl) return;
+        rotateDataUrlImage(state.currentPhotoDataUrl, deg, function (rotatedUrl, rw, rh) {
+          state.currentPhotoDataUrl = rotatedUrl;
+          updatePhotoPreviewUI();
+          var sizeInfo = document.getElementById('photo-size-info');
+          if (sizeInfo && rw && rh) {
+            var kb = Math.round((rotatedUrl.length * 3) / 4 / 1024);
+            sizeInfo.textContent = rw + 'x' + rh + 'px (' + kb + 'KB · 회전됨)';
+          }
+        });
+      };
+
+      var btnRotateLeft = document.getElementById('btn-rotate-left');
+      var btnRotateRight = document.getElementById('btn-rotate-right');
+      if (btnRotateLeft) btnRotateLeft.addEventListener('click', function () { handlePreviewRotate(-90); });
+      if (btnRotateRight) btnRotateRight.addEventListener('click', function () { handlePreviewRotate(90); });
+
+      // 확대 모달 내 좌/우 회전 버튼 (저장된 내역 사진도 회전 즉시 반영)
+      var handleModalRotate = function (deg) {
+        var modalImg = document.getElementById('modal-photo-img');
+        if (!modalImg || !modalImg.src) return;
+        rotateDataUrlImage(modalImg.src, deg, function (rotatedUrl) {
+          modalImg.src = rotatedUrl;
+          if (currentViewingRecordId) {
+            var rec = state.records.find(function (r) { return r && r.id === currentViewingRecordId; });
+            if (rec) {
+              rec.photoDataUrl = rotatedUrl;
+              rec.updatedAt = new Date().toISOString();
+              saveLocalRecords();
+              syncRecordToCloud(rec);
+              renderAllViews();
+            }
+          } else if (state.currentPhotoDataUrl) {
+            state.currentPhotoDataUrl = rotatedUrl;
+            updatePhotoPreviewUI();
+          }
+        });
+      };
+
+      var btnModalRotateLeft = document.getElementById('btn-modal-rotate-left');
+      var btnModalRotateRight = document.getElementById('btn-modal-rotate-right');
+      if (btnModalRotateLeft) btnModalRotateLeft.addEventListener('click', function () { handleModalRotate(-90); });
+      if (btnModalRotateRight) btnModalRotateRight.addEventListener('click', function () { handleModalRotate(90); });
 
       var btnRemovePhoto = document.getElementById('btn-remove-photo');
       if (btnRemovePhoto) {
