@@ -9,9 +9,18 @@
   var STORAGE_KEYS = {
     RECORDS: 'pm_purchase_records_v1',
     VENDORS: 'pm_frequent_vendors_v1',
+    CATEGORIES: 'pm_custom_categories_v1',
     GEMINI_KEY: 'pm_gemini_api_key_v1',
     WORKSPACE: 'pm_cloud_workspace_v1'
   };
+
+  var DEFAULT_CATEGORIES = [
+    '복사기 부품',
+    '컴퓨터 부품',
+    '프린터/소모품',
+    '공구/자재',
+    '기타'
+  ];
 
   var DEFAULT_VENDORS = [
     '대원오피스(복사기부품)',
@@ -26,6 +35,7 @@
   var state = {
     records: [],
     vendors: [],
+    categories: [],
     currentPhotoDataUrl: '',
     currentLineItems: [],
     geminiApiKey: '',
@@ -99,6 +109,16 @@
       }
     } catch (e) {
       state.vendors = DEFAULT_VENDORS.slice();
+    }
+
+    try {
+      var rawCats = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+      state.categories = rawCats ? JSON.parse(rawCats) : DEFAULT_CATEGORIES.slice();
+      if (!Array.isArray(state.categories) || state.categories.length === 0) {
+        state.categories = DEFAULT_CATEGORIES.slice();
+      }
+    } catch (e) {
+      state.categories = DEFAULT_CATEGORIES.slice();
     }
 
     try {
@@ -403,9 +423,10 @@
     var mimeMatch = state.currentPhotoDataUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,/);
     var mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
+    var catListStr = state.categories.length > 0 ? state.categories.join('|') : '복사기 부품|컴퓨터 부품|프린터/소모품|공구/자재|기타';
     var promptText = [
       '한국 거래명세서/영수증/부품사진입니다. 순수 JSON만 출력하세요:',
-      '{"date":"YYYY-MM-DD","vendor":"구매처상호","category":"복사기 부품|컴퓨터 부품|프린터/소모품|공구/자재|기타","summary":"대표품목 요약","totalAmount":숫자총액,"paymentMethod":"세금계산서(월결제)|법인/사업자카드|계좌이체/현금|온라인결제","rotationNeeded":0또는90또는180또는270(글씨가똑바로보이려면시계방향으로몇도회전해야하는지),"items":[{"name":"품목명","qty":수량,"unitPrice":단가,"amount":금액}]}'
+      '{"date":"YYYY-MM-DD","vendor":"구매처상호","category":"' + catListStr + ' 중 가장 알맞은 1개","summary":"대표품목 요약","totalAmount":숫자총액,"paymentMethod":"세금계산서(월결제)|법인/사업자카드|계좌이체/현금|온라인결제","rotationNeeded":0또는90또는180또는270(글씨가똑바로보이려면시계방향으로몇도회전해야하는지),"items":[{"name":"품목명","qty":수량,"unitPrice":단가,"amount":금액}]}'
     ].join('\n');
 
     var requestBody = {
@@ -477,8 +498,7 @@
       dateInput.value = parsed.date;
     }
     if (parsed.category && catInput) {
-      var validCats = ['복사기 부품', '컴퓨터 부품', '프린터/소모품', '공구/자재', '기타'];
-      if (validCats.indexOf(parsed.category) !== -1) {
+      if (state.categories.indexOf(parsed.category) !== -1) {
         catInput.value = parsed.category;
       }
     }
@@ -633,6 +653,156 @@
     } else {
       summaryInput.value = validNames[0] + ' 외 ' + (validNames.length - 1) + '건';
     }
+  }
+
+  // ==================== 카테고리 관리 및 렌더링 ====================
+  function getCategoryIcon(cat) {
+    if (!cat) return '📦';
+    if (cat.indexOf('복사기') !== -1) return '🖨️';
+    if (cat.indexOf('컴퓨터') !== -1 || cat.indexOf('PC') !== -1) return '💻';
+    if (cat.indexOf('프린터') !== -1 || cat.indexOf('소모품') !== -1 || cat.indexOf('토너') !== -1) return '🖨️';
+    if (cat.indexOf('공구') !== -1 || cat.indexOf('자재') !== -1) return '🔧';
+    return '🏷️';
+  }
+
+  function saveCategories() {
+    try {
+      localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(state.categories));
+    } catch (e) {}
+  }
+
+  function renderCategoryOptionsAndChips() {
+    var selectInput = document.getElementById('input-category');
+    var filterSelect = document.getElementById('filter-category');
+    var chipsContainer = document.getElementById('category-quick-chips-container');
+
+    if (selectInput) {
+      var prevVal = selectInput.value;
+      selectInput.innerHTML = '';
+      state.categories.forEach(function (cat) {
+        var opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = getCategoryIcon(cat) + ' ' + cat;
+        selectInput.appendChild(opt);
+      });
+      if (prevVal && state.categories.indexOf(prevVal) !== -1) {
+        selectInput.value = prevVal;
+      } else if (state.categories.length > 0) {
+        selectInput.value = state.categories[0];
+      }
+    }
+
+    if (filterSelect) {
+      var prevFilter = filterSelect.value || 'ALL';
+      filterSelect.innerHTML = '<option value="ALL">전체 카테고리</option>';
+      state.categories.forEach(function (cat) {
+        var opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = getCategoryIcon(cat) + ' ' + cat;
+        filterSelect.appendChild(opt);
+      });
+      if (prevFilter === 'ALL' || state.categories.indexOf(prevFilter) !== -1) {
+        filterSelect.value = prevFilter;
+      } else {
+        filterSelect.value = 'ALL';
+      }
+    }
+
+    if (chipsContainer) {
+      chipsContainer.innerHTML = '';
+      var chipColors = [
+        'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100',
+        'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100',
+        'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100',
+        'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100',
+        'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100',
+        'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
+      ];
+      state.categories.forEach(function (cat, idx) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        var colorClass = chipColors[idx % chipColors.length];
+        btn.className = 'category-quick-chip text-[11px] px-2.5 py-1 rounded-full border font-semibold transition ' + colorClass;
+        btn.textContent = getCategoryIcon(cat) + ' ' + cat;
+        btn.addEventListener('click', function () {
+          if (selectInput) selectInput.value = cat;
+        });
+        chipsContainer.appendChild(btn);
+      });
+    }
+  }
+
+  function renderCategoryManagerModalList() {
+    var listEl = document.getElementById('category-manager-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    state.categories.forEach(function (cat, idx) {
+      var row = document.createElement('div');
+      row.className = 'flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200';
+      row.innerHTML =
+        '<span class="text-sm pl-1">' + getCategoryIcon(cat) + '</span>' +
+        '<input type="text" data-cat-idx="' + idx + '" value="' + escapeHtml(cat) + '" class="cat-rename-input flex-1 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs sm:text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">' +
+        '<button type="button" data-save-idx="' + idx + '" class="btn-save-cat-name px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold shrink-0">이름변경</button>' +
+        '<button type="button" data-del-idx="' + idx + '" class="btn-del-cat px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-bold shrink-0">삭제</button>';
+      listEl.appendChild(row);
+    });
+
+    listEl.querySelectorAll('.btn-save-cat-name').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var idx = parseInt(btn.getAttribute('data-save-idx'), 10);
+        var inp = listEl.querySelector('input[data-cat-idx="' + idx + '"]');
+        if (!inp || isNaN(idx)) return;
+        var oldName = state.categories[idx];
+        var newName = inp.value.trim();
+        if (!newName) {
+          showToast('카테고리 이름을 입력해주세요.', 'error');
+          return;
+        }
+        if (newName === oldName) {
+          showToast('변경된 내용이 없습니다.');
+          return;
+        }
+        if (state.categories.indexOf(newName) !== -1) {
+          showToast('이미 존재하는 카테고리 이름입니다.', 'error');
+          return;
+        }
+        state.categories[idx] = newName;
+        // 기존 구매내역 중 oldName을 쓰던 항목들도 일괄 업데이트
+        var updatedCount = 0;
+        state.records.forEach(function (r) {
+          if (r && r.category === oldName) {
+            r.category = newName;
+            r.updatedAt = new Date().toISOString();
+            syncRecordToCloud(r);
+            updatedCount += 1;
+          }
+        });
+        saveCategories();
+        if (updatedCount > 0) saveLocalRecords();
+        renderCategoryManagerModalList();
+        renderAllViews();
+        showToast('✅ [' + oldName + '] → [' + newName + '] 변경 완료!');
+      });
+    });
+
+    listEl.querySelectorAll('.btn-del-cat').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (state.categories.length <= 1) {
+          showToast('최소 1개의 카테고리는 남아있어야 합니다.', 'error');
+          return;
+        }
+        var idx = parseInt(btn.getAttribute('data-del-idx'), 10);
+        if (isNaN(idx)) return;
+        var targetName = state.categories[idx];
+        if (!confirm('[' + targetName + '] 카테고리를 목록에서 삭제하시겠습니까?')) return;
+        state.categories.splice(idx, 1);
+        saveCategories();
+        renderCategoryManagerModalList();
+        renderAllViews();
+        showToast('🗑️ [' + targetName + '] 카테고리가 삭제되었습니다.');
+      });
+    });
   }
 
   // ==================== 자주 쓰는 구매처 칩 렌더링 ====================
@@ -1125,6 +1295,7 @@
   }
 
   function renderAllViews() {
+    renderCategoryOptionsAndChips();
     renderHeaderSummary();
     renderVendorChips();
     renderRecentPreview();
@@ -1481,6 +1652,70 @@
         btnClosePhotoModal.addEventListener('click', function () {
           var m = document.getElementById('modal-photo-viewer');
           if (m) m.classList.add('hidden');
+        });
+      }
+
+      // 카테고리 관리 모달 열기/닫기/추가/초기화 이벤트
+      var openCategoryModal = function () {
+        renderCategoryManagerModalList();
+        var m = document.getElementById('modal-category-manager');
+        if (m) m.classList.remove('hidden');
+      };
+      var closeCategoryModal = function () {
+        var m = document.getElementById('modal-category-manager');
+        if (m) m.classList.add('hidden');
+      };
+
+      var btnOpenCatModal = document.getElementById('btn-open-category-modal');
+      var btnCloseCatModal = document.getElementById('btn-close-category-modal');
+      var btnDoneCatModal = document.getElementById('btn-done-category-modal');
+      if (btnOpenCatModal) btnOpenCatModal.addEventListener('click', openCategoryModal);
+      if (btnCloseCatModal) btnCloseCatModal.addEventListener('click', closeCategoryModal);
+      if (btnDoneCatModal) btnDoneCatModal.addEventListener('click', closeCategoryModal);
+
+      var handleAddNewCategory = function () {
+        var inp = document.getElementById('input-new-category-name');
+        if (!inp) return;
+        var val = inp.value.trim();
+        if (!val) {
+          showToast('추가할 카테고리 이름을 입력해주세요.', 'error');
+          return;
+        }
+        if (state.categories.indexOf(val) !== -1) {
+          showToast('이미 등록된 카테고리입니다.', 'error');
+          return;
+        }
+        state.categories.push(val);
+        inp.value = '';
+        saveCategories();
+        renderCategoryManagerModalList();
+        renderAllViews();
+        var selectInput = document.getElementById('input-category');
+        if (selectInput) selectInput.value = val;
+        showToast('➕ [' + val + '] 카테고리가 추가되었습니다!');
+      };
+
+      var btnAddCategory = document.getElementById('btn-add-category');
+      var inputNewCatName = document.getElementById('input-new-category-name');
+      if (btnAddCategory) btnAddCategory.addEventListener('click', handleAddNewCategory);
+      if (inputNewCatName) {
+        inputNewCatName.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAddNewCategory();
+          }
+        });
+      }
+
+      var btnResetDefaultCats = document.getElementById('btn-reset-default-categories');
+      if (btnResetDefaultCats) {
+        btnResetDefaultCats.addEventListener('click', function () {
+          if (!confirm('카테고리 목록을 기본값(복사기 부품, 컴퓨터 부품 등 5개)으로 초기화하시겠습니까?')) return;
+          state.categories = DEFAULT_CATEGORIES.slice();
+          saveCategories();
+          renderCategoryManagerModalList();
+          renderAllViews();
+          showToast('기본 카테고리로 복원되었습니다.');
         });
       }
     } catch (uiErr) {
