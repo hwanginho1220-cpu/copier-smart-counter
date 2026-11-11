@@ -1,0 +1,1514 @@
+/**
+ * 스마트 부품 구매이력 매니저 (복사기 부품 / 컴퓨터 부품 / 거래명세서 AI 스캔)
+ * - 전역 식별자 충돌 방지를 위해 IIFE 및 window.PurchaseManagerApp 네임스페이스 사용
+ * - UI 기본 조작(탭 전환, 모달, 폼 이벤트)을 DOMContentLoaded 최상단에 우선 등록 및 try-catch 격리
+ */
+(function () {
+  'use strict';
+
+  var STORAGE_KEYS = {
+    RECORDS: 'pm_purchase_records_v1',
+    VENDORS: 'pm_frequent_vendors_v1',
+    GEMINI_KEY: 'pm_gemini_api_key_v1',
+    WORKSPACE: 'pm_cloud_workspace_v1'
+  };
+
+  var DEFAULT_VENDORS = [
+    '대원오피스(복사기부품)',
+    '신도테크',
+    '캐논파트너스',
+    '컴퓨존',
+    '다나와/아이코다',
+    '쿠팡비즈',
+    '네이버스마트스토어'
+  ];
+
+  var state = {
+    records: [],
+    vendors: [],
+    currentPhotoDataUrl: '',
+    currentLineItems: [],
+    geminiApiKey: '',
+    workspaceCode: 'default-parts-room',
+    db: null,
+    unsubscribeSnapshot: null,
+    isCloudConnected: false
+  };
+
+  // ==================== 유틸리티 함수 ====================
+  function getTodayStr() {
+    var now = new Date();
+    var yyyy = now.getFullYear();
+    var mm = String(now.getMonth() + 1).padStart(2, '0');
+    var dd = String(now.getDate()).padStart(2, '0');
+    return yyyy + '-' + mm + '-' + dd;
+  }
+
+  function formatNumber(num) {
+    var n = Number(String(num || 0).replace(/[^0-9.-]/g, ''));
+    if (isNaN(n)) return '0';
+    return n.toLocaleString('ko-KR');
+  }
+
+  function parseAmount(val) {
+    var cleaned = String(val || '').replace(/[^0-9]/g, '');
+    return cleaned ? parseInt(cleaned, 10) : 0;
+  }
+
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function showToast(message, type) {
+    try {
+      var container = document.getElementById('toast-container');
+      if (!container) return;
+      var toast = document.createElement('div');
+      var bgClass = type === 'error' ? 'bg-red-600' : (type === 'info' ? 'bg-indigo-600' : 'bg-slate-900');
+      toast.className = bgClass + ' text-white text-xs sm:text-sm font-bold px-4 py-3 rounded-xl shadow-lg border border-white/10 animate-fade-in pointer-events-auto';
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(function () {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 3200);
+    } catch (e) {
+      console.error('Toast Error:', e);
+    }
+  }
+
+  // ==================== 로컬 스토리지 관리 ====================
+  function loadLocalData() {
+    try {
+      var rawRecords = localStorage.getItem(STORAGE_KEYS.RECORDS);
+      state.records = rawRecords ? JSON.parse(rawRecords) : [];
+      if (!Array.isArray(state.records)) state.records = [];
+    } catch (e) {
+      state.records = [];
+    }
+
+    try {
+      var rawVendors = localStorage.getItem(STORAGE_KEYS.VENDORS);
+      state.vendors = rawVendors ? JSON.parse(rawVendors) : DEFAULT_VENDORS.slice();
+      if (!Array.isArray(state.vendors) || state.vendors.length === 0) {
+        state.vendors = DEFAULT_VENDORS.slice();
+      }
+    } catch (e) {
+      state.vendors = DEFAULT_VENDORS.slice();
+    }
+
+    try {
+      state.geminiApiKey = localStorage.getItem(STORAGE_KEYS.GEMINI_KEY) || '';
+      var urlParams = new URLSearchParams(window.location.search);
+      var roomParam = urlParams.get('room');
+      var savedWs = localStorage.getItem(STORAGE_KEYS.WORKSPACE);
+      if (roomParam && roomParam.trim()) {
+        state.workspaceCode = roomParam.trim();
+        localStorage.setItem(STORAGE_KEYS.WORKSPACE, state.workspaceCode);
+      } else if (savedWs && savedWs.trim()) {
+        state.workspaceCode = savedWs.trim();
+      }
+    } catch (e) {
+      // ignore storage errors
+    }
+  }
+
+  function saveLocalRecords() {
+    try {
+      localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(state.records));
+    } catch (e) {
+      showToast('브라우저 저장소 용량이 부족합니다. 오래된 사진 내역을 백업 후 정리해주세요.', 'error');
+    }
+  }
+
+  function rememberVendor(vendorName) {
+    if (!vendorName) return;
+    var clean = vendorName.trim();
+    if (!clean || clean === '미지정(사진기록)') return;
+    var idx = state.vendors.indexOf(clean);
+    if (idx !== -1) {
+      state.vendors.splice(idx, 1);
+    }
+    state.vendors.unshift(clean);
+    if (state.vendors.length > 12) {
+      state.vendors = state.vendors.slice(0, 12);
+    }
+    try {
+      localStorage.setItem(STORAGE_KEYS.VENDORS, JSON.stringify(state.vendors));
+    } catch (e) {
+      // ignore
+    }
+    renderVendorChips();
+  }
+
+  // ==================== 이미지 리사이즈/압축 (모바일 사진 용량 최적화) ====================
+  function compressImageFile(file, callback) {
+    var reader = new FileReader();
+    reader.onload = function (event) {
+      var img = new Image();
+      img.onload = function () {
+        var maxDim = 1280;
+        var w = img.width;
+        var h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        var compressedDataUrl = canvas.toDataURL('image/jpeg', 0.78);
+        callback(null, compressedDataUrl, w, h);
+      };
+      img.onerror = function () {
+        callback(new Error('이미지를 불러올 수 없습니다.'));
+      };
+      img.src = event.target.result;
+    };
+    reader.onerror = function () {
+      callback(new Error('파일 읽기에 실패했습니다.'));
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // ==================== Gemini Vision AI 거래명세서 자동 스캔 ====================
+  function analyzeInvoiceWithGemini() {
+    if (!state.currentPhotoDataUrl) {
+      showToast('먼저 거래명세서나 영수증 사진을 첨부해주세요.', 'error');
+      return;
+    }
+
+    if (!state.geminiApiKey) {
+      showToast('AI 자동 인식을 위해 우측 상단 [설정/연동]에서 Gemini API 키를 입력해주세요.', 'info');
+      openSettingsModal();
+      return;
+    }
+
+    var btn = document.getElementById('btn-run-ai-ocr');
+    var statusMsg = document.getElementById('ai-ocr-status-msg');
+    var originalBtnHtml = btn ? btn.innerHTML : '';
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳</span><span>AI가 거래명세서의 거래처·품목·금액을 읽는 중...</span>';
+    }
+    if (statusMsg) {
+      statusMsg.innerHTML = '🔍 <strong>Gemini Vision AI</strong>가 이미지에서 공급자(구매처), 날짜, 세부 품목, 합계금액을 추출하고 있습니다...';
+    }
+
+    var base64Data = state.currentPhotoDataUrl.split(',')[1];
+    var mimeMatch = state.currentPhotoDataUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,/);
+    var mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+
+    var promptText = [
+      '당신은 한국의 거래명세서, 세금계산서, 영수증, 그리고 복사기/컴퓨터 부품 라벨을 분석하는 전문 회계/자재 AI입니다.',
+      '첨부된 이미지를 분석하여 반드시 아래 JSON 형식으로만 응답하세요 (마크다운 코드블록 없이 순수 JSON 반환):',
+      '{',
+      '  "date": "YYYY-MM-DD (인식 안되면 오늘 날짜 또는 빈 문자열)",',
+      '  "vendor": "공급자 상호/구매처 이름 (예: 대원오피스, 컴퓨존 등)",',
+      '  "category": "복사기 부품 | 컴퓨터 부품 | 프린터/소모품 | 공구/자재 | 기타 중 가장 알맞은 1개",',
+      '  "summary": "대표 구매내용 한줄 요약 (예: 캐논 드럼유닛 외 2건)",',
+      '  "totalAmount": 숫자만(총 합계금액, 부가세 포함 총액 우선),',
+      '  "paymentMethod": "세금계산서(월결제) | 법인/사업자카드 | 계좌이체/현금 | 온라인결제 중 추정",',
+      '  "items": [',
+      '    { "name": "품목명 및 규격", "qty": 숫자수량, "unitPrice": 숫자단가, "amount": 숫자금액 }',
+      '  ]',
+      '}'
+    ].join('\n');
+
+    var apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + encodeURIComponent(state.geminiApiKey);
+
+    fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: promptText },
+            { inline_data: { mime_type: mimeType, data: base64Data } }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: 'application/json'
+        }
+      })
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error('API 응답 오류 (' + res.status + '). API 키를 확인해주세요.');
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var rawText = '';
+        if (
+          data &&
+          data.candidates &&
+          data.candidates[0] &&
+          data.candidates[0].content &&
+          data.candidates[0].content.parts &&
+          data.candidates[0].content.parts[0]
+        ) {
+          rawText = data.candidates[0].content.parts[0].text || '';
+        }
+        rawText = rawText.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+        var parsed = JSON.parse(rawText);
+        applyAiResultToForm(parsed);
+        if (statusMsg) {
+          statusMsg.innerHTML = '✅ <strong>AI 자동 인식 완료!</strong> 아래 입력칸에 채워진 내용을 확인 후 [구매이력 저장하기]를 눌러주세요.';
+        }
+        showToast('✨ 거래명세서 내용을 자동으로 입력했습니다!', 'info');
+      })
+      .catch(function (err) {
+        console.error('Gemini OCR Error:', err);
+        if (statusMsg) {
+          statusMsg.innerHTML = '⚠️ AI 자동 인식 실패: ' + escapeHtml(err.message) + ' (직접 입력하거나 [사진만 바로 저장]을 이용해주세요)';
+        }
+        showToast('AI 인식 중 오류가 발생했습니다: ' + err.message, 'error');
+      })
+      .finally(function () {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalBtnHtml;
+        }
+      });
+  }
+
+  function applyAiResultToForm(parsed) {
+    if (!parsed || typeof parsed !== 'object') return;
+
+    var dateInput = document.getElementById('input-date');
+    var catInput = document.getElementById('input-category');
+    var vendorInput = document.getElementById('input-vendor');
+    var summaryInput = document.getElementById('input-summary');
+    var amountInput = document.getElementById('input-amount');
+    var paymentInput = document.getElementById('input-payment');
+
+    if (parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) && dateInput) {
+      dateInput.value = parsed.date;
+    }
+    if (parsed.category && catInput) {
+      var validCats = ['복사기 부품', '컴퓨터 부품', '프린터/소모품', '공구/자재', '기타'];
+      if (validCats.indexOf(parsed.category) !== -1) {
+        catInput.value = parsed.category;
+      }
+    }
+    if (parsed.vendor && vendorInput) {
+      vendorInput.value = parsed.vendor;
+    }
+    if (parsed.summary && summaryInput) {
+      summaryInput.value = parsed.summary;
+    }
+    if (parsed.totalAmount !== undefined && amountInput) {
+      amountInput.value = formatNumber(parsed.totalAmount);
+    }
+    if (parsed.paymentMethod && paymentInput) {
+      paymentInput.value = parsed.paymentMethod;
+    }
+
+    if (Array.isArray(parsed.items) && parsed.items.length > 0) {
+      state.currentLineItems = parsed.items.map(function (item) {
+        var qty = Number(item.qty) || 1;
+        var unitPrice = Number(item.unitPrice) || 0;
+        var amount = Number(item.amount) || (qty * unitPrice);
+        return {
+          name: item.name || '',
+          qty: qty,
+          unitPrice: unitPrice,
+          amount: amount
+        };
+      });
+      renderLineItems();
+    }
+  }
+
+  // ==================== 세부 품목(거래명세서 행) 렌더링 ====================
+  function renderLineItems() {
+    var wrapper = document.getElementById('line-items-wrapper');
+    var listEl = document.getElementById('line-items-list');
+    if (!wrapper || !listEl) return;
+
+    if (!state.currentLineItems || state.currentLineItems.length === 0) {
+      wrapper.classList.add('hidden');
+      listEl.innerHTML = '';
+      return;
+    }
+
+    wrapper.classList.remove('hidden');
+    listEl.innerHTML = '';
+
+    state.currentLineItems.forEach(function (item, idx) {
+      var row = document.createElement('div');
+      row.className = 'grid grid-cols-12 gap-1.5 items-center bg-white p-2 rounded-lg border border-slate-200';
+      row.innerHTML =
+        '<div class="col-span-12 sm:col-span-5">' +
+          '<input type="text" data-idx="' + idx + '" data-field="name" value="' + escapeHtml(item.name) + '" placeholder="품목명/규격 (예: IR2525 드럼)" class="line-item-input w-full px-2.5 py-1.5 rounded border border-slate-200 text-xs font-medium">' +
+        '</div>' +
+        '<div class="col-span-3 sm:col-span-2">' +
+          '<input type="number" data-idx="' + idx + '" data-field="qty" value="' + Number(item.qty || 1) + '" min="1" placeholder="수량" class="line-item-input w-full px-2 py-1.5 rounded border border-slate-200 text-xs text-right">' +
+        '</div>' +
+        '<div class="col-span-4 sm:col-span-2">' +
+          '<input type="text" inputmode="numeric" data-idx="' + idx + '" data-field="unitPrice" value="' + formatNumber(item.unitPrice || 0) + '" placeholder="단가" class="line-item-input w-full px-2 py-1.5 rounded border border-slate-200 text-xs text-right">' +
+        '</div>' +
+        '<div class="col-span-4 sm:col-span-2">' +
+          '<input type="text" inputmode="numeric" data-idx="' + idx + '" data-field="amount" value="' + formatNumber(item.amount || 0) + '" placeholder="합계" class="line-item-input w-full px-2 py-1.5 rounded border border-slate-200 text-xs font-bold text-blue-700 text-right bg-blue-50/40">' +
+        '</div>' +
+        '<div class="col-span-1 text-right">' +
+          '<button type="button" data-remove-idx="' + idx + '" class="btn-remove-line-item text-slate-400 hover:text-red-600 text-xs font-bold p-1" title="줄 삭제">✕</button>' +
+        '</div>';
+      listEl.appendChild(row);
+    });
+
+    // 이벤트 바인딩
+    var inputs = listEl.querySelectorAll('.line-item-input');
+    inputs.forEach(function (inp) {
+      inp.addEventListener('input', function (e) {
+        var idx = parseInt(e.target.getAttribute('data-idx'), 10);
+        var field = e.target.getAttribute('data-field');
+        if (isNaN(idx) || !state.currentLineItems[idx]) return;
+
+        if (field === 'name') {
+          state.currentLineItems[idx].name = e.target.value;
+        } else if (field === 'qty') {
+          state.currentLineItems[idx].qty = Number(e.target.value) || 0;
+          state.currentLineItems[idx].amount = state.currentLineItems[idx].qty * state.currentLineItems[idx].unitPrice;
+          updateLineItemRowDisplay(idx);
+        } else if (field === 'unitPrice') {
+          var up = parseAmount(e.target.value);
+          state.currentLineItems[idx].unitPrice = up;
+          state.currentLineItems[idx].amount = state.currentLineItems[idx].qty * up;
+          e.target.value = formatNumber(up);
+          updateLineItemRowDisplay(idx);
+        } else if (field === 'amount') {
+          var amt = parseAmount(e.target.value);
+          state.currentLineItems[idx].amount = amt;
+          e.target.value = formatNumber(amt);
+          recalculateTotalFromLineItems();
+        }
+        autoFillSummaryFromLineItems();
+      });
+    });
+
+    var removeBtns = listEl.querySelectorAll('.btn-remove-line-item');
+    removeBtns.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var idx = parseInt(btn.getAttribute('data-remove-idx'), 10);
+        if (!isNaN(idx)) {
+          state.currentLineItems.splice(idx, 1);
+          renderLineItems();
+          recalculateTotalFromLineItems();
+        }
+      });
+    });
+  }
+
+  function updateLineItemRowDisplay(idx) {
+    var listEl = document.getElementById('line-items-list');
+    if (!listEl || !state.currentLineItems[idx]) return;
+    var amtInput = listEl.querySelector('input[data-idx="' + idx + '"][data-field="amount"]');
+    if (amtInput) {
+      amtInput.value = formatNumber(state.currentLineItems[idx].amount);
+    }
+    recalculateTotalFromLineItems();
+  }
+
+  function recalculateTotalFromLineItems() {
+    if (!state.currentLineItems || state.currentLineItems.length === 0) return;
+    var sum = state.currentLineItems.reduce(function (acc, cur) {
+      return acc + (Number(cur.amount) || 0);
+    }, 0);
+    var amountInput = document.getElementById('input-amount');
+    if (amountInput && sum > 0) {
+      amountInput.value = formatNumber(sum);
+    }
+  }
+
+  function autoFillSummaryFromLineItems() {
+    var summaryInput = document.getElementById('input-summary');
+    if (!summaryInput) return;
+    var validNames = state.currentLineItems
+      .map(function (i) { return (i.name || '').trim(); })
+      .filter(Boolean);
+    if (validNames.length === 0) return;
+    if (validNames.length === 1) {
+      summaryInput.value = validNames[0];
+    } else {
+      summaryInput.value = validNames[0] + ' 외 ' + (validNames.length - 1) + '건';
+    }
+  }
+
+  // ==================== 자주 쓰는 구매처 칩 렌더링 ====================
+  function renderVendorChips() {
+    var container = document.getElementById('recent-vendors-chips');
+    if (!container) return;
+    container.innerHTML = '';
+
+    state.vendors.forEach(function (v) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 text-slate-700 border border-slate-200 font-semibold transition';
+      btn.textContent = v;
+      btn.addEventListener('click', function () {
+        var vendorInput = document.getElementById('input-vendor');
+        if (vendorInput) {
+          vendorInput.value = v;
+          vendorInput.focus();
+        }
+      });
+      container.appendChild(btn);
+    });
+  }
+
+  // ==================== 구매내역 저장 & 사진만 빠른 저장 ====================
+  function savePurchaseRecord(isQuickPhotoOnly) {
+    var editIdEl = document.getElementById('edit-record-id');
+    var dateEl = document.getElementById('input-date');
+    var catEl = document.getElementById('input-category');
+    var vendorEl = document.getElementById('input-vendor');
+    var summaryEl = document.getElementById('input-summary');
+    var amountEl = document.getElementById('input-amount');
+    var paymentEl = document.getElementById('input-payment');
+    var memoEl = document.getElementById('input-memo');
+
+    var editId = editIdEl ? editIdEl.value.trim() : '';
+    var dateVal = (dateEl && dateEl.value) ? dateEl.value : getTodayStr();
+    var catVal = (catEl && catEl.value) ? catEl.value : '복사기 부품';
+    var vendorVal = (vendorEl && vendorEl.value.trim()) ? vendorEl.value.trim() : (isQuickPhotoOnly ? '미지정(사진기록)' : '');
+    var summaryVal = (summaryEl && summaryEl.value.trim()) ? summaryEl.value.trim() : (isQuickPhotoOnly ? '거래명세서/부품 사진 간편등록 (추후확인)' : '');
+    var amountVal = amountEl ? parseAmount(amountEl.value) : 0;
+    var paymentVal = paymentEl ? paymentEl.value : '세금계산서(월결제)';
+    var memoVal = memoEl ? memoEl.value.trim() : '';
+
+    if (!isQuickPhotoOnly) {
+      if (!vendorVal) {
+        showToast('구매처(거래처)를 입력하거나 아래 버튼을 선택해주세요.', 'error');
+        if (vendorEl) vendorEl.focus();
+        return;
+      }
+      if (!summaryVal) {
+        showToast('구매내용(부품명/품목 요약)을 입력해주세요.', 'error');
+        if (summaryEl) summaryEl.focus();
+        return;
+      }
+    } else if (!state.currentPhotoDataUrl) {
+      showToast('사진만 바로 저장하려면 먼저 사진을 촬영하거나 선택해주세요.', 'error');
+      return;
+    }
+
+    var recordId = editId || ('pm_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7));
+    var recordObj = {
+      id: recordId,
+      date: dateVal,
+      category: catVal,
+      vendor: vendorVal,
+      summary: summaryVal,
+      amount: amountVal,
+      payment: paymentVal,
+      memo: memoVal,
+      lineItems: state.currentLineItems.slice(),
+      photoDataUrl: state.currentPhotoDataUrl || '',
+      updatedAt: new Date().toISOString()
+    };
+
+    var existingIdx = state.records.findIndex(function (r) {
+      return r && r.id === recordId;
+    });
+
+    if (existingIdx !== -1) {
+      state.records[existingIdx] = recordObj;
+    } else {
+      state.records.unshift(recordObj);
+    }
+
+    rememberVendor(vendorVal);
+    saveLocalRecords();
+    syncRecordToCloud(recordObj);
+
+    resetPurchaseForm();
+    renderAllViews();
+
+    showToast(editId ? '✅ 구매내역이 수정되었습니다.' : '✅ 구매이력이 저장되었습니다.');
+  }
+
+  function resetPurchaseForm() {
+    var editIdEl = document.getElementById('edit-record-id');
+    var dateEl = document.getElementById('input-date');
+    var vendorEl = document.getElementById('input-vendor');
+    var summaryEl = document.getElementById('input-summary');
+    var amountEl = document.getElementById('input-amount');
+    var memoEl = document.getElementById('input-memo');
+    var titleEl = document.getElementById('form-mode-title');
+    var submitTextEl = document.getElementById('btn-submit-text');
+
+    if (editIdEl) editIdEl.value = '';
+    if (dateEl) dateEl.value = getTodayStr();
+    if (vendorEl) vendorEl.value = '';
+    if (summaryEl) summaryEl.value = '';
+    if (amountEl) amountEl.value = '';
+    if (memoEl) memoEl.value = '';
+    if (titleEl) titleEl.innerHTML = '<span>✍️</span> 2단계: 구매 내역 확인 및 입력';
+    if (submitTextEl) submitTextEl.textContent = '구매이력 저장하기';
+
+    state.currentPhotoDataUrl = '';
+    state.currentLineItems = [];
+    updatePhotoPreviewUI();
+    renderLineItems();
+  }
+
+  function updatePhotoPreviewUI() {
+    var container = document.getElementById('photo-preview-container');
+    var imgEl = document.getElementById('photo-preview-img');
+    var camInput = document.getElementById('input-camera-photo');
+    var galInput = document.getElementById('input-gallery-photo');
+
+    if (!container || !imgEl) return;
+
+    if (state.currentPhotoDataUrl) {
+      imgEl.src = state.currentPhotoDataUrl;
+      container.classList.remove('hidden');
+    } else {
+      imgEl.src = '';
+      container.classList.add('hidden');
+      if (camInput) camInput.value = '';
+      if (galInput) galInput.value = '';
+    }
+  }
+
+  // ==================== 수정 / 삭제 / 사진 확대 ====================
+  function startEditRecord(recordId) {
+    var target = state.records.find(function (r) { return r && r.id === recordId; });
+    if (!target) return;
+
+    switchTab('register');
+
+    var editIdEl = document.getElementById('edit-record-id');
+    var dateEl = document.getElementById('input-date');
+    var catEl = document.getElementById('input-category');
+    var vendorEl = document.getElementById('input-vendor');
+    var summaryEl = document.getElementById('input-summary');
+    var amountEl = document.getElementById('input-amount');
+    var paymentEl = document.getElementById('input-payment');
+    var memoEl = document.getElementById('input-memo');
+    var titleEl = document.getElementById('form-mode-title');
+    var submitTextEl = document.getElementById('btn-submit-text');
+
+    if (editIdEl) editIdEl.value = target.id;
+    if (dateEl) dateEl.value = target.date || getTodayStr();
+    if (catEl) catEl.value = target.category || '복사기 부품';
+    if (vendorEl) vendorEl.value = target.vendor || '';
+    if (summaryEl) summaryEl.value = target.summary || '';
+    if (amountEl) amountEl.value = formatNumber(target.amount || 0);
+    if (paymentEl) paymentEl.value = target.payment || '세금계산서(월결제)';
+    if (memoEl) memoEl.value = target.memo || '';
+
+    state.currentPhotoDataUrl = target.photoDataUrl || '';
+    state.currentLineItems = Array.isArray(target.lineItems) ? JSON.parse(JSON.stringify(target.lineItems)) : [];
+
+    updatePhotoPreviewUI();
+    renderLineItems();
+
+    if (titleEl) titleEl.innerHTML = '<span>✏️</span> 구매 내역 수정 모드';
+    if (submitTextEl) submitTextEl.textContent = '수정 내용 저장하기';
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast('수정할 내역을 불러왔습니다.');
+  }
+
+  function deleteRecord(recordId) {
+    if (!confirm('이 구매내역을 삭제하시겠습니까?')) return;
+    state.records = state.records.filter(function (r) {
+      return r && r.id !== recordId;
+    });
+    saveLocalRecords();
+    deleteRecordFromCloud(recordId);
+    renderAllViews();
+    showToast('구매내역이 삭제되었습니다.');
+  }
+
+  function openPhotoViewer(dataUrl, caption) {
+    if (!dataUrl) return;
+    var modal = document.getElementById('modal-photo-viewer');
+    var img = document.getElementById('modal-photo-img');
+    var cap = document.getElementById('modal-photo-caption');
+    if (!modal || !img) return;
+    img.src = dataUrl;
+    if (cap) cap.textContent = caption || '거래명세서 / 부품 사진';
+    modal.classList.remove('hidden');
+  }
+
+  // ==================== 화면 렌더링 (헤더, 최근내역, 전체조회, 통계) ====================
+  function getCategoryBadgeHtml(cat) {
+    if (cat === '복사기 부품') {
+      return '<span class="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-bold">🖨️ 복사기 부품</span>';
+    }
+    if (cat === '컴퓨터 부품') {
+      return '<span class="text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold">💻 컴퓨터 부품</span>';
+    }
+    if (cat === '프린터/소모품') {
+      return '<span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">🖨️ 프린터/소모품</span>';
+    }
+    if (cat === '공구/자재') {
+      return '<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-bold">🔧 공구/자재</span>';
+    }
+    return '<span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-bold">📦 ' + escapeHtml(cat || '기타') + '</span>';
+  }
+
+  function createRecordCardHtml(r) {
+    var hasPhoto = Boolean(r.photoDataUrl);
+    var hasLineItems = Array.isArray(r.lineItems) && r.lineItems.length > 0;
+    var lineItemsHtml = '';
+
+    if (hasLineItems) {
+      var rows = r.lineItems.map(function (li) {
+        return '<div class="flex justify-between text-[11px] text-slate-600 py-0.5 border-b border-slate-100 last:border-0">' +
+          '<span class="truncate pr-2">• ' + escapeHtml(li.name) + ' <strong class="text-slate-800">x' + Number(li.qty || 1) + '</strong></span>' +
+          '<span class="shrink-0 font-mono">' + formatNumber(li.amount || 0) + '원</span>' +
+        '</div>';
+      }).join('');
+      lineItemsHtml = '<div class="mt-2 bg-slate-50 rounded-lg p-2 border border-slate-200/80">' + rows + '</div>';
+    }
+
+    return (
+      '<div class="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200 shadow-2xs hover:border-blue-300 transition flex flex-col sm:flex-row gap-3 justify-between">' +
+        '<div class="flex gap-3 flex-1 min-w-0">' +
+          (hasPhoto
+            ? '<div class="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-slate-900 border border-slate-200 shrink-0 cursor-pointer relative group btn-view-photo" data-id="' + escapeHtml(r.id) + '" title="클릭하여 사진/명세서 확대">' +
+                '<img src="' + r.photoDataUrl + '" alt="명세서 썸네일" class="w-full h-full object-cover group-hover:scale-105 transition">' +
+                '<span class="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] text-center py-0.5">🔍 확대</span>' +
+              '</div>'
+            : '<div class="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center shrink-0 text-xl">' +
+                (r.category === '복사기 부품' ? '🖨️' : (r.category === '컴퓨터 부품' ? '💻' : '🧾')) +
+              '</div>') +
+          '<div class="flex-1 min-w-0">' +
+            '<div class="flex flex-wrap items-center gap-1.5 mb-1">' +
+              '<span class="text-xs font-bold text-slate-500 font-mono">' + escapeHtml(r.date) + '</span>' +
+              getCategoryBadgeHtml(r.category) +
+              '<span class="text-xs font-extrabold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md">🏢 ' + escapeHtml(r.vendor) + '</span>' +
+              (r.payment ? '<span class="text-[11px] text-slate-400">' + escapeHtml(r.payment) + '</span>' : '') +
+            '</div>' +
+            '<div class="text-sm sm:text-base font-extrabold text-slate-900 break-words">' + escapeHtml(r.summary) + '</div>' +
+            (r.memo ? '<div class="text-xs text-slate-500 mt-0.5">📝 ' + escapeHtml(r.memo) + '</div>' : '') +
+            lineItemsHtml +
+          '</div>' +
+        '</div>' +
+        '<div class="flex sm:flex-col items-center sm:items-end justify-between border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 shrink-0 gap-2">' +
+          '<div class="text-base sm:text-lg font-extrabold text-blue-700 font-mono">' + formatNumber(r.amount) + '원</div>' +
+          '<div class="flex items-center gap-1.5">' +
+            (hasPhoto ? '<button type="button" data-id="' + escapeHtml(r.id) + '" class="btn-view-photo text-xs px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold">명세서 사진</button>' : '') +
+            '<button type="button" data-id="' + escapeHtml(r.id) + '" class="btn-edit-record text-xs px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-semibold">수정</button>' +
+            '<button type="button" data-id="' + escapeHtml(r.id) + '" class="btn-delete-record text-xs px-2.5 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-semibold">삭제</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function bindCardActionEvents(container) {
+    if (!container) return;
+    container.querySelectorAll('.btn-view-photo').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var id = el.getAttribute('data-id');
+        var rec = state.records.find(function (r) { return r && r.id === id; });
+        if (rec && rec.photoDataUrl) {
+          openPhotoViewer(rec.photoDataUrl, '[' + rec.date + '] ' + rec.vendor + ' - ' + rec.summary);
+        }
+      });
+    });
+
+    container.querySelectorAll('.btn-edit-record').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var id = el.getAttribute('data-id');
+        startEditRecord(id);
+      });
+    });
+
+    container.querySelectorAll('.btn-delete-record').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var id = el.getAttribute('data-id');
+        deleteRecord(id);
+      });
+    });
+  }
+
+  function getSortedRecords() {
+    return state.records.slice().sort(function (a, b) {
+      var dA = (a && a.date) ? a.date : '';
+      var dB = (b && b.date) ? b.date : '';
+      if (dA !== dB) return dB.localeCompare(dA);
+      var uA = (a && a.updatedAt) ? a.updatedAt : '';
+      var uB = (b && b.updatedAt) ? b.updatedAt : '';
+      return uB.localeCompare(uA);
+    });
+  }
+
+  function renderHeaderSummary() {
+    var currentMonth = getTodayStr().slice(0, 7);
+    var monthRecords = state.records.filter(function (r) {
+      return r && r.date && r.date.slice(0, 7) === currentMonth;
+    });
+    var monthSum = monthRecords.reduce(function (acc, cur) {
+      return acc + (Number(cur.amount) || 0);
+    }, 0);
+
+    var countEl = document.getElementById('header-month-count');
+    var totalEl = document.getElementById('header-month-total');
+    if (countEl) countEl.textContent = monthRecords.length + '건';
+    if (totalEl) totalEl.textContent = formatNumber(monthSum) + '원';
+  }
+
+  function renderRecentPreview() {
+    var container = document.getElementById('recent-records-preview');
+    if (!container) return;
+
+    var sorted = getSortedRecords().slice(0, 5);
+    if (sorted.length === 0) {
+      container.innerHTML =
+        '<div class="text-center py-8 text-xs sm:text-sm text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">' +
+          '아직 등록된 구매이력이 없습니다.<br>위에서 거래명세서 사진을 찍거나 구매내역을 입력해보세요! (우측 상단 <strong>[샘플 데이터 넣기]</strong>로 체험 가능)' +
+        '</div>';
+      return;
+    }
+
+    container.innerHTML = sorted.map(createRecordCardHtml).join('');
+    bindCardActionEvents(container);
+  }
+
+  function getFilteredRecords() {
+    var kwEl = document.getElementById('filter-keyword');
+    var catEl = document.getElementById('filter-category');
+    var monthEl = document.getElementById('filter-month');
+
+    var kw = (kwEl && kwEl.value.trim()) ? kwEl.value.trim().toLowerCase() : '';
+    var cat = (catEl && catEl.value) ? catEl.value : 'ALL';
+    var month = (monthEl && monthEl.value) ? monthEl.value : '';
+
+    return getSortedRecords().filter(function (r) {
+      if (!r) return false;
+      if (cat !== 'ALL' && r.category !== cat) return false;
+      if (month && (!r.date || r.date.slice(0, 7) !== month)) return false;
+      if (kw) {
+        var lineText = Array.isArray(r.lineItems)
+          ? r.lineItems.map(function (li) { return li.name || ''; }).join(' ')
+          : '';
+        var haystack = [r.vendor, r.summary, r.memo, r.category, lineText].join(' ').toLowerCase();
+        if (haystack.indexOf(kw) === -1) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderHistoryList() {
+    var container = document.getElementById('history-list-container');
+    var countEl = document.getElementById('filtered-count');
+    var sumEl = document.getElementById('filtered-sum');
+    if (!container) return;
+
+    var filtered = getFilteredRecords();
+    var totalSum = filtered.reduce(function (acc, cur) {
+      return acc + (Number(cur.amount) || 0);
+    }, 0);
+
+    if (countEl) countEl.textContent = filtered.length + '건';
+    if (sumEl) sumEl.textContent = formatNumber(totalSum) + '원';
+
+    if (filtered.length === 0) {
+      container.innerHTML =
+        '<div class="bg-white rounded-2xl p-10 text-center text-sm text-slate-400 border border-slate-200">' +
+          '조건에 맞는 구매이력이 없습니다.' +
+        '</div>';
+      return;
+    }
+
+    container.innerHTML = filtered.map(createRecordCardHtml).join('');
+    bindCardActionEvents(container);
+  }
+
+  function renderStatsView() {
+    var totalAmount = 0;
+    var copierAmount = 0;
+    var pcAmount = 0;
+    var vendorMap = {};
+    var catMap = {};
+
+    state.records.forEach(function (r) {
+      if (!r) return;
+      var amt = Number(r.amount) || 0;
+      totalAmount += amt;
+      if (r.category === '복사기 부품') copierAmount += amt;
+      if (r.category === '컴퓨터 부품') pcAmount += amt;
+
+      var vName = r.vendor || '기타';
+      if (!vendorMap[vName]) vendorMap[vName] = { count: 0, amount: 0 };
+      vendorMap[vName].count += 1;
+      vendorMap[vName].amount += amt;
+
+      var cName = r.category || '기타';
+      if (!catMap[cName]) catMap[cName] = { count: 0, amount: 0 };
+      catMap[cName].count += 1;
+      catMap[cName].amount += amt;
+    });
+
+    var totalAmtEl = document.getElementById('stat-total-amount');
+    var totalCntEl = document.getElementById('stat-total-count');
+    var copierAmtEl = document.getElementById('stat-copier-amount');
+    var copierRatioEl = document.getElementById('stat-copier-ratio');
+    var pcAmtEl = document.getElementById('stat-pc-amount');
+    var pcRatioEl = document.getElementById('stat-pc-ratio');
+
+    if (totalAmtEl) totalAmtEl.textContent = formatNumber(totalAmount) + '원';
+    if (totalCntEl) totalCntEl.textContent = '총 ' + state.records.length + '건 기록됨';
+    if (copierAmtEl) copierAmtEl.textContent = formatNumber(copierAmount) + '원';
+    if (copierRatioEl) {
+      var cRatio = totalAmount > 0 ? Math.round((copierAmount / totalAmount) * 100) : 0;
+      copierRatioEl.textContent = '전체의 ' + cRatio + '%';
+    }
+    if (pcAmtEl) pcAmtEl.textContent = formatNumber(pcAmount) + '원';
+    if (pcRatioEl) {
+      var pRatio = totalAmount > 0 ? Math.round((pcAmount / totalAmount) * 100) : 0;
+      pcRatioEl.textContent = '전체의 ' + pRatio + '%';
+    }
+
+    // 거래처별 리스트
+    var vendorListEl = document.getElementById('stat-vendor-list');
+    if (vendorListEl) {
+      var vendorEntries = Object.keys(vendorMap).map(function (k) {
+        return { name: k, count: vendorMap[k].count, amount: vendorMap[k].amount };
+      }).sort(function (a, b) { return b.amount - a.amount; });
+
+      if (vendorEntries.length === 0) {
+        vendorListEl.innerHTML = '<div class="text-xs text-slate-400 py-4 text-center">데이터가 없습니다.</div>';
+      } else {
+        vendorListEl.innerHTML = vendorEntries.map(function (v) {
+          var pct = totalAmount > 0 ? Math.max(4, Math.round((v.amount / totalAmount) * 100)) : 0;
+          return (
+            '<div class="space-y-1">' +
+              '<div class="flex justify-between text-xs">' +
+                '<span class="font-bold text-slate-800">' + escapeHtml(v.name) + ' <span class="text-slate-400 font-normal">(' + v.count + '건)</span></span>' +
+                '<span class="font-extrabold text-slate-900 font-mono">' + formatNumber(v.amount) + '원</span>' +
+              '</div>' +
+              '<div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">' +
+                '<div class="bg-blue-600 h-full rounded-full" style="width:' + pct + '%"></div>' +
+              '</div>' +
+            '</div>'
+          );
+        }).join('');
+      }
+    }
+
+    // 카테고리별 리스트
+    var catListEl = document.getElementById('stat-category-list');
+    if (catListEl) {
+      var catEntries = Object.keys(catMap).map(function (k) {
+        return { name: k, count: catMap[k].count, amount: catMap[k].amount };
+      }).sort(function (a, b) { return b.amount - a.amount; });
+
+      if (catEntries.length === 0) {
+        catListEl.innerHTML = '<div class="text-xs text-slate-400 py-4 text-center">데이터가 없습니다.</div>';
+      } else {
+        catListEl.innerHTML = catEntries.map(function (c) {
+          var pct = totalAmount > 0 ? Math.max(4, Math.round((c.amount / totalAmount) * 100)) : 0;
+          return (
+            '<div class="space-y-1">' +
+              '<div class="flex justify-between text-xs">' +
+                '<span class="font-bold text-slate-800">' + escapeHtml(c.name) + ' <span class="text-slate-400 font-normal">(' + c.count + '건)</span></span>' +
+                '<span class="font-extrabold text-indigo-700 font-mono">' + formatNumber(c.amount) + '원</span>' +
+              '</div>' +
+              '<div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">' +
+                '<div class="bg-indigo-600 h-full rounded-full" style="width:' + pct + '%"></div>' +
+              '</div>' +
+            '</div>'
+          );
+        }).join('');
+      }
+    }
+  }
+
+  function renderAllViews() {
+    renderHeaderSummary();
+    renderVendorChips();
+    renderRecentPreview();
+    renderHistoryList();
+    renderStatsView();
+  }
+
+  // ==================== 엑셀(CSV) 내보내기 및 JSON 백업/복원 ====================
+  function exportToCsv() {
+    var filtered = getFilteredRecords();
+    if (filtered.length === 0) {
+      showToast('내보낼 구매내역이 없습니다.', 'error');
+      return;
+    }
+
+    var headers = ['구매일자', '카테고리', '구매처(거래처)', '구매내용(품목요약)', '세부품목내역', '구매금액(원)', '결제구분', '메모'];
+    var rows = filtered.map(function (r) {
+      var detailStr = Array.isArray(r.lineItems)
+        ? r.lineItems.map(function (li) {
+            return (li.name || '') + '(' + (li.qty || 1) + '개/' + (li.amount || 0) + '원)';
+          }).join('; ')
+        : '';
+      return [
+        r.date || '',
+        r.category || '',
+        r.vendor || '',
+        r.summary || '',
+        detailStr,
+        String(r.amount || 0),
+        r.payment || '',
+        r.memo || ''
+      ].map(function (cell) {
+        return '"' + String(cell).replace(/"/g, '""') + '"';
+      }).join(',');
+    });
+
+    var csvContent = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
+    var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '부품구매이력_' + getTodayStr() + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('📊 엑셀(CSV) 파일이 다운로드되었습니다.');
+  }
+
+  function exportToJson() {
+    var dataStr = JSON.stringify(state.records, null, 2);
+    var blob = new Blob([dataStr], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '구매이력백업_' + getTodayStr() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('백업 파일(.json)이 저장되었습니다.');
+  }
+
+  function importFromJsonFile(file) {
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        var imported = JSON.parse(e.target.result);
+        if (!Array.isArray(imported)) throw new Error('올바른 백업 파일 형식이 아닙니다.');
+        state.records = imported;
+        saveLocalRecords();
+        renderAllViews();
+        showToast('✅ 총 ' + imported.length + '건의 구매내역이 복원되었습니다.');
+      } catch (err) {
+        showToast('복원 실패: ' + err.message, 'error');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ==================== 샘플 데모 데이터 생성 ====================
+  function seedSampleData() {
+    var today = getTodayStr();
+    var sampleRecords = [
+      {
+        id: 'pm_demo_1',
+        date: today,
+        category: '복사기 부품',
+        vendor: '대원오피스(복사기부품)',
+        summary: '캐논 IR ADV C3520 드럼유닛(검정) 외 2건',
+        amount: 245000,
+        payment: '세금계산서(월결제)',
+        memo: '세무회계법인 정기점검 교체용',
+        lineItems: [
+          { name: '캐논 NPG-67 드럼유닛 (BK)', qty: 1, unitPrice: 125000, amount: 125000 },
+          { name: '급지 픽업롤러 세트 (IR-C3520)', qty: 4, unitPrice: 15000, amount: 60000 },
+          { name: '폐토너통 WT-202', qty: 2, unitPrice: 30000, amount: 60000 }
+        ],
+        photoDataUrl: '',
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: 'pm_demo_2',
+        date: today,
+        category: '컴퓨터 부품',
+        vendor: '컴퓨존',
+        summary: '삼성 DDR4 16GB 메모리 및 마이크론 SSD 500GB',
+        amount: 198000,
+        payment: '법인/사업자카드',
+        memo: '거래처 사무용 PC 업그레이드 납품',
+        lineItems: [
+          { name: '삼성전자 DDR4-3200 16GB', qty: 2, unitPrice: 46000, amount: 92000 },
+          { name: '마이크론 Crucial MX500 500GB SSD', qty: 1, unitPrice: 68000, amount: 68000 },
+          { name: '마이크로닉스 Classic II 500W 파워', qty: 1, unitPrice: 38000, amount: 38000 }
+        ],
+        photoDataUrl: '',
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: 'pm_demo_3',
+        date: today,
+        category: '복사기 부품',
+        vendor: '신도테크',
+        summary: '신도리코 D420 정착기(퓨저) 어셈블리 1개',
+        amount: 165000,
+        payment: '세금계산서(월결제)',
+        memo: '열롤러 손상 수리건',
+        lineItems: [
+          { name: '신도리코 D420 정착기 유닛', qty: 1, unitPrice: 165000, amount: 165000 }
+        ],
+        photoDataUrl: '',
+        updatedAt: new Date().toISOString()
+      }
+    ];
+
+    sampleRecords.forEach(function (sample) {
+      var exists = state.records.some(function (r) { return r && r.id === sample.id; });
+      if (!exists) {
+        state.records.unshift(sample);
+      }
+    });
+
+    saveLocalRecords();
+    renderAllViews();
+    showToast('✨ 복사기·컴퓨터 부품 샘플 구매내역 3건이 추가되었습니다!');
+  }
+
+  // ==================== 클라우드(Firebase Firestore) 실시간 연동 ====================
+  function initCloudSync() {
+    try {
+      if (typeof firebase === 'undefined' || !window.PURCHASE_APP_FIREBASE_CONFIG) {
+        updateSyncBadge(false, '로컬 저장 모드');
+        return;
+      }
+      if (!firebase.apps || firebase.apps.length === 0) {
+        firebase.initializeApp(window.PURCHASE_APP_FIREBASE_CONFIG);
+      }
+      state.db = firebase.firestore();
+      subscribeWorkspaceCollection();
+    } catch (e) {
+      console.warn('Firebase Init Skipped:', e);
+      updateSyncBadge(false, '로컬 저장 모드');
+    }
+  }
+
+  function subscribeWorkspaceCollection() {
+    if (!state.db) return;
+    try {
+      if (state.unsubscribeSnapshot) {
+        state.unsubscribeSnapshot();
+        state.unsubscribeSnapshot = null;
+      }
+
+      var colRef = state.db
+        .collection('purchase_manager_workspaces')
+        .doc(state.workspaceCode)
+        .collection('records');
+
+      state.unsubscribeSnapshot = colRef.onSnapshot(
+        function (snapshot) {
+          state.isCloudConnected = true;
+          updateSyncBadge(true, '클라우드 연동중');
+
+          var changed = false;
+          snapshot.docChanges().forEach(function (change) {
+            var docData = change.doc.data();
+            if (!docData || !docData.id) return;
+
+            var idx = state.records.findIndex(function (r) { return r && r.id === docData.id; });
+            if (change.type === 'removed') {
+              if (idx !== -1) {
+                state.records.splice(idx, 1);
+                changed = true;
+              }
+            } else {
+              if (idx === -1) {
+                state.records.push(docData);
+                changed = true;
+              } else {
+                var localTime = state.records[idx].updatedAt || '';
+                var remoteTime = docData.updatedAt || '';
+                if (remoteTime > localTime) {
+                  state.records[idx] = docData;
+                  changed = true;
+                }
+              }
+            }
+          });
+
+          if (changed) {
+            saveLocalRecords();
+            renderAllViews();
+          }
+        },
+        function (err) {
+          console.warn('Firestore snapshot fallback to local:', err);
+          state.isCloudConnected = false;
+          updateSyncBadge(false, '로컬 저장됨');
+        }
+      );
+    } catch (e) {
+      updateSyncBadge(false, '로컬 저장됨');
+    }
+  }
+
+  function syncRecordToCloud(recordObj) {
+    if (!state.db || !recordObj || !recordObj.id) return;
+    try {
+      state.db
+        .collection('purchase_manager_workspaces')
+        .doc(state.workspaceCode)
+        .collection('records')
+        .doc(recordObj.id)
+        .set(recordObj)
+        .catch(function (err) {
+          console.warn('Cloud sync set warning:', err);
+        });
+    } catch (e) {
+      // ignore cloud errors so UI never breaks
+    }
+  }
+
+  function deleteRecordFromCloud(recordId) {
+    if (!state.db || !recordId) return;
+    try {
+      state.db
+        .collection('purchase_manager_workspaces')
+        .doc(state.workspaceCode)
+        .collection('records')
+        .doc(recordId)
+        .delete()
+        .catch(function () {});
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  function updateSyncBadge(isOnline, labelText) {
+    var dot = document.getElementById('sync-status-dot');
+    var txt = document.getElementById('sync-status-text');
+    var aiBadge = document.getElementById('ai-badge-status');
+
+    if (dot) {
+      dot.className = 'w-2 h-2 rounded-full ' + (isOnline ? 'bg-emerald-400' : 'bg-amber-400');
+    }
+    if (txt) {
+      txt.textContent = labelText || '설정/연동';
+    }
+    if (aiBadge) {
+      if (state.geminiApiKey) {
+        aiBadge.textContent = '✨ Gemini AI 활성';
+        aiBadge.className = 'text-[11px] px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200';
+      } else {
+        aiBadge.textContent = '⚙️ AI 키 설정 필요';
+        aiBadge.className = 'text-[11px] px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 font-semibold border border-amber-200 cursor-pointer';
+      }
+    }
+  }
+
+  // ==================== 탭 전환 및 모달 조작 (최우선 보호) ====================
+  function switchTab(tabName) {
+    var buttons = document.querySelectorAll('.tab-nav-btn');
+    buttons.forEach(function (btn) {
+      var target = btn.getAttribute('data-tab');
+      if (target === tabName) {
+        btn.className = 'tab-nav-btn flex-1 py-3 px-3 text-xs sm:text-sm font-bold border-b-2 border-blue-500 text-blue-400 bg-slate-800/50 flex items-center justify-center gap-1.5 shrink-0 transition';
+      } else {
+        btn.className = 'tab-nav-btn flex-1 py-3 px-3 text-xs sm:text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5 shrink-0 transition';
+      }
+    });
+
+    var panels = {
+      register: document.getElementById('tab-register'),
+      history: document.getElementById('tab-history'),
+      stats: document.getElementById('tab-stats')
+    };
+
+    Object.keys(panels).forEach(function (k) {
+      if (!panels[k]) return;
+      if (k === tabName) {
+        panels[k].classList.remove('hidden');
+      } else {
+        panels[k].classList.add('hidden');
+      }
+    });
+
+    if (tabName === 'history') renderHistoryList();
+    if (tabName === 'stats') renderStatsView();
+  }
+
+  function openSettingsModal() {
+    var modal = document.getElementById('modal-settings');
+    var keyInput = document.getElementById('input-gemini-key');
+    var wsInput = document.getElementById('input-workspace-code');
+    if (keyInput) keyInput.value = state.geminiApiKey || '';
+    if (wsInput) wsInput.value = state.workspaceCode || 'default-parts-room';
+    if (modal) modal.classList.remove('hidden');
+  }
+
+  function closeSettingsModal() {
+    var modal = document.getElementById('modal-settings');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  // ==================== 초기화 (DOMContentLoaded 최상단 UI 이벤트 보호) ====================
+  document.addEventListener('DOMContentLoaded', function () {
+    // 1. 탭 네비게이션 및 모달 닫기 등 기본 UI 이벤트 최우선 등록
+    try {
+      document.querySelectorAll('.tab-nav-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          switchTab(btn.getAttribute('data-tab'));
+        });
+      });
+
+      var btnGoAllHistory = document.getElementById('btn-go-all-history');
+      if (btnGoAllHistory) {
+        btnGoAllHistory.addEventListener('click', function () {
+          switchTab('history');
+        });
+      }
+
+      var btnOpenSettings = document.getElementById('btn-open-settings');
+      if (btnOpenSettings) btnOpenSettings.addEventListener('click', openSettingsModal);
+
+      var aiBadge = document.getElementById('ai-badge-status');
+      if (aiBadge) aiBadge.addEventListener('click', openSettingsModal);
+
+      var btnCloseSettings = document.getElementById('btn-close-settings');
+      if (btnCloseSettings) btnCloseSettings.addEventListener('click', closeSettingsModal);
+
+      var btnClosePhotoModal = document.getElementById('btn-close-photo-modal');
+      if (btnClosePhotoModal) {
+        btnClosePhotoModal.addEventListener('click', function () {
+          var m = document.getElementById('modal-photo-viewer');
+          if (m) m.classList.add('hidden');
+        });
+      }
+    } catch (uiErr) {
+      console.error('UI Navigation Binding Error:', uiErr);
+    }
+
+    // 2. 폼 기본값 및 빠른 칩 이벤트 등록
+    try {
+      var dateInput = document.getElementById('input-date');
+      if (dateInput && !dateInput.value) {
+        dateInput.value = getTodayStr();
+      }
+
+      // 카테고리 빠른 선택 칩
+      document.querySelectorAll('.category-quick-chip').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+          var catSelect = document.getElementById('input-category');
+          if (catSelect) catSelect.value = chip.getAttribute('data-cat');
+        });
+      });
+
+      // 자주 쓰는 부품 키워드 칩
+      document.querySelectorAll('.part-quick-chip').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+          var summaryInput = document.getElementById('input-summary');
+          if (!summaryInput) return;
+          var partName = chip.getAttribute('data-part') || '';
+          summaryInput.value = summaryInput.value.trim()
+            ? (summaryInput.value.trim() + ', ' + partName)
+            : partName;
+          summaryInput.focus();
+        });
+      });
+
+      // 금액 입력 시 천단위 콤마 자동 포맷팅
+      var amountInput = document.getElementById('input-amount');
+      if (amountInput) {
+        amountInput.addEventListener('input', function (e) {
+          var num = parseAmount(e.target.value);
+          e.target.value = num > 0 ? formatNumber(num) : '';
+        });
+      }
+
+      // 세부 품목 줄 추가 버튼
+      var btnAddItemRow = document.getElementById('btn-add-item-row');
+      if (btnAddItemRow) {
+        btnAddItemRow.addEventListener('click', function () {
+          state.currentLineItems.push({ name: '', qty: 1, unitPrice: 0, amount: 0 });
+          renderLineItems();
+        });
+      }
+
+      // 사진 촬영 / 갤러리 선택 이벤트
+      var handleFileSelect = function (e) {
+        var file = e.target.files && e.target.files[0];
+        if (!file) return;
+        compressImageFile(file, function (err, dataUrl, w, h) {
+          if (err) {
+            showToast(err.message, 'error');
+            return;
+          }
+          state.currentPhotoDataUrl = dataUrl;
+          updatePhotoPreviewUI();
+          var sizeInfo = document.getElementById('photo-size-info');
+          if (sizeInfo) {
+            var kb = Math.round((dataUrl.length * 3) / 4 / 1024);
+            sizeInfo.textContent = w + 'x' + h + 'px (' + kb + 'KB 최적화됨)';
+          }
+          showToast('📸 사진이 첨부되었습니다. [AI 자동 입력] 또는 [사진만 바로 저장]을 선택하세요.');
+        });
+      };
+
+      var camInput = document.getElementById('input-camera-photo');
+      var galInput = document.getElementById('input-gallery-photo');
+      if (camInput) camInput.addEventListener('change', handleFileSelect);
+      if (galInput) galInput.addEventListener('change', handleFileSelect);
+
+      var previewImg = document.getElementById('photo-preview-img');
+      if (previewImg) {
+        previewImg.addEventListener('click', function () {
+          openPhotoViewer(state.currentPhotoDataUrl, '첨부된 거래명세서/부품 사진');
+        });
+      }
+
+      var btnRemovePhoto = document.getElementById('btn-remove-photo');
+      if (btnRemovePhoto) {
+        btnRemovePhoto.addEventListener('click', function () {
+          state.currentPhotoDataUrl = '';
+          updatePhotoPreviewUI();
+        });
+      }
+
+      // AI OCR 실행 버튼
+      var btnRunAiOcr = document.getElementById('btn-run-ai-ocr');
+      if (btnRunAiOcr) {
+        btnRunAiOcr.addEventListener('click', analyzeInvoiceWithGemini);
+      }
+
+      // 사진만 바로 저장 버튼
+      var btnQuickPhotoSave = document.getElementById('btn-quick-photo-save');
+      if (btnQuickPhotoSave) {
+        btnQuickPhotoSave.addEventListener('click', function () {
+          savePurchaseRecord(true);
+        });
+      }
+
+      // 폼 제출 저장
+      var purchaseForm = document.getElementById('purchase-form');
+      if (purchaseForm) {
+        purchaseForm.addEventListener('submit', function (e) {
+          e.preventDefault();
+          savePurchaseRecord(false);
+        });
+      }
+
+      // 폼 초기화
+      var btnResetForm = document.getElementById('btn-reset-form');
+      if (btnResetForm) {
+        btnResetForm.addEventListener('click', resetPurchaseForm);
+      }
+
+      // 샘플 데이터 버튼
+      var btnSeedDemo = document.getElementById('btn-seed-demo');
+      if (btnSeedDemo) {
+        btnSeedDemo.addEventListener('click', seedSampleData);
+      }
+
+      // 검색 필터 이벤트
+      var filterKw = document.getElementById('filter-keyword');
+      var filterCat = document.getElementById('filter-category');
+      var filterMonth = document.getElementById('filter-month');
+      if (filterKw) filterKw.addEventListener('input', renderHistoryList);
+      if (filterCat) filterCat.addEventListener('change', renderHistoryList);
+      if (filterMonth) filterMonth.addEventListener('change', renderHistoryList);
+
+      var btnClearFilters = document.getElementById('btn-clear-filters');
+      if (btnClearFilters) {
+        btnClearFilters.addEventListener('click', function () {
+          if (filterKw) filterKw.value = '';
+          if (filterCat) filterCat.value = 'ALL';
+          if (filterMonth) filterMonth.value = '';
+          renderHistoryList();
+        });
+      }
+
+      // 엑셀 다운로드 & 백업/복원
+      var btnExportCsv = document.getElementById('btn-export-csv');
+      if (btnExportCsv) btnExportCsv.addEventListener('click', exportToCsv);
+
+      var btnExportJson = document.getElementById('btn-export-json');
+      if (btnExportJson) btnExportJson.addEventListener('click', exportToJson);
+
+      var inputImportJson = document.getElementById('input-import-json');
+      if (inputImportJson) {
+        inputImportJson.addEventListener('change', function (e) {
+          var f = e.target.files && e.target.files[0];
+          if (f) importFromJsonFile(f);
+          e.target.value = '';
+        });
+      }
+
+      // 스마트폰 접속 링크 복사 버튼
+      var btnCopySyncLink = document.getElementById('btn-copy-sync-link');
+      if (btnCopySyncLink) {
+        btnCopySyncLink.addEventListener('click', function () {
+          var wsInput = document.getElementById('input-workspace-code');
+          var code = (wsInput && wsInput.value.trim()) ? wsInput.value.trim() : state.workspaceCode;
+          var baseUrl = window.location.origin + window.location.pathname;
+          var shareUrl = baseUrl + '?room=' + encodeURIComponent(code);
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(shareUrl).then(function () {
+              showToast('🔗 연동 링크가 복사되었습니다! 카톡 나에게 보내기로 스마트폰에서 열어보세요.', 'info');
+            }).catch(function () {
+              prompt('아래 주소를 복사하여 스마트폰에서 접속하세요:', shareUrl);
+            });
+          } else {
+            prompt('아래 주소를 복사하여 스마트폰에서 접속하세요:', shareUrl);
+          }
+        });
+      }
+
+      // 설정 저장 버튼
+      var btnSaveSettings = document.getElementById('btn-save-settings');
+      if (btnSaveSettings) {
+        btnSaveSettings.addEventListener('click', function () {
+          var keyInput = document.getElementById('input-gemini-key');
+          var wsInput = document.getElementById('input-workspace-code');
+          state.geminiApiKey = keyInput ? keyInput.value.trim() : '';
+          state.workspaceCode = (wsInput && wsInput.value.trim()) ? wsInput.value.trim() : 'default-parts-room';
+
+          try {
+            localStorage.setItem(STORAGE_KEYS.GEMINI_KEY, state.geminiApiKey);
+            localStorage.setItem(STORAGE_KEYS.WORKSPACE, state.workspaceCode);
+          } catch (e) {}
+
+          closeSettingsModal();
+          subscribeWorkspaceCollection();
+          updateSyncBadge(state.isCloudConnected, state.isCloudConnected ? '클라우드 연동중' : '로컬 저장됨');
+          showToast('⚙️ 설정이 저장되었습니다.');
+        });
+      }
+    } catch (formErr) {
+      console.error('Form Binding Error:', formErr);
+    }
+
+    // 3. 데이터 로드 및 클라우드 초기화
+    try {
+      loadLocalData();
+      renderAllViews();
+      initCloudSync();
+    } catch (dataErr) {
+      console.error('Data Init Error:', dataErr);
+    }
+  });
+
+  window.PurchaseManagerApp = {
+    switchTab: switchTab,
+    seedSampleData: seedSampleData
+  };
+})();

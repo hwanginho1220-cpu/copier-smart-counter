@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>스마트 부품 구매이력 관리 (AI 거래명세서 스캔)</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              900: '#1e3a8a'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Firebase SDK Compat CDN (v10) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen pb-24 antialiased">
+
+  <!-- 상단 글로벌 헤더 -->
+  <header class="bg-slate-900 text-white sticky top-0 z-30 shadow-md">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-lg font-extrabold text-xl">
+          🧾
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-extrabold tracking-tight flex items-center gap-1.5">
+            부품 구매이력 매니저
+            <span class="text-[11px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30 font-semibold">AI 스캔</span>
+          </h1>
+          <p class="text-[11px] text-slate-400">복사기·컴퓨터 부품 거래명세서 & 사진 간편 기록</p>
+        </div>
+      </div>
+
+      <!-- 우측 상태 배지 & 설정 버튼 -->
+      <div class="flex items-center gap-2">
+        <button id="btn-open-settings" type="button" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition" title="AI API 키 및 클라우드 설정">
+          <span id="sync-status-dot" class="w-2 h-2 rounded-full bg-amber-400"></span>
+          <span id="sync-status-text">설정/연동</span>
+          <span>⚙️</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 상단 요약 바 -->
+    <div class="bg-slate-800/80 border-t border-slate-700/80">
+      <div class="max-w-5xl mx-auto px-4 py-2 flex items-center justify-between text-xs">
+        <div class="flex items-center gap-3">
+          <span class="text-slate-300">이번 달 구매: <strong id="header-month-count" class="text-white">0건</strong></span>
+          <span class="text-slate-500">|</span>
+          <span class="text-slate-300">합계: <strong id="header-month-total" class="text-emerald-400 font-bold">0원</strong></span>
+        </div>
+        <button id="btn-seed-demo" type="button" class="text-[11px] text-blue-300 hover:text-blue-200 underline font-medium">
+          샘플 데이터 넣기
+        </button>
+      </div>
+    </div>
+
+    <!-- 메인 탭 네비게이션 -->
+    <nav class="max-w-5xl mx-auto px-2 sm:px-4 flex bg-slate-900 border-t border-slate-800 overflow-x-auto no-scrollbar">
+      <button type="button" class="tab-nav-btn flex-1 py-3 px-3 text-xs sm:text-sm font-bold border-b-2 border-blue-500 text-blue-400 bg-slate-800/50 flex items-center justify-center gap-1.5 shrink-0 transition" data-tab="register">
+        <span>📸</span> <span>구매/명세서 등록</span>
+      </button>
+      <button type="button" class="tab-nav-btn flex-1 py-3 px-3 text-xs sm:text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5 shrink-0 transition" data-tab="history">
+        <span>📋</span> <span>구매내역 조회</span>
+      </button>
+      <button type="button" class="tab-nav-btn flex-1 py-3 px-3 text-xs sm:text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5 shrink-0 transition" data-tab="stats">
+        <span>📊</span> <span>거래처/부품 통계</span>
+      </button>
+    </nav>
+  </header>
+
+  <!-- 메인 컨텐츠 영역 -->
+  <main class="max-w-5xl mx-auto px-3 sm:px-6 pt-4">
+
+    <!-- ==================== [탭 1: 구매/명세서 등록] ==================== -->
+    <section id="tab-register" class="tab-panel space-y-4">
+
+      <!-- 1. 사진 촬영 / 거래명세서 업로드 & AI 자동인식 카드 -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <h2 class="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-1.5">
+              <span>📷</span> 1단계: 거래명세서 또는 부품 사진 찍기
+            </h2>
+            <p class="text-xs text-slate-500 mt-0.5">명세서/영수증을 찍으면 AI가 구매처·품목·금액을 자동으로 채워줍니다.</p>
+          </div>
+          <span id="ai-badge-status" class="text-[11px] px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200">
+            ✨ Gemini AI 준비
+          </span>
+        </div>
+
+        <!-- 촬영 모드 선택 버튼 2개 (모바일 친화적 큼직한 버튼) -->
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <label for="input-camera-photo" class="cursor-pointer flex flex-col items-center justify-center p-4 rounded-xl border-2 border-dashed border-blue-400 bg-blue-50/50 hover:bg-blue-50 active:scale-[0.99] transition text-center">
+            <span class="text-2xl sm:text-3xl mb-1">📄</span>
+            <span class="text-xs sm:text-sm font-bold text-blue-800">카메라로 바로 촬영</span>
+            <span class="text-[11px] text-blue-600 mt-0.5">거래명세서 · 영수증 · 부품</span>
+            <input id="input-camera-photo" type="file" accept="image/*" capture="environment" class="hidden">
+          </label>
+
+          <label for="input-gallery-photo" class="cursor-pointer flex flex-col items-center justify-center p-4 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 active:scale-[0.99] transition text-center">
+            <span class="text-2xl sm:text-3xl mb-1">🖼️</span>
+            <span class="text-xs sm:text-sm font-bold text-slate-700">앨범/PC에서 사진 선택</span>
+            <span class="text-[11px] text-slate-500 mt-0.5">카톡 받은 명세서 · 캡처 이미지</span>
+            <input id="input-gallery-photo" type="file" accept="image/*" class="hidden">
+          </label>
+        </div>
+
+        <!-- 사진 미리보기 및 AI 분석 컨트롤 영역 (사진 첨부 시 표시) -->
+        <div id="photo-preview-container" class="hidden bg-slate-50 rounded-xl p-3 border border-slate-200">
+          <div class="flex flex-col sm:flex-row items-center gap-3">
+            <div class="relative w-full sm:w-40 h-40 rounded-lg overflow-hidden bg-slate-900 border border-slate-300 shrink-0 flex items-center justify-center">
+              <img id="photo-preview-img" src="" alt="첨부 사진 미리보기" class="max-w-full max-h-full object-contain cursor-pointer" title="클릭하여 원본 크게 보기">
+              <button id="btn-remove-photo" type="button" class="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-red-600 text-white text-xs font-bold shadow flex items-center justify-center hover:bg-red-700" title="사진 삭제">
+                ✕
+              </button>
+            </div>
+
+            <div class="flex-1 w-full space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-700">첨부된 이미지 활용 방법</span>
+                <span id="photo-size-info" class="text-[11px] text-slate-400">압축 최적화 완료</span>
+              </div>
+
+              <!-- AI 분석 실행 버튼 -->
+              <button id="btn-run-ai-ocr" type="button" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition">
+                <span>🤖</span>
+                <span>AI로 거래명세서/영수증 내용 자동 입력하기</span>
+              </button>
+
+              <!-- 사진만 빠르게 저장 버튼 -->
+              <button id="btn-quick-photo-save" type="button" class="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs flex items-center justify-center gap-1.5 transition">
+                <span>⚡</span>
+                <span>복잡한 입력 없이 [사진만 바로 저장] 하기</span>
+              </button>
+
+              <p id="ai-ocr-status-msg" class="text-xs text-slate-600 bg-white px-3 py-2 rounded-lg border border-slate-200">
+                💡 거래명세서라면 <strong>[AI 자동 입력]</strong>을 누르고, 단순 부품 현물 사진이면 아래 항목을 입력하거나 <strong>[사진만 바로 저장]</strong>을 누르세요.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 구매 정보 입력 폼 -->
+      <form id="purchase-form" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h2 id="form-mode-title" class="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-1.5">
+            <span>✍️</span> 2단계: 구매 내역 확인 및 입력
+          </h2>
+          <button id="btn-reset-form" type="button" class="text-xs text-slate-500 hover:text-slate-800 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 transition font-medium">
+            초기화
+          </button>
+        </div>
+
+        <input type="hidden" id="edit-record-id" value="">
+
+        <!-- 첫째 줄: 구매일자 & 카테고리 -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div>
+            <label for="input-date" class="block text-xs font-bold text-slate-700 mb-1">📅 구매일자 <span class="text-red-500">*</span></label>
+            <input id="input-date" type="date" required class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+          </div>
+
+          <div>
+            <label for="input-category" class="block text-xs font-bold text-slate-700 mb-1">🏷️ 카테고리 (부품 분류) <span class="text-red-500">*</span></label>
+            <select id="input-category" required class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+              <option value="복사기 부품">🖨️ 복사기 부품 (드럼/토너/롤러/정착기 등)</option>
+              <option value="컴퓨터 부품">💻 컴퓨터 부품 (SSD/RAM/파워/메인보드 등)</option>
+              <option value="프린터/소모품">インク 프린터/소모품 (잉크/용지/케이블 등)</option>
+              <option value="공구/자재">🔧 공구/수리자재</option>
+              <option value="기타">📦 기타 구매</option>
+            </select>
+            <!-- 빠른 카테고리 칩 -->
+            <div class="flex flex-wrap gap-1.5 mt-1.5">
+              <button type="button" class="category-quick-chip text-[11px] px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-semibold hover:bg-blue-100" data-cat="복사기 부품">🖨️ 복사기 부품</button>
+              <button type="button" class="category-quick-chip text-[11px] px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold hover:bg-indigo-100" data-cat="컴퓨터 부품">💻 컴퓨터 부품</button>
+              <button type="button" class="category-quick-chip text-[11px] px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold hover:bg-emerald-100" data-cat="프린터/소모품">🖨️ 프린터/소모품</button>
+              <button type="button" class="category-quick-chip text-[11px] px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold hover:bg-amber-100" data-cat="공구/자재">🔧 공구/자재</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 둘째 줄: 구매처(거래처) + 자주 쓰는 거래처 원터치 버튼 -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label for="input-vendor" class="text-xs font-bold text-slate-700">🏢 구매처 (거래처/상호명) <span class="text-red-500">*</span></label>
+            <span class="text-[11px] text-slate-400">자주 쓰는 거래처는 아래 버튼을 터치하세요</span>
+          </div>
+          <input id="input-vendor" type="text" required placeholder="예: 대원오피스, 컴퓨존, 신도테크, 쿠팡 등" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+          <div id="recent-vendors-chips" class="flex flex-wrap gap-1.5 mt-2">
+            <!-- JS에서 자주 쓰는 구매처 칩 동적 렌더링 -->
+          </div>
+        </div>
+
+        <!-- 셋째 줄: 구매 내용 / 세부 품목 리스트 -->
+        <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-200 space-y-3">
+          <div class="flex items-center justify-between">
+            <label for="input-summary" class="text-xs font-bold text-slate-800">📦 구매내용 (품목/모델명 요약) <span class="text-red-500">*</span></label>
+            <button id="btn-add-item-row" type="button" class="text-xs px-2.5 py-1 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 font-semibold shadow-2xs">
+              + 세부 품목 줄 추가
+            </button>
+          </div>
+
+          <input id="input-summary" type="text" required placeholder="예: 캐논 IR-2525 드럼유닛 2개 외 / 삼성 DDR4 16G 4개" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+
+          <!-- 자주 쓰는 부품 키워드 칩 -->
+          <div id="frequent-parts-chips" class="flex flex-wrap gap-1.5">
+            <span class="text-[11px] text-slate-400 self-center mr-1">빠른 태그:</span>
+            <button type="button" class="part-quick-chip text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100" data-part="토너 카트리지">토너 카트리지</button>
+            <button type="button" class="part-quick-chip text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100" data-part="드럼 유닛">드럼 유닛</button>
+            <button type="button" class="part-quick-chip text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100" data-part="정착기(퓨저)">정착기(퓨저)</button>
+            <button type="button" class="part-quick-chip text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100" data-part="급지 롤러">급지 롤러</button>
+            <button type="button" class="part-quick-chip text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100" data-part="SSD 500GB">SSD 500GB</button>
+            <button type="button" class="part-quick-chip text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100" data-part="DDR4 메모리">DDR4 메모리</button>
+            <button type="button" class="part-quick-chip text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100" data-part="파워서플라이">파워서플라이</button>
+          </div>
+
+          <!-- 거래명세서 세부 품목 행 컨테이너 (AI 인식 시 또는 줄 추가 시 표시) -->
+          <div id="line-items-wrapper" class="hidden space-y-2 pt-2 border-t border-slate-200">
+            <div class="flex items-center justify-between text-[11px] font-bold text-slate-500 px-1">
+              <span>세부 품목 내역 (품목명 / 수량 / 단가 / 금액)</span>
+              <span id="line-items-auto-sum" class="text-blue-600">품목 합계 자동계산</span>
+            </div>
+            <div id="line-items-list" class="space-y-2">
+              <!-- JS 동적 행 추가 -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 넷째 줄: 구매금액 & 결제수단 & 비고 -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          <div>
+            <label for="input-amount" class="block text-xs font-bold text-slate-700 mb-1">💰 총 구매금액 (원) <span class="text-red-500">*</span></label>
+            <div class="relative">
+              <input id="input-amount" type="text" inputmode="numeric" required placeholder="0" class="w-full pl-3.5 pr-9 py-2.5 rounded-xl border border-slate-300 text-base font-extrabold text-blue-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+              <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">원</span>
+            </div>
+          </div>
+
+          <div>
+            <label for="input-payment" class="block text-xs font-bold text-slate-700 mb-1">💳 결제 구분</label>
+            <select id="input-payment" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="세금계산서(월결제)">🧾 세금계산서 (월결제/외상)</option>
+              <option value="법인/사업자카드">💳 카드 결제</option>
+              <option value="계좌이체/현금">🏦 계좌이체 / 현금영수증</option>
+              <option value="온라인결제">🛒 온라인몰 결제</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="input-memo" class="block text-xs font-bold text-slate-700 mb-1">📝 메모 (납품처/수리모델 등)</label>
+            <input id="input-memo" type="text" placeholder="예: OO세무서 복사기 수리용" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+        </div>
+
+        <!-- 저장 제출 버튼 -->
+        <div class="pt-2 flex flex-col sm:flex-row gap-2.5">
+          <button id="btn-submit-purchase" type="submit" class="flex-1 py-3.5 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-extrabold text-sm sm:text-base shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 transition">
+            <span>💾</span>
+            <span id="btn-submit-text">구매이력 저장하기</span>
+          </button>
+        </div>
+      </form>
+
+      <!-- 최근 등록한 내역 미리보기 (하단 5건) -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+            <span>🕒</span> 최근 등록된 구매내역
+          </h3>
+          <button type="button" id="btn-go-all-history" class="text-xs text-blue-600 hover:underline font-bold">
+            전체 내역 보기 →
+          </button>
+        </div>
+        <div id="recent-records-preview" class="space-y-2.5">
+          <!-- JS 동적 렌더링 -->
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ==================== [탭 2: 구매내역 조회 & 검색] ==================== -->
+    <section id="tab-history" class="tab-panel hidden space-y-4">
+
+      <!-- 검색 & 필터 바 -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+          <!-- 키워드 검색 -->
+          <div class="sm:col-span-2 relative">
+            <input id="filter-keyword" type="text" placeholder="구매처, 부품명, 모델명, 메모 검색..." class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+          </div>
+
+          <!-- 카테고리 필터 -->
+          <div>
+            <select id="filter-category" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white font-medium outline-none">
+              <option value="ALL">전체 카테고리</option>
+              <option value="복사기 부품">🖨️ 복사기 부품</option>
+              <option value="컴퓨터 부품">💻 컴퓨터 부품</option>
+              <option value="프린터/소모품">🖨️ 프린터/소모품</option>
+              <option value="공구/자재">🔧 공구/자재</option>
+              <option value="기타">📦 기타 구매</option>
+            </select>
+          </div>
+
+          <!-- 월별 필터 -->
+          <div>
+            <input id="filter-month" type="month" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white font-medium outline-none">
+          </div>
+        </div>
+
+        <!-- 필터 하단 액션 & 요약 -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+          <div class="flex items-center gap-2">
+            <span class="text-slate-600">조회 결과: <strong id="filtered-count" class="text-slate-900">0건</strong></span>
+            <span class="text-slate-300">|</span>
+            <span class="text-slate-600">합계금액: <strong id="filtered-sum" class="text-blue-700 font-extrabold text-sm">0원</strong></span>
+            <button id="btn-clear-filters" type="button" class="ml-1 text-slate-400 hover:text-slate-700 underline">필터 초기화</button>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <button id="btn-export-csv" type="button" class="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold flex items-center gap-1 transition">
+              <span>📊</span> <span>엑셀(CSV) 다운로드</span>
+            </button>
+            <button id="btn-export-json" type="button" class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition" title="데이터 파일 백업">
+              백업
+            </button>
+            <label for="input-import-json" class="cursor-pointer px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition" title="백업 파일 복원">
+              복원
+              <input id="input-import-json" type="file" accept=".json" class="hidden">
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- 구매내역 카드 리스트 -->
+      <div id="history-list-container" class="space-y-3">
+        <!-- JS 동적 렌더링 -->
+      </div>
+    </section>
+
+    <!-- ==================== [탭 3: 거래처/부품 통계] ==================== -->
+    <section id="tab-stats" class="tab-panel hidden space-y-4">
+      <!-- 상단 요약 KPI 카드 3개 -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
+          <div class="text-xs font-bold text-slate-400">총 누적 구매액</div>
+          <div id="stat-total-amount" class="text-xl sm:text-2xl font-extrabold text-slate-900 mt-1">0원</div>
+          <div id="stat-total-count" class="text-xs text-slate-500 mt-0.5">총 0건 기록됨</div>
+        </div>
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
+          <div class="text-xs font-bold text-blue-600">🖨️ 복사기 부품 구매액</div>
+          <div id="stat-copier-amount" class="text-xl sm:text-2xl font-extrabold text-blue-700 mt-1">0원</div>
+          <div id="stat-copier-ratio" class="text-xs text-slate-500 mt-0.5">전체의 0%</div>
+        </div>
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
+          <div class="text-xs font-bold text-indigo-600">💻 컴퓨터 부품 구매액</div>
+          <div id="stat-pc-amount" class="text-xl sm:text-2xl font-extrabold text-indigo-700 mt-1">0원</div>
+          <div id="stat-pc-ratio" class="text-xs text-slate-500 mt-0.5">전체의 0%</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- 거래처(구매처)별 구매 순위 -->
+        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs">
+          <h3 class="text-sm font-extrabold text-slate-900 mb-3 flex items-center gap-1.5">
+            <span>🏢</span> 거래처(구매처)별 누적 구매 현황
+          </h3>
+          <div id="stat-vendor-list" class="space-y-2.5">
+            <!-- JS 동적 렌더링 -->
+          </div>
+        </div>
+
+        <!-- 카테고리별 비중 -->
+        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs">
+          <h3 class="text-sm font-extrabold text-slate-900 mb-3 flex items-center gap-1.5">
+            <span>🏷️</span> 카테고리별 지출 분석
+          </h3>
+          <div id="stat-category-list" class="space-y-2.5">
+            <!-- JS 동적 렌더링 -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== [모달 1: 사진/명세서 원본 확대 뷰어] ==================== -->
+  <div id="modal-photo-viewer" class="fixed inset-0 z-50 hidden bg-black/85 flex flex-col items-center justify-center p-4">
+    <div class="w-full max-w-3xl flex items-center justify-between text-white mb-2">
+      <div id="modal-photo-caption" class="text-sm font-bold truncate pr-4">거래명세서/부품 사진</div>
+      <button id="btn-close-photo-modal" type="button" class="px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-sm font-bold">
+        닫기 ✕
+      </button>
+    </div>
+    <div class="w-full max-w-3xl max-h-[82vh] overflow-auto rounded-xl bg-slate-900 flex items-center justify-center p-2">
+      <img id="modal-photo-img" src="" alt="확대 이미지" class="max-w-full max-h-[78vh] object-contain">
+    </div>
+  </div>
+
+  <!-- ==================== [모달 2: AI 스캔 & 클라우드 설정] ==================== -->
+  <div id="modal-settings" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
+      <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <h3 class="text-base font-extrabold flex items-center gap-2">
+          <span>⚙️</span> AI 명세서 인식 & 클라우드 동기화 설정
+        </h3>
+        <button id="btn-close-settings" type="button" class="text-slate-400 hover:text-white text-lg font-bold">✕</button>
+      </div>
+
+      <div class="p-5 overflow-y-auto space-y-5 text-xs sm:text-sm">
+        <!-- 1. Gemini API 키 설정 -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label for="input-gemini-key" class="font-extrabold text-slate-900 flex items-center gap-1.5">
+              <span>🤖</span> Google Gemini API Key (거래명세서 자동 스캔용)
+            </label>
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" class="text-xs text-blue-600 hover:underline font-bold">
+              무료 키 발급받기 ↗
+            </a>
+          </div>
+          <p class="text-xs text-slate-500">
+            거래명세서나 영수증 사진을 찍었을 때 구매처·품목·수량·단가·합계금액을 자동으로 읽어오려면 Gemini API 키가 필요합니다. (한 번 입력해두면 브라우저에 안전하게 보관됩니다)
+          </p>
+          <input id="input-gemini-key" type="password" placeholder="AIzaSy... 로 시작하는 Gemini API 키 입력" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+
+        <hr class="border-slate-200">
+
+        <!-- 2. 클라우드 동기화 룸(워크스페이스) 코드 -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label for="input-workspace-code" class="font-extrabold text-slate-900 flex items-center gap-1.5">
+              <span>☁️</span> 스마트폰 ↔ PC 실시간 연동 코드 (워크스페이스)
+            </label>
+            <button id="btn-copy-sync-link" type="button" class="text-xs px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 font-bold transition">
+              🔗 스마트폰 접속 링크 복사
+            </button>
+          </div>
+          <p class="text-xs text-slate-500">
+            스마트폰과 사무실 PC에서 동일한 연동 코드를 입력하거나 <strong>[스마트폰 접속 링크 복사]</strong>로 카톡에 보낸 주소를 열면, 현장에서 폰으로 찍어 올린 구매내역과 거래명세서가 사무실 PC에 실시간으로 동기화됩니다.
+          </p>
+          <input id="input-workspace-code" type="text" placeholder="예: my-office-parts (영문/숫자/한글 가능)" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+
+        <!-- 3. 클라우드 연동 원리 & 사용 가이드 아코디언 -->
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs text-slate-700 space-y-2">
+          <div class="font-extrabold text-slate-900 flex items-center gap-1.5">
+            <span>📖</span> 클라우드 동기화 3단계 빠른 사용법
+          </div>
+          <ol class="list-decimal list-inside space-y-1 text-slate-600 leading-relaxed">
+            <li><strong>웹 주소로 접속:</strong> Vercel이나 GitHub Pages로 배포된 인터넷 주소(URL)로 스마트폰과 PC에서 접속합니다.</li>
+            <li><strong>동일한 연동 코드 입력:</strong> 위 칸에 나만의 코드(예: <code>office-2026</code>)를 적고 저장합니다. (또는 <code>?room=코드명</code> 링크로 접속하면 자동 설정됨)</li>
+            <li><strong>실시간 자동 반영:</strong> 외근 중 스마트폰으로 거래명세서를 찍어 올리면 사무실 PC 화면에 새로고침 없이 즉시 나타납니다!</li>
+          </ol>
+        </div>
+
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800 space-y-1">
+          <div class="font-bold">💡 팁: API 키 없이도 사용 가능한가요?</div>
+          <div>네! API 키가 없어도 거래명세서/부품 사진 첨부, 원터치 구매처/품목 입력, 클라우드 동기화, 엑셀 다운로드는 100% 무료로 즉시 작동합니다.</div>
+        </div>
+      </div>
+
+      <div class="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+        <button id="btn-save-settings" type="button" class="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold shadow-sm transition">
+          설정 저장 및 적용
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 토스트 알림 -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none"></div>
+
+  <!-- 스크립트 로드 -->
+  <script src="js/firebase-config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
