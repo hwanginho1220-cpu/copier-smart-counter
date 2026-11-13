@@ -135,6 +135,8 @@
     } catch (e) {
       // ignore storage errors
     }
+
+    cleanupAndMergeDuplicateVendors(false);
   }
 
   function saveLocalRecords() {
@@ -145,9 +147,155 @@
     }
   }
 
+  // ==================== 거래처명 표기 표준화 (디지탈↔디지털 등 OCR 오타 통합) ====================
+  function applyStandardVendorSpelling(name) {
+    if (!name) return '';
+    return String(name)
+      .trim()
+      .replace(/\s+/g, ' ')
+      .replace(/디지탈/g, '디지털')
+      .replace(/솔루선|솔류션/g, '솔루션')
+      .replace(/씨스템/g, '시스템')
+      .replace(/오피쓰/g, '오피스')
+      .replace(/테크놀러지/g, '테크놀로지');
+  }
+
+  function getVendorCanonicalKey(name) {
+    var spelled = applyStandardVendorSpelling(name);
+    if (!spelled) return '';
+    return spelled
+      .replace(/주식회사|\(주\)|㈜|\(유\)/g, '')
+      .replace(/[\s\-_.,]/g, '')
+      .toLowerCase();
+  }
+
+  function normalizeVendorName(rawName) {
+    var clean = applyStandardVendorSpelling(rawName);
+    if (!clean) return '';
+    var targetKey = getVendorCanonicalKey(clean);
+    if (!targetKey) return clean;
+
+    // 기존에 등록된 거래처 중 표준 키가 동일한 이름이 있으면 해당 대표 거래처명으로 자동 통일
+    for (var i = 0; i < state.vendors.length; i++) {
+      var v = applyStandardVendorSpelling(state.vendors[i]);
+      if (v && getVendorCanonicalKey(v) === targetKey) {
+        // 만약 기존 거래처에 (주)가 없고 새 입력에도 (주)를 통일하고 싶다면 표준 철자 적용본 반환
+        return v;
+      }
+    }
+    for (var j = 0; j < state.records.length; j++) {
+      var rec = state.records[j];
+      if (rec && rec.vendor) {
+        var rv = applyStandardVendorSpelling(rec.vendor);
+        if (rv && getVendorCanonicalKey(rv) === targetKey) {
+          return rv;
+        }
+      }
+    }
+    return clean;
+  }
+
+  function cleanupAndMergeDuplicateVendors(shouldSyncCloud) {
+    var changed = false;
+
+    // 1) 자주 쓰는 거래처 목록 표준화 및 중복 제거
+    if (Array.isArray(state.vendors)) {
+      var uniqueVendors = [];
+      var seenVendorKeys = {};
+      state.vendors.forEach(function (v) {
+        var normV = applyStandardVendorSpelling(v);
+        if (!normV) return;
+        var vKey = getVendorCanonicalKey(normV);
+        if (!seenVendorKeys[vKey]) {
+          seenVendorKeys[vKey] = normV;
+          uniqueVendors.push(normV);
+        }
+      });
+      if (JSON.stringify(uniqueVendors) !== JSON.stringify(state.vendors)) {
+        state.vendors = uniqueVendors;
+        try {
+          localStorage.setItem(STORAGE_KEYS.VENDORS, JSON.stringify(state.vendors));
+        } catch (e) {}
+        changed = true;
+      }
+    }
+
+    // 2) 모든 구매내역의 거래처명 표준화 (예: '디지탈솔루션' -> '디지털솔루션')
+    var canonicalMap = {};
+    state.records.forEach(function (r) {
+      if (!r || !r.vendor) return;
+      var spelled = applyStandardVendorSpelling(r.vendor);
+      var key = getVendorCanonicalKey(spelled);
+      if (key && !canonicalMap[key]) {
+        canonicalMap[key] = spelled;
+      }
+    });
+
+    state.records.forEach(function (r) {
+      if (!r || !r.vendor) return;
+      var spelled = applyStandardVendorSpelling(r.vendor);
+      var key = getVendorCanonicalKey(spelled);
+      var unifiedVendor = (key && canonicalMap[key]) ? canonicalMap[key] : spelled;
+      if (unifiedVendor && r.vendor !== unifiedVendor) {
+        r.vendor = unifiedVendor;
+        r.updatedAt = new Date().toISOString();
+        changed = true;
+        if (shouldSyncCloud) {
+          syncRecordToCloud(r);
+        }
+      }
+    });
+
+    // 3) 동일 거래처 + 동일 날짜 + 동일 합계금액(>0) 중복 스캔 레코드 자동 병합/제거
+    // (예: 2026-07 디지탈솔루션 2,937,000원 & 디지털솔루션 2,937,000원 중복 스캔 건 정리)
+    var seenInvoiceMap = {};
+    var dedupedRecords = [];
+    var removedDupIds = [];
+
+    state.records.forEach(function (r) {
+      if (!r) return;
+      var amt = Number(r.amount) || 0;
+      var dateStr = r.date || '';
+      var vKey = getVendorCanonicalKey(r.vendor || '');
+
+      if (amt > 0 && dateStr && vKey) {
+        var dupSig = dateStr + '|' + vKey + '|' + amt;
+        if (seenInvoiceMap[dupSig]) {
+          var kept = seenInvoiceMap[dupSig];
+          // 만약 기존 레코드에는 사진이나 세부품목이 없고 중복 레코드에 있으면 보강
+          if ((!kept.lineItems || kept.lineItems.length === 0) && r.lineItems && r.lineItems.length > 0) {
+            kept.lineItems = r.lineItems;
+          }
+          if (!kept.photoDataUrl && r.photoDataUrl) {
+            kept.photoDataUrl = r.photoDataUrl;
+          }
+          if (r.id) removedDupIds.push(r.id);
+          changed = true;
+          return;
+        }
+        seenInvoiceMap[dupSig] = r;
+      }
+      dedupedRecords.push(r);
+    });
+
+    if (removedDupIds.length > 0) {
+      state.records = dedupedRecords;
+      if (shouldSyncCloud) {
+        removedDupIds.forEach(function (dupId) {
+          deleteRecordFromCloud(dupId);
+        });
+      }
+    }
+
+    if (changed) {
+      saveLocalRecords();
+    }
+    return changed;
+  }
+
   function rememberVendor(vendorName) {
     if (!vendorName) return;
-    var clean = vendorName.trim();
+    var clean = normalizeVendorName(vendorName);
     if (!clean || clean === '미지정(사진기록)') return;
     var idx = state.vendors.indexOf(clean);
     if (idx !== -1) {
@@ -503,7 +651,7 @@
       }
     }
     if (parsed.vendor && vendorInput) {
-      vendorInput.value = parsed.vendor;
+      vendorInput.value = normalizeVendorName(parsed.vendor);
     }
     if (parsed.summary && summaryInput) {
       summaryInput.value = parsed.summary;
@@ -842,7 +990,8 @@
               if (!inv || typeof inv !== 'object') return;
               var dateVal = (inv.date && /^\d{4}-\d{2}-\d{2}$/.test(inv.date)) ? inv.date : getTodayStr();
               var catVal = (inv.category && state.categories.indexOf(inv.category) !== -1) ? inv.category : (state.categories[0] || '복사기 부품');
-              var vendorVal = (inv.vendor && String(inv.vendor).trim()) ? String(inv.vendor).trim() : '미상(명세서스캔)';
+              var rawVendorVal = (inv.vendor && String(inv.vendor).trim()) ? String(inv.vendor).trim() : '미상(명세서스캔)';
+              var vendorVal = normalizeVendorName(rawVendorVal) || rawVendorVal;
               var summaryVal = (inv.summary && String(inv.summary).trim()) ? String(inv.summary).trim() : item.label;
               var lineItems = Array.isArray(inv.items) ? inv.items.map(function (li) {
                 var q = Number(li.qty) || 1;
@@ -853,6 +1002,30 @@
               var totalAmt = parseAmount(inv.totalAmount);
               if (!totalAmt && lineItems.length > 0) {
                 totalAmt = lineItems.reduce(function (a, c) { return a + (Number(c.amount) || 0); }, 0);
+              }
+
+              // 동일 거래처 + 동일 날짜 + 동일 합계금액(>0) 중복 스캔 방지
+              var vKey = getVendorCanonicalKey(vendorVal);
+              var existingDupIdx = -1;
+              if (totalAmt > 0 && vKey) {
+                existingDupIdx = state.records.findIndex(function (r) {
+                  return r && r.date === dateVal && (Number(r.amount) || 0) === totalAmt && getVendorCanonicalKey(r.vendor || '') === vKey;
+                });
+              }
+
+              if (existingDupIdx !== -1) {
+                var existingRec = state.records[existingDupIdx];
+                existingRec.vendor = vendorVal;
+                if ((!existingRec.lineItems || existingRec.lineItems.length === 0) && lineItems.length > 0) {
+                  existingRec.lineItems = lineItems;
+                }
+                if (!existingRec.photoDataUrl && lightPhotoUrl) {
+                  existingRec.photoDataUrl = lightPhotoUrl;
+                }
+                existingRec.updatedAt = new Date().toISOString();
+                syncRecordToCloud(existingRec);
+                savedSummaries.push(vendorVal + ' ' + formatNumber(totalAmt) + '원 (중복병합)');
+                return;
               }
 
               var recObj = {
@@ -1249,7 +1422,7 @@
     var editId = editIdEl ? editIdEl.value.trim() : '';
     var dateVal = (dateEl && dateEl.value) ? dateEl.value : getTodayStr();
     var catVal = (catEl && catEl.value) ? catEl.value : '복사기 부품';
-    var vendorVal = (vendorEl && vendorEl.value.trim()) ? vendorEl.value.trim() : (isQuickPhotoOnly ? '미지정(사진기록)' : '');
+    var vendorVal = (vendorEl && vendorEl.value.trim()) ? normalizeVendorName(vendorEl.value.trim()) : (isQuickPhotoOnly ? '미지정(사진기록)' : '');
     var summaryVal = (summaryEl && summaryEl.value.trim()) ? summaryEl.value.trim() : (isQuickPhotoOnly ? '거래명세서/부품 사진 간편등록 (추후확인)' : '');
     var amountVal = amountEl ? parseAmount(amountEl.value) : 0;
     var paymentVal = paymentEl ? paymentEl.value : '세금계산서(월결제)';
@@ -1776,6 +1949,47 @@
     if (panel && !panel.classList.contains('hidden')) {
       panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
+  }
+
+  function renameOrMergeVendor(oldVendorName) {
+    if (!oldVendorName) return;
+    var inputName = window.prompt(
+      '✏️ 거래처명 일괄 변경 / 통합\n\n[' + oldVendorName + '] 거래처의 이름을 무엇으로 변경(또는 기존 거래처로 통합)하시겠습니까?\n(기존 거래처명을 입력하면 두 거래처 내역이 하나로 자동 합쳐집니다)',
+      oldVendorName
+    );
+    if (inputName === null) return;
+    var newVendorName = applyStandardVendorSpelling(inputName);
+    if (!newVendorName || newVendorName === oldVendorName) return;
+
+    var updatedCount = 0;
+    state.records.forEach(function (r) {
+      if (r && (r.vendor || '기타') === oldVendorName) {
+        r.vendor = newVendorName;
+        r.updatedAt = new Date().toISOString();
+        syncRecordToCloud(r);
+        updatedCount += 1;
+      }
+    });
+
+    var vIdx = state.vendors.indexOf(oldVendorName);
+    if (vIdx !== -1) {
+      if (state.vendors.indexOf(newVendorName) !== -1) {
+        state.vendors.splice(vIdx, 1);
+      } else {
+        state.vendors[vIdx] = newVendorName;
+      }
+      try {
+        localStorage.setItem(STORAGE_KEYS.VENDORS, JSON.stringify(state.vendors));
+      } catch (e) {}
+    }
+
+    cleanupAndMergeDuplicateVendors(true);
+    saveLocalRecords();
+    syncSharedConfigToCloud();
+
+    selectedStatVendor = newVendorName;
+    renderAllViews();
+    showToast('✅ [' + oldVendorName + '] → [' + newVendorName + '] (' + updatedCount + '건) 통합 완료!');
   }
 
   function renderVendorDetailPanel() {
@@ -2415,7 +2629,8 @@
             }
           });
 
-          if (changed) {
+          var dedupChanged = cleanupAndMergeDuplicateVendors(true);
+          if (changed || dedupChanged) {
             saveLocalRecords();
             renderAllViews();
           }
@@ -2564,7 +2779,16 @@
         });
       }
 
-      // 통계 탭: 선택한 거래처 상세 닫기 & 전체 월 보기 버튼
+      // 통계 탭: 선택한 거래처 상세 닫기, 거래처명 일괄 수정/통합 & 전체 월 보기 버튼
+      var btnRenameMergeVendor = document.getElementById('btn-rename-merge-vendor');
+      if (btnRenameMergeVendor) {
+        btnRenameMergeVendor.addEventListener('click', function () {
+          if (selectedStatVendor) {
+            renameOrMergeVendor(selectedStatVendor);
+          }
+        });
+      }
+
       var btnCloseVendorDetail = document.getElementById('btn-close-vendor-detail');
       if (btnCloseVendorDetail) {
         btnCloseVendorDetail.addEventListener('click', function () {
