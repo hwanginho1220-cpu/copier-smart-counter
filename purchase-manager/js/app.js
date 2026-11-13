@@ -11,7 +11,8 @@
     VENDORS: 'pm_frequent_vendors_v1',
     CATEGORIES: 'pm_custom_categories_v1',
     GEMINI_KEY: 'pm_gemini_api_key_v1',
-    WORKSPACE: 'pm_cloud_workspace_v1'
+    WORKSPACE: 'pm_cloud_workspace_v1',
+    MY_COMPANY: 'pm_my_company_name_v1'
   };
 
   var DEFAULT_CATEGORIES = [
@@ -40,6 +41,7 @@
     currentLineItems: [],
     geminiApiKey: '',
     workspaceCode: 'default-parts-room',
+    myCompanyName: '하영통신',
     db: null,
     unsubscribeSnapshot: null,
     isCloudConnected: false
@@ -132,6 +134,10 @@
       } else if (savedWs && savedWs.trim()) {
         state.workspaceCode = savedWs.trim();
       }
+      var savedMyCompany = localStorage.getItem(STORAGE_KEYS.MY_COMPANY);
+      if (savedMyCompany && savedMyCompany.trim()) {
+        state.myCompanyName = savedMyCompany.trim();
+      }
     } catch (e) {
       // ignore storage errors
     }
@@ -167,6 +173,13 @@
       .replace(/주식회사|\(주\)|㈜|\(유\)/g, '')
       .replace(/[\s\-_.,]/g, '')
       .toLowerCase();
+  }
+
+  function isMyCompanyName(name) {
+    if (!name || !state.myCompanyName) return false;
+    var k1 = getVendorCanonicalKey(name);
+    var k2 = getVendorCanonicalKey(state.myCompanyName);
+    return !!(k1 && k2 && (k1 === k2 || k1.indexOf(k2) !== -1 || k2.indexOf(k1) !== -1));
   }
 
   function normalizeVendorName(rawName) {
@@ -572,9 +585,12 @@
     var mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
     var catListStr = state.categories.length > 0 ? state.categories.join('|') : '복사기 부품|컴퓨터 부품|프린터/소모품|공구/자재|기타';
+    var myComp = state.myCompanyName || '하영통신';
     var promptText = [
-      '한국 거래명세서/영수증/부품사진입니다. 순수 JSON만 출력하세요:',
-      '{"date":"YYYY-MM-DD","vendor":"구매처상호","category":"' + catListStr + ' 중 가장 알맞은 1개","summary":"대표품목 요약","totalAmount":숫자총액,"paymentMethod":"세금계산서(월결제)|법인/사업자카드|계좌이체/현금|온라인결제","rotationNeeded":0또는90또는180또는270(글씨가똑바로보이려면시계방향으로몇도회전해야하는지),"items":[{"name":"품목명","qty":수량,"unitPrice":단가,"amount":금액}]}'
+      '한국 거래명세서/영수증/부품사진입니다. 순수 JSON만 출력하세요.',
+      '중요 규칙: "' + myComp + '"은 우리 회사(공급받는자/구매자)입니다. 절대로 "' + myComp + '"을 vendor에 넣지 마세요!',
+      'vendor에는 반드시 물건을 판매하고 명세서를 발행한 [공급자] 칸의 상호명만 적으세요.',
+      '{"date":"YYYY-MM-DD","vendor":"공급자(판매처) 상호명","category":"' + catListStr + ' 중 가장 알맞은 1개","summary":"대표품목 요약","totalAmount":숫자총액,"paymentMethod":"세금계산서(월결제)|법인/사업자카드|계좌이체/현금|온라인결제","rotationNeeded":0또는90또는180또는270(글씨가똑바로보이려면시계방향으로몇도회전해야하는지),"items":[{"name":"품목명","qty":수량,"unitPrice":단가,"amount":금액}]}'
     ].join('\n');
 
     var requestBody = {
@@ -651,7 +667,13 @@
       }
     }
     if (parsed.vendor && vendorInput) {
-      vendorInput.value = normalizeVendorName(parsed.vendor);
+      var normV = normalizeVendorName(parsed.vendor);
+      if (isMyCompanyName(normV)) {
+        vendorInput.value = '';
+        showToast('⚠️ 공급받는자(' + (state.myCompanyName || '하영통신') + ')는 제외했습니다. 실제 공급자(거래처)를 확인해주세요.', 'info');
+      } else {
+        vendorInput.value = normV;
+      }
     }
     if (parsed.summary && summaryInput) {
       summaryInput.value = parsed.summary;
@@ -939,12 +961,15 @@
   function processSingleBatchItemWithAi(item, cleanKey) {
     var base64Data = item.dataUrl.split(',')[1];
     var catListStr = state.categories.length > 0 ? state.categories.join('|') : '복사기 부품|컴퓨터 부품|프린터/소모품|공구/자재|기타';
+    var myComp = state.myCompanyName || '하영통신';
 
     // 한 페이지 안에 1개 또는 여러 개의 명세서가 있을 수 있으므로 invoices 배열 형태로도 수용
     var promptText = [
       '한국 거래명세서/영수증 이미지입니다. 이미지 안의 거래명세서를 분석하여 순수 JSON만 출력하세요.',
+      '중요 규칙: "' + myComp + '"은 우리 회사(공급받는자/구매자)입니다. 절대로 "' + myComp + '"을 vendor에 넣지 마세요!',
+      'vendor에는 반드시 물건을 판매하고 명세서를 발행한 [공급자] 칸의 상호명만 적으세요.',
       '만약 한 페이지에 여러 건의 독립된 명세서가 있다면 invoices 배열에 각각 넣고, 1건이면 1개만 넣으세요:',
-      '{"rotationNeeded":0또는90또는180또는270,"invoices":[{"date":"YYYY-MM-DD","vendor":"구매처상호","category":"' + catListStr + ' 중 1개","summary":"대표품목 요약","totalAmount":숫자총액,"paymentMethod":"세금계산서(월결제)|법인/사업자카드|계좌이체/현금|온라인결제","items":[{"name":"품목명","qty":수량,"unitPrice":단가,"amount":금액}]}]}'
+      '{"rotationNeeded":0또는90또는180또는270,"invoices":[{"date":"YYYY-MM-DD","vendor":"공급자(판매처) 상호명","category":"' + catListStr + ' 중 1개","summary":"대표품목 요약","totalAmount":숫자총액,"paymentMethod":"세금계산서(월결제)|법인/사업자카드|계좌이체/현금|온라인결제","items":[{"name":"품목명","qty":수량,"unitPrice":단가,"amount":금액}]}]}'
     ].join('\n');
 
     var requestBody = {
@@ -992,6 +1017,9 @@
               var catVal = (inv.category && state.categories.indexOf(inv.category) !== -1) ? inv.category : (state.categories[0] || '복사기 부품');
               var rawVendorVal = (inv.vendor && String(inv.vendor).trim()) ? String(inv.vendor).trim() : '미상(명세서스캔)';
               var vendorVal = normalizeVendorName(rawVendorVal) || rawVendorVal;
+              if (isMyCompanyName(vendorVal)) {
+                vendorVal = '공급자 확인필요';
+              }
               var summaryVal = (inv.summary && String(inv.summary).trim()) ? String(inv.summary).trim() : item.label;
               var lineItems = Array.isArray(inv.items) ? inv.items.map(function (li) {
                 var q = Number(li.qty) || 1;
@@ -1992,6 +2020,108 @@
     showToast('✅ [' + oldVendorName + '] → [' + newVendorName + '] (' + updatedCount + '건) 통합 완료!');
   }
 
+  function reextractVendorsFromPhotos(targetVendorName) {
+    var cleanKey = String(state.geminiApiKey || '').replace(/\s+/g, '');
+    if (!cleanKey) {
+      showToast('AI 재인식을 위해 먼저 [설정/연동]에서 Gemini API 키를 확인해주세요.', 'info');
+      openSettingsModal();
+      return;
+    }
+
+    var targets = state.records.filter(function (r) {
+      return r && (r.vendor || '기타') === targetVendorName && r.photoDataUrl && r.photoDataUrl.indexOf('data:image/') === 0;
+    });
+
+    if (targets.length === 0) {
+      showToast('첨부된 명세서 사진이 있는 내역이 없습니다. 개별 내역의 [수정] 버튼을 눌러 거래처를 직접 변경해주세요.', 'error');
+      return;
+    }
+
+    var btn = document.getElementById('btn-reextract-vendor-from-photos');
+    var origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ 0/' + targets.length + '건 분석 중...';
+    }
+
+    var myComp = state.myCompanyName || '하영통신';
+    var updatedCount = 0;
+    var failedCount = 0;
+    var seq = Promise.resolve();
+
+    targets.forEach(function (rec, idx) {
+      seq = seq.then(function () {
+        if (btn) btn.textContent = '⏳ ' + (idx + 1) + '/' + targets.length + '건 공급자 찾는 중...';
+        var base64Data = rec.photoDataUrl.split(',')[1];
+        var mimeMatch = rec.photoDataUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,/);
+        var mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+
+        var promptText = [
+          '한국 거래명세서 이미지입니다.',
+          '"' + myComp + '"은 우리 회사(공급받는자/구매자)이므로 절대로 추출하지 마세요.',
+          '이 명세서에서 물건을 판매하고 발행한 실제 [공급자] 칸의 상호명만 찾아 순수 JSON으로 출력하세요:',
+          '{"vendor":"실제공급자상호명"}'
+        ].join('\n');
+
+        var requestBody = {
+          contents: [{
+            parts: [
+              { text: promptText },
+              { inline_data: { mime_type: mimeType, data: base64Data } }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 256
+          }
+        };
+
+        return callGeminiModelWithFallback(cleanKey, requestBody)
+          .then(function (data) {
+            var rawText = '';
+            if (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
+              rawText = data.candidates[0].content.parts[0].text || '';
+            }
+            rawText = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+            var jsonStart = rawText.indexOf('{');
+            var jsonEnd = rawText.lastIndexOf('}');
+            if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+              rawText = rawText.substring(jsonStart, jsonEnd + 1);
+            }
+            var parsed = JSON.parse(rawText);
+            var foundVendor = parsed && parsed.vendor ? normalizeVendorName(parsed.vendor) : '';
+            if (foundVendor && !isMyCompanyName(foundVendor)) {
+              rec.vendor = foundVendor;
+              rec.updatedAt = new Date().toISOString();
+              rememberVendor(foundVendor);
+              syncRecordToCloud(rec);
+              updatedCount += 1;
+            } else {
+              failedCount += 1;
+            }
+          })
+          .catch(function () {
+            failedCount += 1;
+          });
+      });
+    });
+
+    seq.finally(function () {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+      cleanupAndMergeDuplicateVendors(true);
+      saveLocalRecords();
+      renderAllViews();
+      if (updatedCount > 0) {
+        showToast('✅ 총 ' + updatedCount + '건의 실제 공급자(거래처)를 자동으로 찾아 수정했습니다!' + (failedCount > 0 ? ' (확인필요 ' + failedCount + '건)' : ''), 'info');
+      } else {
+        showToast('⚠️ 사진에서 실제 공급자를 찾지 못했습니다. 개별 [수정] 버튼으로 확인해주세요.', 'error');
+      }
+    });
+  }
+
   function renderVendorDetailPanel() {
     var panel = document.getElementById('stat-vendor-detail-panel');
     var titleEl = document.getElementById('stat-vendor-detail-title');
@@ -2037,6 +2167,19 @@
       summaryEl.innerHTML =
         '총 누적 <strong>' + vendorRecords.length + '건</strong> · 누적 합계 <strong class="text-blue-700 font-mono">' +
         formatNumber(totalVendorAmt) + '원</strong>';
+    }
+
+    var warningBanner = document.getElementById('vendor-mycompany-warning-banner');
+    var warningTitle = document.getElementById('vendor-mycompany-warning-title');
+    if (warningBanner) {
+      if (isMyCompanyName(selectedStatVendor) || selectedStatVendor === '공급자 확인필요') {
+        warningBanner.classList.remove('hidden');
+        if (warningTitle) {
+          warningTitle.textContent = '[' + selectedStatVendor + ']은(는) 우리 회사(공급받는자)로 잘못 인식된 내역(' + vendorRecords.length + '건)입니다.';
+        }
+      } else {
+        warningBanner.classList.add('hidden');
+      }
     }
 
     // 이 거래처의 월별 구매 현황 카드 렌더링
@@ -2524,6 +2667,7 @@
       var payload = {
         categories: state.categories,
         vendors: state.vendors,
+        myCompanyName: state.myCompanyName || '하영통신',
         updatedAt: new Date().toISOString()
       };
       if (state.geminiApiKey) {
@@ -2579,6 +2723,15 @@
               if (JSON.stringify(state.categories) !== JSON.stringify(cfg.categories)) {
                 state.categories = cfg.categories;
                 try { localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(state.categories)); } catch (e) {}
+                uiNeedsUpdate = true;
+              }
+            }
+
+            if (cfg.myCompanyName && String(cfg.myCompanyName).trim()) {
+              var remoteCompany = String(cfg.myCompanyName).trim();
+              if (state.myCompanyName !== remoteCompany) {
+                state.myCompanyName = remoteCompany;
+                try { localStorage.setItem(STORAGE_KEYS.MY_COMPANY, remoteCompany); } catch (e) {}
                 uiNeedsUpdate = true;
               }
             }
@@ -2735,8 +2888,10 @@
     var modal = document.getElementById('modal-settings');
     var keyInput = document.getElementById('input-gemini-key');
     var wsInput = document.getElementById('input-workspace-code');
+    var myCompInput = document.getElementById('input-my-company-name');
     if (keyInput) keyInput.value = state.geminiApiKey || '';
     if (wsInput) wsInput.value = state.workspaceCode || 'default-parts-room';
+    if (myCompInput) myCompInput.value = state.myCompanyName || '하영통신';
     if (modal) modal.classList.remove('hidden');
   }
 
@@ -2785,6 +2940,15 @@
         btnRenameMergeVendor.addEventListener('click', function () {
           if (selectedStatVendor) {
             renameOrMergeVendor(selectedStatVendor);
+          }
+        });
+      }
+
+      var btnReextractVendor = document.getElementById('btn-reextract-vendor-from-photos');
+      if (btnReextractVendor) {
+        btnReextractVendor.addEventListener('click', function () {
+          if (selectedStatVendor) {
+            reextractVendorsFromPhotos(selectedStatVendor);
           }
         });
       }
@@ -3233,18 +3397,21 @@
         btnSaveSettings.addEventListener('click', function () {
           var keyInput = document.getElementById('input-gemini-key');
           var wsInput = document.getElementById('input-workspace-code');
+          var myCompInput = document.getElementById('input-my-company-name');
           var inputKeyVal = keyInput ? String(keyInput.value || '').replace(/\s+/g, '') : '';
           // 만약 입력칸을 건드리지 않았거나 비워둔 채 워크스페이스 코드만 바꾼 경우, 기존 저장된 API 키가 지워지지 않도록 보호!
           if (inputKeyVal) {
             state.geminiApiKey = inputKeyVal;
           }
           state.workspaceCode = (wsInput && wsInput.value.trim()) ? wsInput.value.trim() : 'default-parts-room';
+          state.myCompanyName = (myCompInput && myCompInput.value.trim()) ? myCompInput.value.trim() : '하영통신';
 
           try {
             if (state.geminiApiKey) {
               localStorage.setItem(STORAGE_KEYS.GEMINI_KEY, state.geminiApiKey);
             }
             localStorage.setItem(STORAGE_KEYS.WORKSPACE, state.workspaceCode);
+            localStorage.setItem(STORAGE_KEYS.MY_COMPANY, state.myCompanyName);
           } catch (e) {}
 
           closeSettingsModal();
