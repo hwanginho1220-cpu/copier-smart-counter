@@ -1076,6 +1076,7 @@
     try {
       localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(state.categories));
     } catch (e) {}
+    syncSharedConfigToCloud();
   }
 
   function renderCategoryOptionsAndChips() {
@@ -2301,6 +2302,29 @@
     }
   }
 
+  var unsubscribeConfigSnapshot = null;
+
+  function syncSharedConfigToCloud() {
+    if (!state.db) return;
+    try {
+      var payload = {
+        categories: state.categories,
+        vendors: state.vendors,
+        updatedAt: new Date().toISOString()
+      };
+      if (state.geminiApiKey) {
+        payload.geminiApiKey = state.geminiApiKey;
+      }
+      state.db
+        .collection('purchase_manager_workspaces')
+        .doc(state.workspaceCode)
+        .set(payload, { merge: true })
+        .catch(function (err) {
+          console.warn('Cloud config sync warning:', err);
+        });
+    } catch (e) {}
+  }
+
   function subscribeWorkspaceCollection() {
     if (!state.db) return;
     try {
@@ -2308,11 +2332,57 @@
         state.unsubscribeSnapshot();
         state.unsubscribeSnapshot = null;
       }
+      if (unsubscribeConfigSnapshot) {
+        unsubscribeConfigSnapshot();
+        unsubscribeConfigSnapshot = null;
+      }
 
-      var colRef = state.db
+      var wsDocRef = state.db
         .collection('purchase_manager_workspaces')
-        .doc(state.workspaceCode)
-        .collection('records');
+        .doc(state.workspaceCode);
+
+      // 1) 워크스페이스 공통 설정(Gemini API 키, 커스텀 카테고리, 자주 쓰는 거래처) 실시간 영구 연동
+      unsubscribeConfigSnapshot = wsDocRef.onSnapshot(
+        function (docSnap) {
+          if (docSnap && docSnap.exists) {
+            var cfg = docSnap.data() || {};
+            var uiNeedsUpdate = false;
+
+            // 클라우드에 저장된 API 키가 있으면 자동으로 복원/유지 (한 번만 등록하면 다른 기기·새 브라우저에서도 영구 유지)
+            if (cfg.geminiApiKey && String(cfg.geminiApiKey).trim()) {
+              var remoteKey = String(cfg.geminiApiKey).replace(/\s+/g, '');
+              if (state.geminiApiKey !== remoteKey) {
+                state.geminiApiKey = remoteKey;
+                try { localStorage.setItem(STORAGE_KEYS.GEMINI_KEY, remoteKey); } catch (e) {}
+                uiNeedsUpdate = true;
+              }
+            } else if (state.geminiApiKey) {
+              // 반대로 내 기기에는 키가 있는데 클라우드에 아직 없으면 클라우드에 자동 백업
+              syncSharedConfigToCloud();
+            }
+
+            if (Array.isArray(cfg.categories) && cfg.categories.length > 0) {
+              if (JSON.stringify(state.categories) !== JSON.stringify(cfg.categories)) {
+                state.categories = cfg.categories;
+                try { localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(state.categories)); } catch (e) {}
+                uiNeedsUpdate = true;
+              }
+            }
+
+            if (uiNeedsUpdate) {
+              updateSyncBadge(state.isCloudConnected, state.isCloudConnected ? '클라우드 연동중' : '로컬 저장됨');
+              renderAllViews();
+            }
+          } else if (state.geminiApiKey) {
+            // 워크스페이스 문서가 처음 만들어질 때 기존 로컬 키를 클라우드에 자동 업로드
+            syncSharedConfigToCloud();
+          }
+        },
+        function () {}
+      );
+
+      // 2) 구매내역 레코드 실시간 연동
+      var colRef = wsDocRef.collection('records');
 
       state.unsubscribeSnapshot = colRef.onSnapshot(
         function (snapshot) {
@@ -2912,6 +2982,7 @@
             .then(function (activeModel) {
               state.geminiApiKey = cleanKey;
               try { localStorage.setItem(STORAGE_KEYS.GEMINI_KEY, cleanKey); } catch (e) {}
+              syncSharedConfigToCloud();
               updateSyncBadge(state.isCloudConnected, state.isCloudConnected ? '클라우드 연동중' : '로컬 저장됨');
               if (resultBox) {
                 resultBox.className = 'text-xs px-3 py-2 rounded-lg border bg-emerald-50 border-emerald-200 text-emerald-800 font-bold';
@@ -2938,18 +3009,25 @@
         btnSaveSettings.addEventListener('click', function () {
           var keyInput = document.getElementById('input-gemini-key');
           var wsInput = document.getElementById('input-workspace-code');
-          state.geminiApiKey = keyInput ? String(keyInput.value || '').replace(/\s+/g, '') : '';
+          var inputKeyVal = keyInput ? String(keyInput.value || '').replace(/\s+/g, '') : '';
+          // 만약 입력칸을 건드리지 않았거나 비워둔 채 워크스페이스 코드만 바꾼 경우, 기존 저장된 API 키가 지워지지 않도록 보호!
+          if (inputKeyVal) {
+            state.geminiApiKey = inputKeyVal;
+          }
           state.workspaceCode = (wsInput && wsInput.value.trim()) ? wsInput.value.trim() : 'default-parts-room';
 
           try {
-            localStorage.setItem(STORAGE_KEYS.GEMINI_KEY, state.geminiApiKey);
+            if (state.geminiApiKey) {
+              localStorage.setItem(STORAGE_KEYS.GEMINI_KEY, state.geminiApiKey);
+            }
             localStorage.setItem(STORAGE_KEYS.WORKSPACE, state.workspaceCode);
           } catch (e) {}
 
           closeSettingsModal();
+          syncSharedConfigToCloud();
           subscribeWorkspaceCollection();
           updateSyncBadge(state.isCloudConnected, state.isCloudConnected ? '클라우드 연동중' : '로컬 저장됨');
-          showToast('⚙️ 설정이 저장되었습니다.');
+          showToast('⚙️ 설정 및 API 키가 클라우드에 영구 저장되었습니다.');
         });
       }
     } catch (formErr) {
