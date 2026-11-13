@@ -2047,6 +2047,7 @@
     var myComp = state.myCompanyName || '하영통신';
     var updatedCount = 0;
     var failedCount = 0;
+    var movedDetails = [];
     var seq = Promise.resolve();
 
     targets.forEach(function (rec, idx) {
@@ -2096,6 +2097,12 @@
               rememberVendor(foundVendor);
               syncRecordToCloud(rec);
               updatedCount += 1;
+              movedDetails.push({
+                date: rec.date || '',
+                summary: rec.summary || '',
+                amount: Number(rec.amount) || 0,
+                newVendor: foundVendor
+              });
             } else {
               failedCount += 1;
             }
@@ -2111,11 +2118,48 @@
         btn.disabled = false;
         btn.innerHTML = origHtml;
       }
-      cleanupAndMergeDuplicateVendors(true);
       saveLocalRecords();
+
+      var resultBanner = document.getElementById('reextract-result-banner');
+      var resultTitle = document.getElementById('reextract-result-title');
+      var resultList = document.getElementById('reextract-result-list');
+      if (resultBanner && resultList && movedDetails.length > 0) {
+        resultBanner.classList.remove('hidden');
+        if (resultTitle) {
+          resultTitle.textContent = '총 ' + updatedCount + '건이 실제 공급자(거래처)로 이동되었습니다! (명세서 사진 그대로 유지됨)';
+        }
+        resultList.innerHTML = movedDetails.map(function (md) {
+          return (
+            '<div class="flex flex-wrap items-center justify-between gap-2 bg-white/90 px-3 py-2 rounded-xl border border-emerald-200">' +
+              '<div class="truncate">' +
+                '<span class="font-mono text-slate-500 mr-1.5">' + escapeHtml(md.date) + '</span>' +
+                '<span class="font-bold text-slate-800">' + escapeHtml(md.summary) + '</span>' +
+                '<span class="text-slate-500 ml-1.5">(' + formatNumber(md.amount) + '원)</span>' +
+              '</div>' +
+              '<button type="button" data-jump-vendor="' + escapeHtml(md.newVendor) + '" class="btn-jump-reextracted-vendor px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] shrink-0">' +
+                '🏢 ' + escapeHtml(md.newVendor) + ' 보기 →' +
+              '</button>' +
+            '</div>'
+          );
+        }).join('');
+
+        resultList.querySelectorAll('.btn-jump-reextracted-vendor').forEach(function (jBtn) {
+          jBtn.addEventListener('click', function () {
+            var vName = jBtn.getAttribute('data-jump-vendor');
+            if (vName) openVendorStatDetail(vName, '');
+          });
+        });
+      }
+
+      // 이동된 첫 번째 거래처 상세를 자동으로 열어 사진과 내역이 그대로 유지됨을 즉시 확인시켜 줌
+      if (movedDetails.length > 0) {
+        selectedStatVendor = movedDetails[0].newVendor;
+        selectedStatVendorMonth = '';
+      }
+
       renderAllViews();
       if (updatedCount > 0) {
-        showToast('✅ 총 ' + updatedCount + '건의 실제 공급자(거래처)를 자동으로 찾아 수정했습니다!' + (failedCount > 0 ? ' (확인필요 ' + failedCount + '건)' : ''), 'info');
+        showToast('✅ 총 ' + updatedCount + '건의 실제 공급자를 찾아 이동했습니다! (사진 유지됨)' + (failedCount > 0 ? ' (확인필요 ' + failedCount + '건)' : ''), 'info');
       } else {
         showToast('⚠️ 사진에서 실제 공급자를 찾지 못했습니다. 개별 [수정] 버튼으로 확인해주세요.', 'error');
       }
@@ -2950,6 +2994,14 @@
           if (selectedStatVendor) {
             reextractVendorsFromPhotos(selectedStatVendor);
           }
+        });
+      }
+
+      var btnCloseReextractBanner = document.getElementById('btn-close-reextract-banner');
+      if (btnCloseReextractBanner) {
+        btnCloseReextractBanner.addEventListener('click', function () {
+          var b = document.getElementById('reextract-result-banner');
+          if (b) b.classList.add('hidden');
         });
       }
 

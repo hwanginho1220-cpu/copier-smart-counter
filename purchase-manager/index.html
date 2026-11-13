@@ -498,6 +498,20 @@
         </div>
       </div>
 
+      <!-- 공급자 자동 재인식 결과 안내 배너 -->
+      <div id="reextract-result-banner" class="hidden bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-4 shadow-sm space-y-2.5">
+        <div class="flex items-center justify-between gap-2">
+          <div class="text-sm font-extrabold text-emerald-900 flex items-center gap-1.5">
+            <span>✅</span>
+            <span id="reextract-result-title">실제 공급자(거래처) 재인식 완료</span>
+          </div>
+          <button id="btn-close-reextract-banner" type="button" class="px-2.5 py-1 rounded-lg bg-white/80 hover:bg-white text-emerald-800 border border-emerald-300 text-xs font-bold">
+            닫기 ✕
+          </button>
+        </div>
+        <div id="reextract-result-list" class="space-y-1.5 text-xs text-emerald-950"></div>
+      </div>
+
       <!-- 선택한 거래처의 상세 분석 패널 (거래처별 월별 구매현황 + 누적 개별 세부내역) -->
       <div id="stat-vendor-detail-panel" class="hidden bg-white rounded-2xl p-4 sm:p-5 border-2 border-blue-500 shadow-md space-y-4">
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
