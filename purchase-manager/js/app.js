@@ -1764,6 +1764,133 @@
     bindCardActionEvents(container);
   }
 
+  var selectedStatVendor = null;
+  var selectedStatVendorMonth = '';
+
+  function openVendorStatDetail(vendorName, ymFilter) {
+    selectedStatVendor = vendorName || null;
+    selectedStatVendorMonth = ymFilter || '';
+    renderStatsView();
+    var panel = document.getElementById('stat-vendor-detail-panel');
+    if (panel && !panel.classList.contains('hidden')) {
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  function renderVendorDetailPanel() {
+    var panel = document.getElementById('stat-vendor-detail-panel');
+    var titleEl = document.getElementById('stat-vendor-detail-title');
+    var summaryEl = document.getElementById('stat-vendor-detail-summary');
+    var monthlyBreakdownEl = document.getElementById('stat-vendor-monthly-breakdown');
+    var recordsHeadingEl = document.getElementById('stat-vendor-records-heading');
+    var showAllMonthsBtn = document.getElementById('btn-vendor-detail-show-all-months');
+    var recordsContainer = document.getElementById('stat-vendor-detail-records');
+
+    if (!panel || !recordsContainer || !monthlyBreakdownEl) return;
+
+    if (!selectedStatVendor) {
+      panel.classList.add('hidden');
+      return;
+    }
+
+    var vendorRecords = getSortedRecords().filter(function (r) {
+      return r && (r.vendor || '기타') === selectedStatVendor;
+    });
+
+    if (vendorRecords.length === 0) {
+      panel.classList.add('hidden');
+      selectedStatVendor = null;
+      return;
+    }
+
+    panel.classList.remove('hidden');
+
+    var totalVendorAmt = 0;
+    var vendorMonthMap = {};
+
+    vendorRecords.forEach(function (r) {
+      var amt = Number(r.amount) || 0;
+      totalVendorAmt += amt;
+      var ym = (r.date && r.date.length >= 7) ? r.date.slice(0, 7) : '기타';
+      if (!vendorMonthMap[ym]) vendorMonthMap[ym] = { count: 0, amount: 0 };
+      vendorMonthMap[ym].count += 1;
+      vendorMonthMap[ym].amount += amt;
+    });
+
+    if (titleEl) titleEl.textContent = '🏢 ' + selectedStatVendor;
+    if (summaryEl) {
+      summaryEl.innerHTML =
+        '총 누적 <strong>' + vendorRecords.length + '건</strong> · 누적 합계 <strong class="text-blue-700 font-mono">' +
+        formatNumber(totalVendorAmt) + '원</strong>';
+    }
+
+    // 이 거래처의 월별 구매 현황 카드 렌더링
+    var sortedVendorMonths = Object.keys(vendorMonthMap).sort(function (a, b) {
+      return b.localeCompare(a);
+    });
+
+    monthlyBreakdownEl.innerHTML = sortedVendorMonths.map(function (ym) {
+      var mObj = vendorMonthMap[ym];
+      var isSelectedMonth = selectedStatVendorMonth === ym;
+      return (
+        '<button type="button" data-vendor-ym="' + escapeHtml(ym) + '" class="btn-vendor-month-card text-left p-3 rounded-xl border transition ' +
+          (isSelectedMonth
+            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+            : 'bg-slate-50 hover:bg-blue-50/70 text-slate-800 border-slate-200 hover:border-blue-300') +
+        '">' +
+          '<div class="flex items-center justify-between text-xs font-bold">' +
+            '<span>🗓️ ' + escapeHtml(formatMonthLabel(ym)) + '</span>' +
+            '<span class="' + (isSelectedMonth ? 'text-blue-100' : 'text-slate-400') + '">' + mObj.count + '건</span>' +
+          '</div>' +
+          '<div class="text-sm sm:text-base font-extrabold font-mono mt-1 ' + (isSelectedMonth ? 'text-white' : 'text-blue-700') + '">' +
+            formatNumber(mObj.amount) + '원' +
+          '</div>' +
+        '</button>'
+      );
+    }).join('');
+
+    monthlyBreakdownEl.querySelectorAll('.btn-vendor-month-card').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var ym = btn.getAttribute('data-vendor-ym') || '';
+        selectedStatVendorMonth = (selectedStatVendorMonth === ym) ? '' : ym;
+        renderVendorDetailPanel();
+      });
+    });
+
+    // 개별 세부내역 필터링 (특정 월 클릭 시 해당 월만, 아니면 전체 누적)
+    var displayRecords = selectedStatVendorMonth
+      ? vendorRecords.filter(function (r) {
+          var ym = (r.date && r.date.length >= 7) ? r.date.slice(0, 7) : '기타';
+          return ym === selectedStatVendorMonth;
+        })
+      : vendorRecords;
+
+    if (recordsHeadingEl) {
+      if (selectedStatVendorMonth) {
+        var subSum = displayRecords.reduce(function (a, c) { return a + (Number(c.amount) || 0); }, 0);
+        recordsHeadingEl.innerHTML =
+          '<span>📋</span> <span>[' + escapeHtml(selectedStatVendor) + '] ' +
+          escapeHtml(formatMonthLabel(selectedStatVendorMonth)) + ' 구매 세부내역 (' +
+          displayRecords.length + '건 · ' + formatNumber(subSum) + '원)</span>';
+      } else {
+        recordsHeadingEl.innerHTML =
+          '<span>📋</span> <span>[' + escapeHtml(selectedStatVendor) + '] 누적 구매 개별 세부내역 (전체 ' +
+          displayRecords.length + '건)</span>';
+      }
+    }
+
+    if (showAllMonthsBtn) {
+      if (selectedStatVendorMonth) {
+        showAllMonthsBtn.classList.remove('hidden');
+      } else {
+        showAllMonthsBtn.classList.add('hidden');
+      }
+    }
+
+    recordsContainer.innerHTML = displayRecords.map(createRecordCardHtml).join('');
+    bindCardActionEvents(recordsContainer);
+  }
+
   function renderStatsView() {
     var totalAmount = 0;
     var copierAmount = 0;
@@ -1771,6 +1898,7 @@
     var vendorMap = {};
     var catMap = {};
     var monthStatMap = {};
+    var vendorMonthMatrix = {}; // vendor -> { ym -> { count, amount } }
 
     state.records.forEach(function (r) {
       if (!r) return;
@@ -1795,6 +1923,11 @@
       monthStatMap[ym].amount += amt;
       if (r.category === '복사기 부품') monthStatMap[ym].copier += amt;
       if (r.category === '컴퓨터 부품') monthStatMap[ym].pc += amt;
+
+      if (!vendorMonthMatrix[vName]) vendorMonthMatrix[vName] = {};
+      if (!vendorMonthMatrix[vName][ym]) vendorMonthMatrix[vName][ym] = { count: 0, amount: 0 };
+      vendorMonthMatrix[vName][ym].count += 1;
+      vendorMonthMatrix[vName][ym].amount += amt;
     });
 
     var totalAmtEl = document.getElementById('stat-total-amount');
@@ -1817,30 +1950,121 @@
       pcRatioEl.textContent = '전체의 ' + pRatio + '%';
     }
 
-    // 거래처별 리스트
+    // 거래처별 리스트 (클릭 시 개별 세부사항 표시)
+    var vendorEntries = Object.keys(vendorMap).map(function (k) {
+      return { name: k, count: vendorMap[k].count, amount: vendorMap[k].amount };
+    }).sort(function (a, b) { return b.amount - a.amount; });
+
     var vendorListEl = document.getElementById('stat-vendor-list');
     if (vendorListEl) {
-      var vendorEntries = Object.keys(vendorMap).map(function (k) {
-        return { name: k, count: vendorMap[k].count, amount: vendorMap[k].amount };
-      }).sort(function (a, b) { return b.amount - a.amount; });
-
       if (vendorEntries.length === 0) {
         vendorListEl.innerHTML = '<div class="text-xs text-slate-400 py-4 text-center">데이터가 없습니다.</div>';
       } else {
         vendorListEl.innerHTML = vendorEntries.map(function (v) {
           var pct = totalAmount > 0 ? Math.max(4, Math.round((v.amount / totalAmount) * 100)) : 0;
+          var isSelected = selectedStatVendor === v.name;
           return (
-            '<div class="space-y-1">' +
-              '<div class="flex justify-between text-xs">' +
-                '<span class="font-bold text-slate-800">' + escapeHtml(v.name) + ' <span class="text-slate-400 font-normal">(' + v.count + '건)</span></span>' +
-                '<span class="font-extrabold text-slate-900 font-mono">' + formatNumber(v.amount) + '원</span>' +
+            '<div data-vendor-name="' + escapeHtml(v.name) + '" class="stat-vendor-row cursor-pointer p-2.5 rounded-xl border transition space-y-1.5 ' +
+              (isSelected
+                ? 'bg-blue-50/90 border-blue-500 ring-2 ring-blue-500/20'
+                : 'bg-slate-50/60 hover:bg-blue-50/40 border-slate-200/80 hover:border-blue-300') +
+            '" title="클릭하여 ' + escapeHtml(v.name) + ' 세부 구매내역 보기">' +
+              '<div class="flex justify-between items-center text-xs">' +
+                '<span class="font-extrabold text-slate-900 flex items-center gap-1">' +
+                  '<span>🏢 ' + escapeHtml(v.name) + '</span>' +
+                  '<span class="text-slate-400 font-normal">(' + v.count + '건)</span>' +
+                  '<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold ml-1">상세보기</span>' +
+                '</span>' +
+                '<span class="font-extrabold text-blue-700 font-mono">' + formatNumber(v.amount) + '원</span>' +
               '</div>' +
-              '<div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">' +
+              '<div class="w-full bg-slate-200/80 h-2 rounded-full overflow-hidden">' +
                 '<div class="bg-blue-600 h-full rounded-full" style="width:' + pct + '%"></div>' +
               '</div>' +
             '</div>'
           );
         }).join('');
+
+        vendorListEl.querySelectorAll('.stat-vendor-row').forEach(function (row) {
+          row.addEventListener('click', function () {
+            var vName = row.getAttribute('data-vendor-name');
+            if (selectedStatVendor === vName && !selectedStatVendorMonth) {
+              selectedStatVendor = null;
+              renderStatsView();
+            } else {
+              openVendorStatDetail(vName, '');
+            }
+          });
+        });
+      }
+    }
+
+    // 선택한 거래처 상세 패널 업데이트
+    renderVendorDetailPanel();
+
+    // 거래처별 × 월별 구매 현황 종합 매트릭스 테이블 렌더링
+    var matrixEl = document.getElementById('stat-vendor-monthly-matrix');
+    if (matrixEl) {
+      var allMonthsSorted = Object.keys(monthStatMap).sort(function (a, b) {
+        return b.localeCompare(a);
+      });
+
+      if (vendorEntries.length === 0 || allMonthsSorted.length === 0) {
+        matrixEl.innerHTML = '<div class="text-xs text-slate-400 py-4 text-center">데이터가 없습니다.</div>';
+      } else {
+        var thMonths = allMonthsSorted.map(function (ym) {
+          return '<th class="px-3 py-2.5 text-right font-extrabold text-slate-700 whitespace-nowrap border-b border-slate-200 bg-slate-100">' + escapeHtml(formatMonthLabel(ym)) + '</th>';
+        }).join('');
+
+        var tbodyRows = vendorEntries.map(function (v) {
+          var isSelected = selectedStatVendor === v.name;
+          var monthCells = allMonthsSorted.map(function (ym) {
+            var cell = vendorMonthMatrix[v.name] && vendorMonthMatrix[v.name][ym];
+            if (!cell || cell.amount === 0) {
+              return '<td class="px-3 py-2.5 text-right text-slate-300 font-mono border-b border-slate-100">-</td>';
+            }
+            var isCellSelected = isSelected && selectedStatVendorMonth === ym;
+            return (
+              '<td data-matrix-vendor="' + escapeHtml(v.name) + '" data-matrix-ym="' + escapeHtml(ym) + '" class="matrix-cell-btn cursor-pointer px-3 py-2.5 text-right border-b border-slate-100 hover:bg-blue-50 transition ' +
+                (isCellSelected ? 'bg-blue-100/80 font-extrabold' : '') +
+              '" title="클릭하여 ' + escapeHtml(v.name) + '의 ' + escapeHtml(formatMonthLabel(ym)) + ' 내역 보기">' +
+                '<div class="font-bold text-slate-900 font-mono">' + formatNumber(cell.amount) + '원</div>' +
+                '<div class="text-[10px] text-slate-400">' + cell.count + '건</div>' +
+              '</td>'
+            );
+          }).join('');
+
+          return (
+            '<tr class="hover:bg-slate-50/80 transition ' + (isSelected ? 'bg-blue-50/40' : '') + '">' +
+              '<td data-matrix-vendor="' + escapeHtml(v.name) + '" data-matrix-ym="" class="matrix-cell-btn cursor-pointer px-3 py-2.5 font-extrabold text-slate-900 whitespace-nowrap border-b border-r border-slate-200 hover:text-blue-600">' +
+                '🏢 ' + escapeHtml(v.name) +
+              '</td>' +
+              '<td data-matrix-vendor="' + escapeHtml(v.name) + '" data-matrix-ym="" class="matrix-cell-btn cursor-pointer px-3 py-2.5 text-right font-extrabold text-blue-700 font-mono whitespace-nowrap border-b border-r border-slate-200 bg-blue-50/30">' +
+                formatNumber(v.amount) + '원 <span class="text-[10px] text-slate-400 font-sans">(' + v.count + '건)</span>' +
+              '</td>' +
+              monthCells +
+            '</tr>'
+          );
+        }).join('');
+
+        matrixEl.innerHTML =
+          '<table class="w-full text-xs border-collapse border border-slate-200 rounded-xl overflow-hidden">' +
+            '<thead>' +
+              '<tr>' +
+                '<th class="px-3 py-2.5 text-left font-extrabold text-slate-800 whitespace-nowrap border-b border-r border-slate-200 bg-slate-100">거래처명</th>' +
+                '<th class="px-3 py-2.5 text-right font-extrabold text-blue-800 whitespace-nowrap border-b border-r border-slate-200 bg-blue-50">누적 합계</th>' +
+                thMonths +
+              '</tr>' +
+            '</thead>' +
+            '<tbody>' + tbodyRows + '</tbody>' +
+          '</table>';
+
+        matrixEl.querySelectorAll('.matrix-cell-btn').forEach(function (cellEl) {
+          cellEl.addEventListener('click', function () {
+            var vName = cellEl.getAttribute('data-matrix-vendor');
+            var ym = cellEl.getAttribute('data-matrix-ym') || '';
+            openVendorStatDetail(vName, ym);
+          });
+        });
       }
     }
 
@@ -2267,6 +2491,24 @@
         btnClosePhotoModal.addEventListener('click', function () {
           var m = document.getElementById('modal-photo-viewer');
           if (m) m.classList.add('hidden');
+        });
+      }
+
+      // 통계 탭: 선택한 거래처 상세 닫기 & 전체 월 보기 버튼
+      var btnCloseVendorDetail = document.getElementById('btn-close-vendor-detail');
+      if (btnCloseVendorDetail) {
+        btnCloseVendorDetail.addEventListener('click', function () {
+          selectedStatVendor = null;
+          selectedStatVendorMonth = '';
+          renderStatsView();
+        });
+      }
+
+      var btnVendorShowAllMonths = document.getElementById('btn-vendor-detail-show-all-months');
+      if (btnVendorShowAllMonths) {
+        btnVendorShowAllMonths.addEventListener('click', function () {
+          selectedStatVendorMonth = '';
+          renderVendorDetailPanel();
         });
       }
 
